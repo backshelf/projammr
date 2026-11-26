@@ -45,7 +45,7 @@ url = "2"
 base64 = "0.22"
 # The scripted instance on a loopback port, for the sign-out's test.
 dit-core = { path = "../../../packages/dit/crates/dit-core", features = ["test-support"] }
-minisign = "0.7"
+minisign = "0.10"
 tauri = { version = "2.12", features = ["test"] }
 tempfile = "3"
 
