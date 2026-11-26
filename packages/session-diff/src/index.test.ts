@@ -686,4 +686,83 @@ describe("diffSave", () => {
     expect(roots[0]?.children.map((c) => c.row.id)).toEqual([1]);
     expect(roots[0]?.children[0]?.children).toEqual([]);
   });
+
+  it("ignores track-number shifts on auto-numbered tracks when an earlier track is deleted", () => {
+    const t = (
+      name: string,
+      id?: number,
+      kind: SessionTrack["kind"] = "audio"
+    ): SessionTrack => ({ kind, name, devices: [], ...(id != null && { id }) });
+
+    // With explicit DAW track ids (saved Ableton sets).
+    const before = meta({
+      structure: structure([
+        t("1-Deleted", 10),
+        t("2 Audio", 11),
+        t("3-Group", 12, "group"),
+        t("4-Serum 2", 13, "midi"),
+        t("05 Kick", 14),
+        t("6-119-Audio 0001", 15),
+        t("Audio #1", 16),
+        t("A Reverb", 17, "return"),
+        t("B Delay", 18, "return"),
+      ]),
+    });
+    const after = meta({
+      structure: structure([
+        t("1 Audio", 11),
+        t("2-Group", 12, "group"),
+        t("3-Serum 2", 13, "midi"),
+        t("04 Kick", 14),
+        t("5-119-Audio 0001", 15),
+        t("Audio #1", 16),
+        t("A Delay", 18, "return"),
+      ]),
+    });
+    expect(labels(diffSaves(before, after))).toEqual(["−2 tracks"]);
+    expect(
+      diffStructure(before, after)
+        .rows.filter((r) => r.status !== "same")
+        .map((r) => [r.name, r.status])
+    ).toEqual([
+      ["1-Deleted", "removed"],
+      ["A Reverb", "removed"],
+    ]);
+
+    // Without track ids (name matching across shifted numbers).
+    const beforeNoId = meta({
+      structure: structure([
+        t("1-Deleted"),
+        t("2 Audio"),
+        t("3-Group", undefined, "group"),
+        t("4-Serum 2", undefined, "midi"),
+      ]),
+    });
+    const afterNoId = meta({
+      structure: structure([
+        t("1 Audio"),
+        t("2-Group", undefined, "group"),
+        t("3-Serum 2", undefined, "midi"),
+      ]),
+    });
+    expect(labels(diffSaves(beforeNoId, afterNoId))).toEqual(["−1 track"]);
+
+    // Genuine renames on shifted tracks are still reported.
+    const renamedAfter = meta({
+      structure: structure([
+        t("1 Vox", 11),
+        t("Group", 12, "group"),
+        t("3-Serum 2", 13, "midi"),
+        t("04 Kick", 14),
+        t("5-119-Audio 0001", 15),
+        t("Audio #1", 16),
+        t("A Delay", 18, "return"),
+      ]),
+    });
+    expect(labels(diffSaves(before, renamedAfter))).toEqual([
+      "−2 tracks",
+      "2 Audio → 1 Vox",
+      "3-Group → Group",
+    ]);
+  });
 });

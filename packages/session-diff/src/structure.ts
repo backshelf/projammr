@@ -39,14 +39,96 @@ const multisetDiff = (
   return { added, removed };
 };
 
+type TrackNameKey =
+  | { kind: "literal"; value: string }
+  | { kind: "numbered"; value: string }
+  | { kind: "returnLettered"; value: string };
+
+/**
+ * 1-based position of each track in its DAW numbering sequence: regular tracks
+ * (audio, midi, group, other) share one 1-based counter, return tracks carry
+ * their own 1-based letter counter, and master has no number (0).
+ */
+function trackPositions(
+  tracks: readonly SessionTrack[]
+): Map<SessionTrack, number> {
+  const positions = new Map<SessionTrack, number>();
+  let trackNum = 0;
+  let returnNum = 0;
+  for (const track of tracks) {
+    if (track.kind === "return") {
+      positions.set(track, ++returnNum);
+    } else if (track.kind === "master") {
+      positions.set(track, 0);
+    } else {
+      positions.set(track, ++trackNum);
+    }
+  }
+  return positions;
+}
+
+/**
+ * Splits off an auto-numbered prefix when a track's name starts with its own
+ * 1-based track number (including zero-padded forms like `03 Kick` from `##`)
+ * or, for return tracks, its 1-based letter (`A`..`Z`) followed by a separator
+ * or end of name.
+ */
+function trackNameKey(track: SessionTrack, pos: number): TrackNameKey {
+  const { name } = track;
+  if (track.kind === "return") {
+    if (pos >= 1 && pos <= 26) {
+      const letter = String.fromCharCode(64 + pos);
+      if (
+        name.startsWith(letter) &&
+        (name.length === 1 || name[1] === " " || name[1] === "-")
+      ) {
+        return { kind: "returnLettered", value: name.slice(1) };
+      }
+    }
+    return { kind: "literal", value: name };
+  }
+  if (track.kind === "master") {
+    return { kind: "literal", value: name };
+  }
+  let digitsEnd = 0;
+  while (digitsEnd < name.length) {
+    const code = name.charCodeAt(digitsEnd);
+    if (code < 48 || code > 57) break;
+    digitsEnd++;
+  }
+  if (digitsEnd > 0 && Number(name.slice(0, digitsEnd)) === pos) {
+    return { kind: "numbered", value: name.slice(digitsEnd) };
+  }
+  return { kind: "literal", value: name };
+}
+
+/**
+ * True when two paired track names differ solely because the track's 1-based
+ * position shifted and the DAW updated its leading auto-number prefix.
+ */
+function isTrackRenumber(
+  was: SessionTrack,
+  wasPos: number,
+  now: SessionTrack,
+  nowPos: number
+): boolean {
+  if (was.name === now.name || wasPos === nowPos) return false;
+  const a = trackNameKey(was, wasPos);
+  const b = trackNameKey(now, nowPos);
+  return a.kind !== "literal" && a.kind === b.kind && a.value === b.value;
+}
+
 /**
  * Pairs tracks across two saves: first by stable DAW track id when both sides
- * carry one, then by name occurrence order so duplicate track names pair 1-to-1
- * rather than colliding.
+ * carry one, then by exact name occurrence order, then by auto-numbered
+ * canonical key so shifted `#` / default track numbers pair 1-to-1 rather than
+ * colliding or reading as add+remove.
  */
 function matchTracks(
   before: SessionTrack[],
-  after: SessionTrack[]
+  after: SessionTrack[],
+  beforePos = trackPositions(before),
+  afterPos = trackPositions(after)
 ): {
   pairs: Map<SessionTrack, SessionTrack>;
   added: SessionTrack[];
@@ -86,6 +168,35 @@ function matchTracks(
     if (usedAfter.has(track)) continue;
     const candidates = beforeByName.get(track.name);
     // Avoid pairing two tracks that carry distinct explicit DAW ids.
+    const matched = candidates?.find(
+      (candidate) =>
+        !usedBefore.has(candidate) &&
+        (candidate.id == null || track.id == null || candidate.id === track.id)
+    );
+    if (matched) {
+      pairs.set(track, matched);
+      usedBefore.add(matched);
+      usedAfter.add(track);
+    }
+  }
+
+  const beforeByKey = new Map<string, SessionTrack[]>();
+  for (const track of before) {
+    if (usedBefore.has(track)) continue;
+    const key = trackNameKey(track, beforePos.get(track) ?? 0);
+    if (key.kind === "literal") continue;
+    const bucket = `${track.kind}\0${key.kind}\0${key.value}`;
+    const list = beforeByKey.get(bucket);
+    if (list) list.push(track);
+    else beforeByKey.set(bucket, [track]);
+  }
+  for (const track of after) {
+    if (usedAfter.has(track)) continue;
+    const key = trackNameKey(track, afterPos.get(track) ?? 0);
+    if (key.kind === "literal") continue;
+    const candidates = beforeByKey.get(
+      `${track.kind}\0${key.kind}\0${key.value}`
+    );
     const matched = candidates?.find(
       (candidate) =>
         !usedBefore.has(candidate) &&
@@ -164,12 +275,22 @@ export function pairRenames(
 function trackChanges(before: SaveMeta | null, after: SaveMeta) {
   const a = before?.structure?.tracks ?? [];
   const b = after.structure?.tracks ?? [];
-  const matched = matchTracks(a, b);
+  const beforePos = trackPositions(a);
+  const afterPos = trackPositions(b);
+  const matched = matchTracks(a, b, beforePos, afterPos);
   const idRenames: { from: string; to: string }[] = [];
   const renamedTrack = new Map<SessionTrack, string>();
 
   for (const [now, was] of matched.pairs) {
-    if (was.name !== now.name) {
+    if (
+      was.name !== now.name &&
+      !isTrackRenumber(
+        was,
+        beforePos.get(was) ?? 0,
+        now,
+        afterPos.get(now) ?? 0
+      )
+    ) {
       idRenames.push({ from: was.name, to: now.name });
       renamedTrack.set(now, was.name);
     }

@@ -460,9 +460,12 @@ clips, sample files, replaced samples. Past five clauses the first five stay and
 `more`).
 
 The metas add what the trees cannot, so with either meta missing there are no rename, device, clip or sample-file
-clauses and no scalars. Tracks are paired between metas by the DAW's track id (by name where either has none), so a
-track renamed and given a device at once is `Old → New` and `+Reverb on New`, one track; the web pairs a rename only
-when the devices did not change, so it would call that a removed and an added track. `DiffSummary.samplesReplaced` (file
+clauses and no scalars. Tracks are paired between metas by the DAW's track id (by exact name, then by auto-numbered
+canonical key where either has none), so a track renamed and given a device at once is `Old → New` and `+Reverb on New`,
+one track; the web pairs a rename only when the devices did not change, so it would call that a removed and an added
+track. A paired track whose name changed solely because its 1-based track number (or return letter) shifted when an
+earlier track was added, removed or reordered (Ableton's leading `#` / default auto-numbering) is not reported as a
+rename. `DiffSummary.samplesReplaced` (file
 names, once each, in the later save's order) is filled by `Repo::diff`, which has the saves' sample objects, and is
 empty from `diff_trees`; a sample that was not referenced before is added, not replaced, and one that could not be
 read before (missing) and can now counts as replaced.
@@ -561,7 +564,7 @@ lists as an alternation, so matches arrive in document order and the value is wh
   `WarpMarker`.
 - `Value` lists, `<Tag Value="…"`: `IsContentSelectedInDocument`, `IsContentSelected`, `SelectedEnvelope`,
   `LastSelectedClipEnvelopeIndex`, `LastSelectedTimeableIndex`, `LeftTime`, `RightTime`, `LaneHeight`,
-  `SelectedDevice`, `TakeCounter`.
+  `SelectedDevice`, `TakeCounter`, `EffectiveName`, `UpperDisplayString`.
 
 `mask(text, side)` runs per Text leaf and appends to `side`. A value that is already empty is still pushed, so the
 counts stay aligned. A value that is not valid UTF-8 cannot become a `String`, so `mask` leaves that match as it is.
@@ -1797,7 +1800,9 @@ reaches the masthead's blurred band and every `text-art` below it; with no artwo
 grayscale. `SetMasthead` is the name, the branch and `timeInSet` since the last commit, and "Open on the web"
 (`open_web` with `open.webPath`, absent until a push made the set a session). `SkylineReadout` wraps `SetSkyline` in
 `group/save-diff` over `skylineStructure` (`skyline-model.ts`): `diffStructure(headMeta, liveTracks as a synthetic
-meta, else latestMeta)`, a set with no commit diffed against an empty one (every track new), and the app's
+meta, else latestMeta)` (when `liveTracks` is used, `headMeta`'s XML track ids are stripped so the script's 0-based
+positional ids pair by name/auto-numbered key without colliding, and the script's `master` track is omitted when
+`headMeta` has none), a set with no commit diffed against an empty one (every track new), and the app's
 `tracksChanged` names promoting a `same` row to `changed` (a clip edit has no device change to light it). It is one tab
 stop: `←/→/Home/End` move the lit bar (written as `data-hot`, as the web's `SaveDiffControls` does), pointing does the
 same over a hit area wider than the 8px bar, and an `aria-live` line names the track ("Bass · +EQ Eight") or counts the

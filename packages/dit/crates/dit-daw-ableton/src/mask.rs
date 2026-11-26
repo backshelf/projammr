@@ -8,10 +8,11 @@ use regex::bytes::{Captures, Regex};
 /// Tags whose `Id` attribute Live renumbers.
 const ID_TAGS: &str = "Vst3Preset|AuPreset|VstPreset|FileRef|RelativePathElement|WarpMarker";
 
-/// Tags whose `Value` attribute is view state.
+/// Tags whose `Value` attribute is view state or a derived display label Live
+/// rewrites when track numbers shift.
 const VALUE_TAGS: &str = "IsContentSelectedInDocument|IsContentSelected|SelectedEnvelope|\
     LastSelectedClipEnvelopeIndex|LastSelectedTimeableIndex|LeftTime|RightTime|LaneHeight|\
-    SelectedDevice|TakeCounter";
+    SelectedDevice|TakeCounter|EffectiveName|UpperDisplayString";
 
 /// Both tag lists as one alternation, so matches arrive in document order. Group 1 is the value of an
 /// `Id` match, group 2 the value of a `Value` match; the value is whatever sits between the quotes.
@@ -86,7 +87,7 @@ mod tests {
         "WarpMarker",
     ];
 
-    const VALUE_TAG_NAMES: [&str; 10] = [
+    const VALUE_TAG_NAMES: [&str; 12] = [
         "IsContentSelectedInDocument",
         "IsContentSelected",
         "SelectedEnvelope",
@@ -97,6 +98,8 @@ mod tests {
         "LaneHeight",
         "SelectedDevice",
         "TakeCounter",
+        "EffectiveName",
+        "UpperDisplayString",
     ];
 
     fn every_tag(id: &str, value: &str) -> String {
@@ -129,7 +132,7 @@ mod tests {
     fn unmask_of_mask_restores_a_document_with_every_tag() {
         let doc = every_tag("17", "true");
         let (out, side) = masked(&doc);
-        assert_eq!(side.len(), 16);
+        assert_eq!(side.len(), 18);
         assert_eq!(restored(&out, &side), doc.as_bytes());
     }
 
@@ -239,7 +242,7 @@ mod tests {
         let doc = crate::Ableton.decode(file).unwrap();
         let tree = crate::split::split(&doc).unwrap();
         let (_, side) = dit_core::mask_tree(&crate::Ableton, &tree);
-        assert_eq!(side.len(), 11);
+        assert_eq!(side.len(), 12);
         let blobs = tree
             .parts
             .iter()
@@ -259,5 +262,16 @@ mod tests {
     fn a_match_opened_in_a_comment_before_a_leaf_boundary_survives_the_round_trip() {
         let doc = r#"<Ableton><LiveSet><!-- <FileRef Id=" --><MainTrack><LaneHeight Value="68" /></MainTrack></LiveSet></Ableton>"#;
         assert_eq!(round_trip(doc), doc.as_bytes());
+    }
+
+    #[test]
+    fn tracks_differing_only_in_auto_numbered_effective_name_or_routing_label_mask_identically() {
+        let before = r##"<AudioTrack Id="42"><Name><EffectiveName Value="35 Audio" /><UserName Value="# Audio" /></Name><AudioOutputRouting><Target Value="AudioOut/Track.9" /><UpperDisplayString Value="9-Group" /></AudioOutputRouting></AudioTrack>"##;
+        let after = r##"<AudioTrack Id="42"><Name><EffectiveName Value="34 Audio" /><UserName Value="# Audio" /></Name><AudioOutputRouting><Target Value="AudioOut/Track.9" /><UpperDisplayString Value="8-Group" /></AudioOutputRouting></AudioTrack>"##;
+        let (a, a_side) = masked(before);
+        let (b, b_side) = masked(after);
+        assert_eq!(a, b);
+        assert_eq!(restored(&a, &a_side), before.as_bytes());
+        assert_eq!(restored(&b, &b_side), after.as_bytes());
     }
 }

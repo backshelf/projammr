@@ -17,6 +17,38 @@ function liveMeta(tracks: readonly StructureTrack[]): SaveMeta {
 }
 
 /**
+ * Aligns a saved commit's `head` with the control script's live track list:
+ * - The script assigns 0-based list indices as `id`/`groupId`, whereas saved sets carry the DAW's persistent XML
+ *   ids. Stripping ids from `before` lets `diffStructure` pair live tracks against `head` by name (and shifted
+ *   auto-numbered key) while keeping the script's own `id`/`groupId` for group nesting in the skyline.
+ * - Saved Ableton sets omit the master track while the script includes it; drop it when `head` has none so it does
+ *   not read as an added track on every set.
+ */
+function liveComparison(
+  head: SetMeta | null,
+  live: readonly StructureTrack[]
+): { before: SaveMeta; now: SaveMeta } {
+  const headTracks = head?.structure?.tracks ?? [];
+  const headHasMaster = headTracks.some((track) => track.kind === "master");
+  const nowTracks =
+    head !== null && !headHasMaster
+      ? live.filter((track) => track.kind !== "master")
+      : [...live];
+  const beforeTracks = headTracks.map((track) => ({
+    kind: track.kind,
+    name: track.name,
+    devices: track.devices,
+    ...(track.color !== undefined && { color: track.color }),
+  }));
+  return {
+    before: head
+      ? { ...head, structure: { ...head.structure, tracks: beforeTracks } }
+      : liveMeta([]),
+    now: liveMeta(nowTracks),
+  };
+}
+
+/**
  * The tracks the skyline draws, each row's status saying how it differs from the last commit. The set is the
  * script's latest `tracks` message when it has sent one (the changes before they are saved), else the newest save;
  * the commit is `head`, and a set with none has every track new. A track whose content changed but whose devices did
@@ -34,10 +66,13 @@ export function skylineStructure({
   live: readonly StructureTrack[] | null;
   changed: readonly string[];
 }): StructureDiff | null {
-  const now: SaveMeta | null = live ? liveMeta(live) : latest;
-  if (!now?.structure) return null;
-  const before = head ?? liveMeta([]);
-  const diff = diffStructure(before, now);
+  const pair = live
+    ? liveComparison(head, live)
+    : latest?.structure
+      ? { before: head ?? liveMeta([]), now: latest }
+      : null;
+  if (!pair) return null;
+  const diff = diffStructure(pair.before, pair.now);
   const edited = new Set(changed);
   return {
     ...diff,

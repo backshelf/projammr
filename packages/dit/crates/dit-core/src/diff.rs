@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::meta::SetMeta;
+use crate::meta::{SetMeta, StructureTrack, TrackKind};
 use crate::store::{PartEntry, TreeObject, encode_part};
 use crate::tree::PartKind;
 
@@ -373,14 +373,102 @@ fn device_counts(devices: &[String]) -> HashMap<&str, usize> {
     counts
 }
 
+/// Canonical name key for recognizing DAW auto-numbered track prefixes
+/// (such as Ableton's leading `#` / default track numbers and return letters)
+/// that shift whenever an earlier track is added, removed or reordered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum TrackNameKey<'a> {
+    Literal(&'a str),
+    Numbered(&'a str),
+    ReturnLettered(&'a str),
+}
+
+/// 1-based position of each track in its numbering sequence: regular tracks
+/// (audio, midi, group, other) share one 1-based counter, return tracks have
+/// their own 1-based letter counter, and master has no number (0).
+fn track_positions(tracks: &[StructureTrack]) -> Vec<usize> {
+    let mut track_num = 0;
+    let mut return_num = 0;
+    tracks
+        .iter()
+        .map(|track| match track.kind {
+            TrackKind::Return => {
+                return_num += 1;
+                return_num
+            }
+            TrackKind::Master => 0,
+            _ => {
+                track_num += 1;
+                track_num
+            }
+        })
+        .collect()
+}
+
+/// Splits off an auto-numbered prefix when a track's name starts with its own
+/// 1-based track number (including zero-padded forms like `03 Kick` from `##`)
+/// or, for return tracks, its 1-based letter (`A..Z`) followed by a separator
+/// or end of name.
+fn track_name_key(track: &StructureTrack, pos: usize) -> TrackNameKey<'_> {
+    let name = track.name.as_str();
+    match track.kind {
+        TrackKind::Return => {
+            if (1..=26).contains(&pos) {
+                let letter = (b'A' + (pos - 1) as u8) as char;
+                if let Some(rest) = name.strip_prefix(letter)
+                    && (rest.is_empty() || rest.starts_with([' ', '-']))
+                {
+                    return TrackNameKey::ReturnLettered(rest);
+                }
+            }
+            TrackNameKey::Literal(name)
+        }
+        TrackKind::Master => TrackNameKey::Literal(name),
+        _ => {
+            let digits_end = name
+                .bytes()
+                .take_while(|byte| byte.is_ascii_digit())
+                .count();
+            if digits_end > 0 && name[..digits_end].parse::<usize>().ok() == Some(pos) {
+                TrackNameKey::Numbered(&name[digits_end..])
+            } else {
+                TrackNameKey::Literal(name)
+            }
+        }
+    }
+}
+
+/// True when two paired track names differ solely because the track's 1-based
+/// position shifted and the DAW updated its leading auto-number prefix.
+fn is_track_renumber(
+    earlier: &StructureTrack,
+    earlier_pos: usize,
+    current: &StructureTrack,
+    current_pos: usize,
+) -> bool {
+    earlier.name != current.name
+        && earlier_pos != current_pos
+        && match (
+            track_name_key(earlier, earlier_pos),
+            track_name_key(current, current_pos),
+        ) {
+            (TrackNameKey::Numbered(a), TrackNameKey::Numbered(b)) => a == b,
+            (TrackNameKey::ReturnLettered(a), TrackNameKey::ReturnLettered(b)) => a == b,
+            _ => false,
+        }
+}
+
 /// Pairs each track of `after` with its track in `before`: by the DAW's track id when both have one, else by
-/// name occurrence order so duplicate track names pair 1-to-1 rather than colliding. A pair with another name
-/// is a rename; a pair with other devices names the devices it gained and lost using multiset counts.
+/// name occurrence order (exact name first, then auto-numbered canonical key) so duplicate track names pair
+/// 1-to-1 rather than colliding. A pair with another name is a rename unless only its DAW track number
+/// shifted; a pair with other devices names the devices it gained and lost using multiset counts.
 /// Past `DEVICE_CLAUSES` the rest of the device changes are one clause.
 fn track_moves(before: &SetMeta, after: &SetMeta) -> TrackMoves {
     let (Some(was), Some(now)) = (&before.structure, &after.structure) else {
         return TrackMoves::default();
     };
+    let was_pos = track_positions(&was.tracks);
+    let now_pos = track_positions(&now.tracks);
     let mut used_before = vec![false; was.tracks.len()];
     let mut matched: Vec<Option<usize>> = vec![None; now.tracks.len()];
 
@@ -400,7 +488,7 @@ fn track_moves(before: &SetMeta, after: &SetMeta) -> TrackMoves {
         }
     }
 
-    // Second pass: pair remaining tracks by name occurrence without crossing distinct ids.
+    // Second pass: pair remaining tracks by exact name occurrence without crossing distinct ids.
     for (now_idx, track) in now.tracks.iter().enumerate() {
         if matched[now_idx].is_some() {
             continue;
@@ -408,6 +496,26 @@ fn track_moves(before: &SetMeta, after: &SetMeta) -> TrackMoves {
         if let Some((was_idx, _)) = was.tracks.iter().enumerate().find(|(idx, earlier)| {
             !used_before[*idx]
                 && earlier.name == track.name
+                && (earlier.id.is_none() || track.id.is_none() || earlier.id == track.id)
+        }) {
+            used_before[was_idx] = true;
+            matched[now_idx] = Some(was_idx);
+        }
+    }
+
+    // Third pass: pair remaining auto-numbered tracks whose leading number shifted.
+    for (now_idx, track) in now.tracks.iter().enumerate() {
+        if matched[now_idx].is_some() {
+            continue;
+        }
+        let key = track_name_key(track, now_pos[now_idx]);
+        if matches!(key, TrackNameKey::Literal(_)) {
+            continue;
+        }
+        if let Some((was_idx, _)) = was.tracks.iter().enumerate().find(|(idx, earlier)| {
+            !used_before[*idx]
+                && earlier.kind == track.kind
+                && track_name_key(earlier, was_pos[*idx]) == key
                 && (earlier.id.is_none() || track.id.is_none() || earlier.id == track.id)
         }) {
             used_before[was_idx] = true;
@@ -423,7 +531,9 @@ fn track_moves(before: &SetMeta, after: &SetMeta) -> TrackMoves {
         };
         let earlier = &was.tracks[was_idx];
         let mut track_explained = false;
-        if earlier.name != track.name {
+        if earlier.name != track.name
+            && !is_track_renumber(earlier, was_pos[was_idx], track, now_pos[now_idx])
+        {
             moves.renames.push(Clause::new(
                 ClauseKind::Rename,
                 format!("{} \u{2192} {}", earlier.name, track.name),
@@ -1488,5 +1598,89 @@ mod tests {
         let diff_one_dev = diff_trees(&a, Some(&a_meta), &b, Some(&b_meta_one_dev));
         let line_one_dev = summary_line(&diff_one_dev, Some(&a_meta), Some(&b_meta_one_dev));
         assert_eq!(line_one_dev, "+EQ Eight on Audio, ~Audio");
+    }
+
+    #[test]
+    fn deleting_a_track_does_not_report_shifted_auto_numbered_tracks_as_renames() {
+        let mk = |kind: TrackKind, id: i64, name: &str| StructureTrack {
+            kind,
+            name: name.to_owned(),
+            devices: vec![],
+            id: Some(id),
+            group_id: None,
+            color: None,
+        };
+        let a_meta = meta_with_tracks(vec![
+            mk(TrackKind::Audio, 1, "1-Deleted"),
+            mk(TrackKind::Audio, 2, "2 Audio"),
+            mk(TrackKind::Group, 3, "3-Group"),
+            mk(TrackKind::Midi, 4, "4-Serum 2"),
+            mk(TrackKind::Audio, 5, "05 Kick"),
+            mk(TrackKind::Audio, 6, "6-119-Audio 0001"),
+            mk(TrackKind::Audio, 7, "Bass #1"),
+            mk(TrackKind::Return, 8, "A Reverb"),
+            mk(TrackKind::Return, 9, "B Delay"),
+        ]);
+        let b_meta = meta_with_tracks(vec![
+            mk(TrackKind::Audio, 2, "1 Audio"),
+            mk(TrackKind::Group, 3, "2-Group"),
+            mk(TrackKind::Midi, 4, "3-Serum 2"),
+            mk(TrackKind::Audio, 5, "04 Kick"),
+            mk(TrackKind::Audio, 6, "5-119-Audio 0001"),
+            mk(TrackKind::Audio, 7, "Bass #1"),
+            mk(TrackKind::Return, 9, "A Delay"),
+        ]);
+        let a = tree(vec![
+            track("1", "deleted"),
+            track("2", "t2"),
+            track("3", "t3"),
+            track("4", "t4"),
+            track("5", "t5"),
+            track("6", "t6"),
+            track("7", "t7"),
+            track("8", "r1"),
+            track("9", "r2"),
+        ]);
+        let b = tree(vec![
+            track("2", "t2"),
+            track("3", "t3"),
+            track("4", "t4"),
+            track("5", "t5"),
+            track("6", "t6"),
+            track("7", "t7"),
+            track("9", "r2"),
+        ]);
+        let diff = diff_trees(&a, Some(&a_meta), &b, Some(&b_meta));
+        assert_eq!(
+            summary_line(&diff, Some(&a_meta), Some(&b_meta)),
+            "\u{2212}2 tracks"
+        );
+    }
+
+    #[test]
+    fn real_renames_on_auto_numbered_tracks_are_still_reported() {
+        let a_meta = meta_with_tracks(vec![
+            named(1, "1-Deleted"),
+            named(2, "2 Audio"),
+            named(3, "3-Serum 2"),
+            named(4, "4-Pad"),
+        ]);
+        let b_meta = meta_with_tracks(vec![
+            named(2, "1 Vox"),
+            named(3, "Serum 2"),
+            named(4, "3-Pad"),
+        ]);
+        let a = tree(vec![
+            track("1", "d"),
+            track("2", "t2a"),
+            track("3", "t3a"),
+            track("4", "t4"),
+        ]);
+        let b = tree(vec![track("2", "t2b"), track("3", "t3b"), track("4", "t4")]);
+        let diff = diff_trees(&a, Some(&a_meta), &b, Some(&b_meta));
+        assert_eq!(
+            summary_line(&diff, Some(&a_meta), Some(&b_meta)),
+            "\u{2212}1 track, 2 Audio \u{2192} 1 Vox, 3-Serum 2 \u{2192} Serum 2"
+        );
     }
 }

@@ -82,6 +82,54 @@ describe("the skyline's rows", () => {
     ]);
   });
 
+  test("pair live script tracks (positional ids + master) against saved XML ids and shifted track numbers", () => {
+    const savedHead: SetMeta = {
+      ...head,
+      structure: {
+        tracks: [
+          { kind: "audio", name: "1-Deleted", devices: [], id: 19 },
+          { kind: "group", name: "2-Group", devices: [], id: 73 },
+          {
+            kind: "midi",
+            name: "3-Serum 2",
+            devices: ["Serum 2"],
+            id: 74,
+            groupId: 73,
+          },
+          { kind: "audio", name: "DRUMS", devices: [], id: 107 },
+        ],
+      },
+    };
+    const liveFromScript: StructureTrack[] = [
+      { kind: "group", name: "1-Group", devices: [], id: 0 },
+      {
+        kind: "midi",
+        name: "2-Serum 2",
+        devices: ["Serum 2"],
+        id: 1,
+        groupId: 0,
+      },
+      { kind: "audio", name: "DRUMS", devices: [], id: 2 },
+      { kind: "master", name: "Master", devices: [], id: 3 },
+    ];
+    const structure = skylineStructure({
+      head: savedHead,
+      latest: savedHead,
+      live: liveFromScript,
+      changed: [],
+    });
+
+    expect(statuses(structure)).toEqual([
+      ["1-Deleted", "removed"],
+      ["1-Group", "same"],
+      ["2-Serum 2", "same"],
+      ["DRUMS", "same"],
+    ]);
+    expect(summarize(structure!, true)).toBe(
+      "1 track changed since the last commit"
+    );
+  });
+
   test("make every track new in a set with no commit", () => {
     const structure = skylineStructure({
       head: null,
