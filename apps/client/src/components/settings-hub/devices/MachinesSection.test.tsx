@@ -201,17 +201,19 @@ describe("MachinesSection's rows", () => {
     expect(row("Studio Mac").getAttribute("tabindex")).toBe("-1");
   });
 
-  it("names the set open on the machine", () => {
+  it("links the set open on the machine to its session page", () => {
     mount(
       list([
-        machine({ openSession: { id: 9, name: "science123" } }),
+        machine({ openSession: { id: 9, name: "science123", projectId: 3 } }),
         machine({ id: LAPTOP, name: "Laptop" }),
       ])
     );
 
     expect(
-      within(row("Studio Mac")).getByText("Open: science123")
-    ).toBeTruthy();
+      within(row("Studio Mac"))
+        .getByRole("link", { name: "science123" })
+        .getAttribute("href")
+    ).toBe("/project/3/session/9");
     expect(within(row("Laptop")).queryByText(/^Open:/)).toBeNull();
   });
 

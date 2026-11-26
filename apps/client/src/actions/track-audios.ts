@@ -50,6 +50,20 @@ export const setPrimaryTrackAudio = async (
   );
 };
 
+export const unpinPrimaryTrackAudio = async (
+  trackAudioId: number
+): Promise<{ ok: true } | ActionError> => {
+  const res = await serverApi.DELETE("/api/track-audios/{id}/primary", {
+    params: { path: { id: String(trackAudioId) } },
+  });
+
+  return written(
+    toActionOutcome(res, "Failed to unpin primary audio", {
+      ok: true,
+    } as const)
+  );
+};
+
 export const getCandidateAudios = async (
   trackId: number
 ): Promise<CandidateAudio[] | ActionError> => {

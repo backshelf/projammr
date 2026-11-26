@@ -592,9 +592,9 @@ describe("diffSave", () => {
   });
 
   it("ignores invalid tempo strings instead of emitting NaN", () => {
-    expect(
-      diffSaves(meta({ tempo: "abc" }), meta({ tempo: "NaN" }))
-    ).toEqual([]);
+    expect(diffSaves(meta({ tempo: "abc" }), meta({ tempo: "NaN" }))).toEqual(
+      []
+    );
     expect(diffSaves(meta({ tempo: "126" }), meta({ tempo: "" }))).toEqual([]);
     expect(
       labels(diffSaves(meta({ tempo: "invalid" }), meta({ tempo: "128" })))

@@ -141,7 +141,7 @@ app.put(
     // Refused before the allowance is spent, so naming another account's
     // machine cannot drain the beats its owner has.
     await assertMachineAvailable(id, userId);
-    spendToken("device-heartbeat", id);
+    spendToken("machine-heartbeat", id);
     return respond(
       c,
       machineSchema,

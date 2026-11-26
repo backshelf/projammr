@@ -157,16 +157,16 @@ impl Core {
         Ok(())
     }
 
-    /// Settings' remove button on a folder marked "Never here". The ledger is changed at once; the engine keeps the
-    /// folders in a filter of its own, which only a new engine reads, so the hub is attached again to give it one.
-    /// That attach sends the removal to the hub as it reads the hub's lists.
+    /// Settings' remove button on a folder marked "Never here". Updates the ledger, reloads the running render
+    /// engine's filter in-place without tearing down the hub connection, and flushes the removal to the hub.
     pub fn forget_never_here(self: &Arc<Self>, folder: &str) -> Result<(), String> {
         Ledger::update(&self.ledger_path(), |ledger| {
             ledger.forget_never_here(Path::new(folder))
         })
         .map_err(|error| error.to_string())?;
         self.publish_remembered();
-        self.reconcile();
+        let _ = self.tell(|running| running.reload_render_never_here());
+        self.tell_hub_of_rejections();
         Ok(())
     }
 

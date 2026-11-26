@@ -1,6 +1,9 @@
 "use client";
 
-import { setPrimaryTrackAudio } from "@/actions/track-audios";
+import {
+  setPrimaryTrackAudio,
+  unpinPrimaryTrackAudio,
+} from "@/actions/track-audios";
 import { BottomSheet, SHEET_ROW } from "@/components/dock/BottomSheet";
 import { DuplicateFlag } from "@/components/track-audio/DuplicateFlag";
 import { VersionBadge } from "@/components/track-audio/VersionBadge";
@@ -31,6 +34,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 const MANAGE_LABEL = "Manage track audios…";
+const UNPIN_LABEL = "Unpin primary version";
 
 /**
  * What one version says of itself: its badge, its filename, and the loudness
@@ -126,6 +130,7 @@ type VersionShellProps = {
   canEdit: boolean;
   promoting: number | null;
   promote: (audioId: number) => void;
+  unpin: (audioId: number) => void;
   /** What opens the list, from the caller. */
   trigger: React.ReactNode;
 };
@@ -141,8 +146,12 @@ function VersionMenu({
   canEdit,
   promoting,
   promote,
+  unpin,
   trigger,
 }: VersionShellProps) {
+  const pinnedPrimary = versions.find(
+    (audio) => audio.isPrimary && audio.primaryPinned
+  );
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
@@ -214,15 +223,26 @@ function VersionMenu({
             );
           })}
         </div>
-        {canEdit && onManage && (
+        {canEdit && (pinnedPrimary || onManage) && (
           <>
             <DropdownMenuSeparator className="my-0" />
-            <DropdownMenuItem
-              onSelect={onManage}
-              className="m-1 rounded-sm font-mono text-micro text-ink-soft"
-            >
-              {MANAGE_LABEL}
-            </DropdownMenuItem>
+            {pinnedPrimary && (
+              <DropdownMenuItem
+                disabled={promoting !== null}
+                onSelect={() => unpin(pinnedPrimary.id)}
+                className="m-1 rounded-sm font-mono text-micro text-ink-soft"
+              >
+                {UNPIN_LABEL}
+              </DropdownMenuItem>
+            )}
+            {onManage && (
+              <DropdownMenuItem
+                onSelect={onManage}
+                className="m-1 rounded-sm font-mono text-micro text-ink-soft"
+              >
+                {MANAGE_LABEL}
+              </DropdownMenuItem>
+            )}
           </>
         )}
       </DropdownMenuContent>
@@ -244,8 +264,12 @@ function VersionSheet({
   canEdit,
   promoting,
   promote,
+  unpin,
   trigger,
 }: VersionShellProps) {
+  const pinnedPrimary = versions.find(
+    (audio) => audio.isPrimary && audio.primaryPinned
+  );
   return (
     <BottomSheet title="Versions" trigger={trigger}>
       {versions.map((audio) => {
@@ -286,6 +310,15 @@ function VersionSheet({
           </div>
         );
       })}
+      {canEdit && pinnedPrimary && (
+        <SheetClose
+          className={cn(SHEET_ROW, "border-t border-rule text-ink-soft")}
+          disabled={promoting !== null}
+          onClick={() => unpin(pinnedPrimary.id)}
+        >
+          {UNPIN_LABEL}
+        </SheetClose>
+      )}
       {canEdit && onManage && (
         <SheetClose
           className={cn(SHEET_ROW, "border-t border-rule text-ink-soft")}
@@ -331,6 +364,17 @@ export function TrackAudioDropdown({
     }
   };
 
+  const unpin = async (audioId: number) => {
+    setPromoting(audioId);
+    const result = await unpinPrimaryTrackAudio(audioId);
+    setPromoting(null);
+
+    if (isActionError(result)) {
+      toast.error(`Couldn't unpin primary version: ${result.error}`);
+      return;
+    }
+  };
+
   const shell = {
     versions: byNewest(audios),
     selectedAudioId,
@@ -339,6 +383,7 @@ export function TrackAudioDropdown({
     canEdit,
     promoting,
     promote,
+    unpin,
     trigger: children,
   };
 

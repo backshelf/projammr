@@ -164,29 +164,6 @@ pub fn settings_of(config: &UserConfig, home: &Path, host: &Host) -> Settings {
     }
 }
 
-/// A path no repo is ever at. The daemon works through its inputs in order, so by the time it answers this one with
-/// `RepoUnreachable` it has finished `launch` and every repo's catch-up: the daemon has no event of its own for that.
-const LAUNCH_PROBE: &str = "/dit-app/launch-probe";
-
-/// Whether `event` is the daemon's answer to the launch probe, which is not for the panel.
-fn is_launch_probe(event: &DaemonEvent) -> bool {
-    matches!(event, DaemonEvent::RepoUnreachable { repo, .. } if repo == Path::new(LAUNCH_PROBE))
-}
-
-/// Where the probes that follow an adopted folder live: the same trick as [`LAUNCH_PROBE`], so the daemon's answer
-/// says it has recorded the first saves of every set it could. The folder's path follows, under this one.
-const ADOPT_PROBE: &str = "/dit-app/adopt-probe";
-
-/// The path whose `RepoUnreachable` answer says the daemon is done adopting `folder` (an absolute path).
-fn adoption_probe(folder: &Path) -> PathBuf {
-    Path::new(ADOPT_PROBE).join(folder.strip_prefix("/").unwrap_or(folder))
-}
-
-/// The folder an adoption probe at `probe` was made for.
-fn adopted_folder(probe: &Path) -> PathBuf {
-    Path::new("/").join(probe.strip_prefix(ADOPT_PROBE).unwrap_or(probe))
-}
-
 /// Opens `url` in the default browser.
 pub fn open_url(url: &str) -> Result<(), String> {
     let status = Command::new("open")
@@ -227,7 +204,7 @@ impl Core {
         let core = Arc::new_cyclic(|weak| {
             let backfill = Core::backfill_for(weak, &paths, &registry);
             Core {
-                remote: AppRemote::new(paths.config.clone()),
+                remote: AppRemote::for_app(paths.config.clone(), paths.dev),
                 app_version: app.package_info().version.to_string(),
                 reducer: Mutex::new(Reducer::new(
                     snapshot,
@@ -432,9 +409,6 @@ impl Core {
                 return;
             }
         };
-        // The worker takes its inputs in order, after the launch catch-up, so this one's answer (see
-        // `launch_probe`) says the catch-up is done.
-        running.send(Input::AddRepo(LAUNCH_PROBE.into()));
         let stop = Arc::new(AtomicBool::new(false));
         let (jobs, requests) = mpsc::channel();
         let folding = {
@@ -460,11 +434,10 @@ impl Core {
         let mut refreshed = Instant::now();
         while !stop.load(Ordering::SeqCst) {
             match running.events().recv_timeout(Duration::from_millis(250)) {
-                Ok(DaemonEvent::RepoUnreachable { repo, .. }) if repo.starts_with(ADOPT_PROBE) => {
-                    let folder = adopted_folder(&repo);
+                Ok(DaemonEvent::Adopted { folder }) => {
                     self.with_reducer(|reducer| reducer.finish_adopting(&folder));
                 }
-                Ok(event) if is_launch_probe(&event) => self.launched(),
+                Ok(DaemonEvent::Launched) => self.launched(),
                 Ok(event) => {
                     let needs_projects = self.with_reducer(|reducer| {
                         reducer.apply(&event);
@@ -833,10 +806,10 @@ mod tests {
         "/../../../packages/dit/crates/dit-daw-ableton/fixtures/Contract Fixtures Project"
     );
 
-    /// The probe is answered only after the daemon has launched and caught up every repo in its list, against a real
-    /// daemon: the catch-up's own events all come before it.
+    /// `DaemonEvent::Launched` arrives only after the daemon has launched and caught up every repo in its list:
+    /// the catch-up's own events all come before it.
     #[test]
-    fn the_probe_is_answered_after_the_launch_catch_up_of_every_repo() {
+    fn launched_arrives_after_the_launch_catch_up_of_every_repo() {
         let dir = tempfile::tempdir().unwrap();
         let registry = dit_daws::registry();
         let project = dir.path().join("Test Project");
@@ -864,15 +837,14 @@ mod tests {
             Options::default(),
         )
         .unwrap();
-        running.send(Input::AddRepo(LAUNCH_PROBE.into()));
 
         let mut before = Vec::new();
         loop {
             let event = running
                 .events()
                 .recv_timeout(Duration::from_secs(30))
-                .expect("the daemon answers the probe");
-            if is_launch_probe(&event) {
+                .expect("the daemon emits Launched");
+            if matches!(event, DaemonEvent::Launched) {
                 break;
             }
             before.push(event);
@@ -883,7 +855,7 @@ mod tests {
             before
                 .iter()
                 .any(|event| matches!(event, DaemonEvent::RepoTracked { .. })),
-            "the repo was tracked before the probe was answered"
+            "the repo was tracked before Launched"
         );
         assert!(
             before.iter().any(|event| matches!(
@@ -893,40 +865,12 @@ mod tests {
                     ..
                 }
             )),
-            "its catch-up save was recorded before the probe was answered"
+            "its catch-up save was recorded before Launched"
         );
     }
 
-    #[test]
-    fn only_the_launch_probes_own_unreachable_report_is_the_launch_probe() {
-        let probe = DaemonEvent::RepoUnreachable {
-            repo: LAUNCH_PROBE.into(),
-            message: "No such file or directory".to_string(),
-        };
-        let other = DaemonEvent::RepoUnreachable {
-            repo: "/Volumes/Gone/other Project".into(),
-            message: "No such file or directory".to_string(),
-        };
-        assert!(is_launch_probe(&probe));
-        assert!(!is_launch_probe(&other));
-        assert!(!is_launch_probe(&DaemonEvent::LiveRunning(true)));
-    }
-
-    #[test]
-    fn an_adoption_probe_names_its_folder_and_is_never_the_launch_probe() {
-        let folder = Path::new("/Users/me/Music/new Project");
-        let probe = adoption_probe(folder);
-        assert!(probe.starts_with(ADOPT_PROBE));
-        assert_ne!(probe, Path::new(LAUNCH_PROBE));
-        assert_eq!(adopted_folder(&probe), folder);
-        assert!(!is_launch_probe(&DaemonEvent::RepoUnreachable {
-            repo: probe,
-            message: String::new(),
-        }));
-    }
-
-    /// Adopting a folder against a real daemon: the sets are listed as saving, their first saves come before the
-    /// probe's answer, and the list is gone once they have landed.
+    /// Adopting a folder against a real daemon: the sets are listed as saving, their first saves come before
+    /// `DaemonEvent::Adopted`, and the list is gone once they have landed.
     #[test]
     fn an_adopted_folders_sets_are_listed_until_their_first_saves_have_landed() {
         let dir = tempfile::tempdir().unwrap();
@@ -966,18 +910,15 @@ mod tests {
             ["Arranged Set", "Empty Set", "Volatile Set"]
         );
         running.send(Input::Adopt(project.clone()));
-        running.send(Input::AddRepo(adoption_probe(&tracked)));
 
         let mut landed = 0;
         loop {
             let event = running
                 .events()
                 .recv_timeout(Duration::from_secs(30))
-                .expect("the daemon answers the probe");
-            if let DaemonEvent::RepoUnreachable { repo, .. } = &event
-                && repo.starts_with(ADOPT_PROBE)
-            {
-                assert_eq!(adopted_folder(repo), tracked);
+                .expect("the daemon emits Adopted");
+            if let DaemonEvent::Adopted { folder } = &event {
+                assert_eq!(folder, &tracked);
                 break;
             }
             if matches!(
@@ -993,7 +934,7 @@ mod tests {
         }
         running.stop();
 
-        assert_eq!(landed, 3, "every set's first save came before the probe");
+        assert_eq!(landed, 3, "every set's first save came before Adopted");
         assert_eq!(
             reducer.snapshot().adopting,
             None,

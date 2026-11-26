@@ -10,8 +10,15 @@ use std::sync::{Arc, Mutex};
 use dit_cli::RemoteSource;
 use dit_core::remote::{self, Instance, RemoteError, Token, TokenStore};
 
+/// The Keychain service name: release builds share the CLI's `"dit"` service; `.dev` builds keep their own
+/// `"dit.dev"` service so development runs never overwrite the installed app's token.
+pub const fn keychain_service(dev: bool) -> &'static str {
+    if dev { "dit.dev" } else { "dit" }
+}
+
 pub struct AppRemote {
     config: PathBuf,
+    service: &'static str,
     /// The Keychain, opened on first use.
     keychain: Mutex<Option<Arc<dyn TokenStore>>>,
     /// The secret of each instance read or written, by the instance's address; `None` where there is none.
@@ -20,8 +27,13 @@ pub struct AppRemote {
 
 impl AppRemote {
     pub fn new(config: PathBuf) -> Self {
+        Self::for_app(config, false)
+    }
+
+    pub fn for_app(config: PathBuf, dev: bool) -> Self {
         AppRemote {
             config,
+            service: keychain_service(dev),
             keychain: Mutex::default(),
             secrets: Arc::default(),
         }
@@ -32,7 +44,7 @@ impl AppRemote {
         if let Some(keychain) = &*held {
             return Ok(keychain.clone());
         }
-        let keychain: Arc<dyn TokenStore> = Arc::from(remote::system_tokens()?);
+        let keychain: Arc<dyn TokenStore> = Arc::from(remote::system_tokens_for(self.service)?);
         *held = Some(keychain.clone());
         Ok(keychain)
     }
@@ -168,5 +180,13 @@ mod tests {
         store.delete(&instance).unwrap();
         assert!(store.get(&instance).unwrap().is_none());
         assert!(keychain.held.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn dev_builds_use_an_isolated_keychain_service() {
+        assert_eq!(keychain_service(false), "dit");
+        assert_eq!(keychain_service(true), "dit.dev");
+        assert_eq!(AppRemote::for_app(PathBuf::new(), false).service, "dit");
+        assert_eq!(AppRemote::for_app(PathBuf::new(), true).service, "dit.dev");
     }
 }

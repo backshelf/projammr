@@ -224,7 +224,7 @@ export const RATE_BUCKETS = {
    * every 30 s and on each change it reports; the default leaves room for a
    * burst and a reconnect, not for a loop, and the floor keeps the 30 s beat.
    */
-  "device-heartbeat": {
+  "machine-heartbeat": {
     label: "Machine beats",
     meters: "A machine reporting in, per machine",
     burst: 10,

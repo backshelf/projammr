@@ -21,7 +21,7 @@ const INSTANCE_HOST = {
 };
 
 /** The reference's name for the Projammr API. The server's own spec keeps the
- * title `PROJAMMR_API`, which the scanner identifies a server by, so only the
+ * title `PROJAMMR_API`, which dit identifies a server by, so only the
  * site's copy carries the readable one. */
 const API_TITLE = "Projammr API";
 

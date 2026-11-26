@@ -66,6 +66,9 @@ describe("docs hygiene", () => {
     const audioVersions = await readDocFile("docs/guide/audio-versions.mdx");
     expect(audioVersions).toContain(`${serverMb} MB`);
 
+    const artwork = await readDocFile("docs/guide/artwork.mdx");
+    expect(artwork).toContain(`${serverMb} MB`);
+
     const relations = await readDocFile(
       "docs/guide/relations-attachments-links.mdx"
     );

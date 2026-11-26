@@ -4,65 +4,23 @@
 
 use std::path::PathBuf;
 
+pub use dit_core::branch_file_name;
 use dit_core::remote::Instance;
 use dit_core::{Registry, Repo, RepoError};
 
-/// The most characters a branch name has, as the core's `check_branch_name` holds it.
-const BRANCH_NAME_MAX: usize = 64;
-
-/// Device names Windows reserves, which the core refuses as branch names on every system so a repo travels.
-const WINDOWS_RESERVED_NAMES: &[&str] = &[
-    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
-    "COM9", "COM¹", "COM²", "COM³", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
-    "LPT9", "LPT¹", "LPT²", "LPT³",
-];
-
 /// `name` when a branch can be called that, else the core's own refusal line (`RepoError::BadBranchName`).
 ///
-/// This is the core's `check_branch_name`, which is private to it, and `checkout_new_branch`'s refusal of `main`
-/// in any case: 1 to 64 characters that are letters, digits, space, `-`, `_` or `.`; not starting or ending with `.`
-/// or a space; not a Windows device name, with or without an extension; not `main`. A test holds it to the core's
-/// answer on a real repo for a table of names.
+/// Delegates to `dit_core::check_branch_name` and also refuses `main` in any case (matching `checkout_new_branch`).
 pub fn check_branch_name(name: &str) -> Result<(), String> {
-    let edge = |c: char| c == '.' || c == ' ';
-    let allowed = |c: char| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.');
-    let fits = (1..=BRANCH_NAME_MAX).contains(&name.chars().count());
-    let edges_ok = !name.starts_with(edge) && !name.ends_with(edge);
-    let stem = name.split('.').next().unwrap_or_default().trim();
-    let reserved = WINDOWS_RESERVED_NAMES
-        .iter()
-        .any(|device| stem.eq_ignore_ascii_case(device));
-    if fits && edges_ok && !reserved && name.chars().all(allowed) && name.to_lowercase() != "main" {
-        Ok(())
-    } else {
-        Err(RepoError::BadBranchName(name.to_string()).to_string())
+    if name.eq_ignore_ascii_case("main") {
+        return Err(RepoError::BadBranchName(name.to_string()).to_string());
     }
+    dit_core::check_branch_name(name).map_err(|error| error.to_string())
 }
 
 /// The name the branch field starts with: `restore-` and the commit's first seven hex digits.
 pub fn default_branch(hash: &str) -> String {
     format!("restore-{}", hash.chars().take(7).collect::<String>())
-}
-
-/// The file a branch `branch` of the set whose main file is `main_rel` (relative to the project folder, `/`
-/// separated) is written to: `<main file stem> @<branch>.<main file extension>` beside the main file. This is the
-/// core's `branch_file_name`, private to it, which `checkout_new_branch` names the new file with.
-pub fn branch_file_name(main_rel: &str, branch: &str) -> String {
-    let (dir, file) = main_rel.rsplit_once('/').unwrap_or(("", main_rel));
-    let file = std::path::Path::new(file);
-    let stem = file
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or_default();
-    let name = match file.extension().and_then(|ext| ext.to_str()) {
-        Some(ext) => format!("{stem} @{branch}.{ext}"),
-        None => format!("{stem} @{branch}"),
-    };
-    if dir.is_empty() {
-        name
-    } else {
-        format!("{dir}/{name}")
-    }
 }
 
 /// Where a commit's set lives on this computer.

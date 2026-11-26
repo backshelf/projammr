@@ -80,11 +80,9 @@ impl Core {
         // The daemon tracks the folder by its canonical path.
         let key = folder.canonicalize().unwrap_or_else(|_| folder.clone());
         self.with_reducer(|reducer| reducer.begin_adopting(&folder, key.clone()));
-        let (adopted, probe) = (folder.clone(), adoption_probe(&key));
-        // The probe, answered after everything adopting records, says the list of sets is done.
+        let adopted = folder.clone();
         let told = self.tell(move |running| {
             running.send(Input::Adopt(adopted));
-            running.send(Input::AddRepo(probe));
         });
         if let Err(error) = told {
             self.with_reducer(|reducer| reducer.finish_adopting(&key));

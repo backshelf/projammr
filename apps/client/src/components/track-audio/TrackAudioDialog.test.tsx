@@ -36,6 +36,7 @@ mock.module("@/actions/track-audios", () => ({
   linkTrackAudios: mock(),
   unlinkTrackAudio: mock(),
   setPrimaryTrackAudio: mock(),
+  unpinPrimaryTrackAudio: mock(),
 }));
 
 mock.module("@/components/uploads/FileUploader", () => ({

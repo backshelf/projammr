@@ -109,7 +109,7 @@ describe("DEFAULT_INSTANCE_POLICY", () => {
         "share-read": { burst: 60, perMinute: 120 },
         "share-stream": { burst: 20, perMinute: 60 },
         "share-comment": { burst: 5, perMinute: 10 },
-        "device-heartbeat": { burst: 10, perMinute: 10 },
+        "machine-heartbeat": { burst: 10, perMinute: 10 },
         "email-change": { burst: 5, perMinute: 10 },
         "notes-save": { burst: 60, perMinute: 120 },
         "lyrics-analyze": { burst: 60, perMinute: 120 },

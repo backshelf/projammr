@@ -5,11 +5,13 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { ReactNode } from "react";
 
 const setPrimaryTrackAudio = mock(async () => ({ ok: true as const }));
+const unpinPrimaryTrackAudio = mock(async () => ({ ok: true as const }));
 mock.module("@/actions/track-audios", () => ({
   getCandidateAudios: mock(async () => []),
   linkTrackAudios: mock(async () => ({ analysisJobIds: [] })),
   unlinkTrackAudio: mock(async () => ({ ok: true as const })),
   setPrimaryTrackAudio,
+  unpinPrimaryTrackAudio,
 }));
 mock.module("sonner", () => ({ toast: { success: mock(), error: mock() } }));
 mock.module("@workspace/ui/hooks/use-mobile", () => ({
@@ -76,6 +78,7 @@ function wrapRole(role: "viewer" | "editor") {
 afterEach(() => {
   cleanup();
   setPrimaryTrackAudio.mockClear();
+  unpinPrimaryTrackAudio.mockClear();
 });
 
 describe("TrackAudioDropdown", () => {
@@ -101,9 +104,12 @@ describe("TrackAudioDropdown", () => {
     expect(
       screen.queryByRole("button", { name: /Make v2 the primary version/ })
     ).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Unpin primary version" })
+    ).toBeNull();
   });
 
-  it("renders editor primary star controls as sibling menuitems without nested buttons", async () => {
+  it("renders editor primary star controls as sibling menuitems without nested buttons and lets editors unpin", async () => {
     render(
       <TrackAudioDropdown
         audios={AUDIOS}
@@ -129,5 +135,10 @@ describe("TrackAudioDropdown", () => {
     expect(
       screen.getByRole("menuitem", { name: "Manage track audios…" })
     ).toBeTruthy();
+    const unpinItem = screen.getByRole("menuitem", {
+      name: "Unpin primary version",
+    });
+    fireEvent.click(unpinItem);
+    expect(unpinPrimaryTrackAudio).toHaveBeenCalledWith(1);
   });
 });

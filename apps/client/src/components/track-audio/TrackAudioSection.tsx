@@ -1,5 +1,6 @@
 "use client";
 
+import { unpinPrimaryTrackAudio } from "@/actions/track-audios";
 import { useEntityKey } from "@/components/commands/entity-surface";
 import { PlayAffordance } from "@/components/music-player/PlayAffordance";
 import {
@@ -43,8 +44,10 @@ import { StatusChip } from "@workspace/ui/components/status-chip";
 import { useArrival } from "@workspace/ui/components/motion/arrival";
 import { m } from "@workspace/ui/lib/motion";
 import { cn } from "@workspace/ui/lib/utils";
+import { isActionError } from "@workspace/api/lib/action-result";
 import type { TrackAudioWithAsset } from "@workspace/api/api";
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 /** A stable empty array, so a version with no peaks yet does not hand
  *  `peakCeiling`'s memo a fresh reference every render. */
@@ -61,6 +64,7 @@ export function TrackAudioSection({
 }) {
   const canEdit = useProjectRole()?.can("editor") ?? false;
   const [manageOpen, setManageOpen] = useState(false);
+  const [unpinning, setUnpinning] = useState(false);
   useEntityKey("upload", () => setManageOpen(true), canEdit);
 
   const store = useMusicPlayerStore();
@@ -205,6 +209,15 @@ export function TrackAudioSection({
     ]
   );
 
+  const handleUnpin = useCallback(async (audioId: number) => {
+    setUnpinning(true);
+    const result = await unpinPrimaryTrackAudio(audioId);
+    setUnpinning(false);
+    if (isActionError(result)) {
+      toast.error(`Couldn't unpin primary version: ${result.error}`);
+    }
+  }, []);
+
   return (
     <m.div {...useArrival("audio")} className="group/track-play mt-6">
       {selected && selectedPlayable ? (
@@ -286,14 +299,26 @@ export function TrackAudioSection({
             </TrackAudioDropdown>
 
             {selected.isPrimary && selected.primaryPinned && (
-              <StatusChip
-                flag
-                colour="var(--ink-soft)"
-                title="Pinned as primary — newer bounces will not replace it"
-                className="flex-none"
-              >
-                Pinned
-              </StatusChip>
+              <>
+                <StatusChip
+                  flag
+                  colour="var(--ink-soft)"
+                  title="Pinned as primary — newer bounces will not replace it"
+                  className="flex-none"
+                >
+                  Pinned
+                </StatusChip>
+                {canEdit && (
+                  <button
+                    type="button"
+                    className={AUDIO_PILL}
+                    disabled={unpinning}
+                    onClick={() => handleUnpin(selected.id)}
+                  >
+                    Unpin
+                  </button>
+                )}
+              </>
             )}
 
             {duplicateVersion != null && (

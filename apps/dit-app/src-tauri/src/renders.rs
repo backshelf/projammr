@@ -6,22 +6,11 @@
 use std::path::Path;
 
 use dit_core::Registry;
-use dit_daemon::renders::RenderFile;
 use dit_daemon::renders::ledger::{Ledger, ProposalState};
+use dit_daemon::renders::{EXCLUDED_NAMES, RenderFile};
 use dit_daemon::{RenderEvent, RenderState};
 
 use crate::snapshot::RememberedFile;
-
-/// The folders and files the render watcher never offers from, by exact name, as `renders::rules` holds them
-/// (`EXCLUDED_NAMES` is private to the daemon: a test here asks the daemon's own rule about each name, so a name
-/// that stops being excluded fails there). The names of a DAW's managed subfolders join them, from the DAW.
-const BUILT_IN_NAMES: &[&str] = &[
-    "Library",
-    "Application Support",
-    "node_modules",
-    "Trash",
-    "Ableton",
-];
 
 /// The kinds of name the rule excludes as a class, worded for the settings list.
 const BUILT_IN_KINDS: &[&str] = &[
@@ -30,15 +19,41 @@ const BUILT_IN_KINDS: &[&str] = &[
     "iCloud, Dropbox and temporary files (.icloud, .dropbox, .tmp, ~)",
 ];
 
-/// What the render watcher never looks in, whatever the producer says: the built-in names, the DAWs' own project
-/// subfolders and the kinds of name excluded as a class.
+fn display_excluded_name(name: &str) -> String {
+    if name.contains('_') {
+        return name.to_string();
+    }
+    name.split(' ')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// What the render watcher never looks in, whatever the producer says: the daemon's built-in names
+/// ([`EXCLUDED_NAMES`]), the DAWs' own project subfolders and the kinds of name excluded as a class.
 pub fn built_in_excluded(registry: &Registry) -> Vec<String> {
-    let mut names: Vec<String> = BUILT_IN_NAMES.iter().map(|name| name.to_string()).collect();
-    for folder in registry
+    let managed: Vec<&str> = registry
         .all()
         .iter()
-        .flat_map(|daw| daw.managed_subfolders())
-    {
+        .flat_map(|daw| daw.managed_subfolders().iter().copied())
+        .collect();
+    let mut names: Vec<String> = EXCLUDED_NAMES
+        .iter()
+        .map(|name| {
+            managed
+                .iter()
+                .find(|folder| folder.eq_ignore_ascii_case(name))
+                .map(|folder| (*folder).to_string())
+                .unwrap_or_else(|| display_excluded_name(name))
+        })
+        .collect();
+    for folder in managed {
         if !names.iter().any(|held| held.eq_ignore_ascii_case(folder)) {
             names.push(folder.to_string());
         }
@@ -196,7 +211,7 @@ mod tests {
             .collect();
         let exclusions = Exclusions::new(&managed, &[]);
         let listed = built_in_excluded(&registry);
-        for name in BUILT_IN_NAMES {
+        for name in EXCLUDED_NAMES {
             assert!(
                 exclusions.excludes(&Path::new("/Users/me/Music").join(name)),
                 "{name} is not excluded by the daemon"
@@ -213,6 +228,8 @@ mod tests {
         );
         assert!(listed.iter().any(|name| name == "Backup"));
         assert!(listed.iter().any(|name| name == "Samples"));
+        assert!(listed.iter().any(|name| name == "Library"));
+        assert!(listed.iter().any(|name| name == "node_modules"));
         assert!(listed.iter().any(|name| name.starts_with("Stems")));
     }
 

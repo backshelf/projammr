@@ -65,7 +65,16 @@ export function MachineRow({ machine }: { machine: Machine }) {
         </p>
         {machine.openSession && (
           <p className="text-small text-ink-soft">
-            Open: {machine.openSession.name}
+            Open:{" "}
+            <AppLink
+              href={hrefFromParsedRoute(
+                { kind: "session", sessionId: machine.openSession.id },
+                machine.openSession.projectId
+              )}
+              className="text-ink underline-offset-4 hover:underline focus-visible:underline"
+            >
+              {machine.openSession.name}
+            </AppLink>
           </p>
         )}
         {machine.neverHere.length > 0 && (

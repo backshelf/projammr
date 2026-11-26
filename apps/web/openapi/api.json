@@ -1868,7 +1868,7 @@
           "Projects"
         ],
         "summary": "Every DAW the project's sessions are tagged with",
-        "description": "Every DAW the project's sessions are tagged with: the scanner module's id and, where known, its display name. Feeds the sessions table's DAW filter and the manual session form's suggestions.",
+        "description": "Every DAW the project's sessions are tagged with: dit's DAW module id and, where known, its display name. Feeds the sessions table's DAW filter and the manual session form's suggestions.",
         "responses": {
           "200": {
             "description": "DAWs fetched successfully",
@@ -35951,12 +35951,20 @@
                 "type": "object",
                 "properties": {
                   "assetId": {
-                    "type": "number"
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
                   },
                   "bouncedFromSaveId": {
-                    "type": [
-                      "number",
-                      "null"
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
                     ]
                   }
                 },
@@ -35976,10 +35984,113 @@
         "tags": [
           "Audio versions"
         ],
-        "summary": "Make this track audio the track's primary version",
+        "summary": "Make this track audio the track's primary version and pin it",
         "responses": {
           "200": {
             "description": "Primary set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$"
+            },
+            "required": true
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteApiTrackAudiosByIdPrimary",
+        "tags": [
+          "Audio versions"
+        ],
+        "summary": "Unpin the track's primary version so it resumes following the latest bounce",
+        "responses": {
+          "200": {
+            "description": "Primary unpinned",
             "content": {
               "application/json": {
                 "schema": {
@@ -42554,12 +42665,12 @@
                           "minimum": 20,
                           "maximum": 9007199254740991
                         },
-                        "instance-rate-limits.device-heartbeat.burst": {
+                        "instance-rate-limits.machine-heartbeat.burst": {
                           "type": "integer",
                           "minimum": 3,
                           "maximum": 9007199254740991
                         },
-                        "instance-rate-limits.device-heartbeat.perMinute": {
+                        "instance-rate-limits.machine-heartbeat.perMinute": {
                           "type": "integer",
                           "minimum": 3,
                           "maximum": 9007199254740991
@@ -69244,7 +69355,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "instance-rate-limits.device-heartbeat.burst": {
+                    "instance-rate-limits.machine-heartbeat.burst": {
                       "type": "object",
                       "properties": {
                         "effective": {
@@ -69352,7 +69463,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "instance-rate-limits.device-heartbeat.perMinute": {
+                    "instance-rate-limits.machine-heartbeat.perMinute": {
                       "type": "object",
                       "properties": {
                         "effective": {
@@ -96651,7 +96762,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "instance-rate-limits.device-heartbeat.burst": {
+                    "instance-rate-limits.machine-heartbeat.burst": {
                       "type": "object",
                       "properties": {
                         "effective": {
@@ -96759,7 +96870,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "instance-rate-limits.device-heartbeat.perMinute": {
+                    "instance-rate-limits.machine-heartbeat.perMinute": {
                       "type": "object",
                       "properties": {
                         "effective": {
@@ -100097,7 +100208,7 @@
                       }
                     ]
                   },
-                  "instance-rate-limits.device-heartbeat.burst": {
+                  "instance-rate-limits.machine-heartbeat.burst": {
                     "anyOf": [
                       {
                         "type": "integer",
@@ -100109,7 +100220,7 @@
                       }
                     ]
                   },
-                  "instance-rate-limits.device-heartbeat.perMinute": {
+                  "instance-rate-limits.machine-heartbeat.perMinute": {
                     "anyOf": [
                       {
                         "type": "integer",
@@ -102800,7 +102911,7 @@
                           }
                         ]
                       },
-                      "instance-rate-limits.device-heartbeat.burst": {
+                      "instance-rate-limits.machine-heartbeat.burst": {
                         "anyOf": [
                           {
                             "type": "string",
@@ -102812,7 +102923,7 @@
                           }
                         ]
                       },
-                      "instance-rate-limits.device-heartbeat.perMinute": {
+                      "instance-rate-limits.machine-heartbeat.perMinute": {
                         "anyOf": [
                           {
                             "type": "string",
@@ -129266,7 +129377,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "instance-rate-limits.device-heartbeat.burst": {
+                    "instance-rate-limits.machine-heartbeat.burst": {
                       "type": "object",
                       "properties": {
                         "effective": {
@@ -129374,7 +129485,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "instance-rate-limits.device-heartbeat.perMinute": {
+                    "instance-rate-limits.machine-heartbeat.perMinute": {
                       "type": "object",
                       "properties": {
                         "effective": {
@@ -134474,9 +134585,12 @@
                 "type": "object",
                 "properties": {
                   "projectId": {
-                    "type": "number"
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
                   },
                   "fingerprints": {
+                    "maxItems": 2000,
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -138535,6 +138649,7 @@
                   },
                   "saves": {
                     "minItems": 1,
+                    "maxItems": 1000,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -139418,6 +139533,7 @@
                   },
                   "commits": {
                     "minItems": 1,
+                    "maxItems": 500,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -139457,6 +139573,7 @@
                         },
                         "saves": {
                           "minItems": 1,
+                          "maxItems": 2000,
                           "type": "array",
                           "items": {
                             "type": "object",
@@ -139465,6 +139582,7 @@
                                 "type": "string"
                               },
                               "objects": {
+                                "maxItems": 100000,
                                 "type": "array",
                                 "items": {
                                   "type": "string"
@@ -139478,6 +139596,7 @@
                           }
                         },
                         "sampleObjects": {
+                          "maxItems": 10000,
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -140156,11 +140275,17 @@
                                   },
                                   "name": {
                                     "type": "string"
+                                  },
+                                  "projectId": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
                                   }
                                 },
                                 "required": [
                                   "id",
-                                  "name"
+                                  "name",
+                                  "projectId"
                                 ],
                                 "additionalProperties": false
                               },

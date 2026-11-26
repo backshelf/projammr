@@ -60,7 +60,10 @@ class LiveScratch {
     if (samples > this.capacity) {
       this.release();
       const bytes = samples * Float32Array.BYTES_PER_ELEMENT;
-      this.ptr = this.dsp.nonZero(this.dsp.exports.dsp_alloc(bytes), "dsp_alloc");
+      this.ptr = this.dsp.nonZero(
+        this.dsp.exports.dsp_alloc(bytes),
+        "dsp_alloc"
+      );
       this.capacity = samples;
       this.buffer = null;
     }

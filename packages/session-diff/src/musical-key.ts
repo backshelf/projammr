@@ -41,9 +41,7 @@ const FLAT_TO_SHARP: Readonly<Record<string, string>> = {
 
 function normalizeTonic(tonic: string): string {
   const canonical =
-    tonic.length >= 1
-      ? `${tonic[0]!.toUpperCase()}${tonic.slice(1)}`
-      : tonic;
+    tonic.length >= 1 ? `${tonic[0]!.toUpperCase()}${tonic.slice(1)}` : tonic;
   return FLAT_TO_SHARP[canonical] ?? canonical.replace("#", "♯");
 }
 
@@ -132,8 +130,7 @@ const FLAT_NAMES: Readonly<Record<string, string>> = {
 const written = (tonic: string, scale: string | null) =>
   scale ? `${tonic} ${scale}` : tonic;
 
-const flatName = (tonic: string) =>
-  FLAT_NAMES[normalizeTonic(tonic)] ?? tonic;
+const flatName = (tonic: string) => FLAT_NAMES[normalizeTonic(tonic)] ?? tonic;
 
 /** One notation: how it writes a whole key, and how it labels a spoke of
  *  the major ring. */
