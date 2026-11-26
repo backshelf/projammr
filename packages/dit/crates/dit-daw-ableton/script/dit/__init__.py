@@ -56,7 +56,10 @@ class DitSurface(ControlSurface):
         self._alive = False
         if self._connected:
             self._outbox.push(protocol.encode(self._reporter.closed()))
-            self._send_pending()
+            try:
+                self._send_pending()
+            except OSError:
+                pass
         self._drop()
         super(DitSurface, self).disconnect()
 

@@ -110,4 +110,8 @@ pub enum DaemonEvent {
     /// The remembered turn-downs were brought in step with the hub's after a hub was attached: the files and
     /// folders listed in the settings may have changed.
     RejectionsSynced,
+    /// `Daemon::launch` has finished tracking and catching up every configured repo.
+    Launched,
+    /// `Daemon::adopt` has finished processing `folder` (whether it succeeded or reported a `RepoError`).
+    Adopted { folder: PathBuf },
 }

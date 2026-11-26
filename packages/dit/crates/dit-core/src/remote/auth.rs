@@ -29,12 +29,21 @@ pub trait TokenStore: Send + Sync {
     fn delete(&self, instance: &Instance) -> Result<(), RemoteError>;
 }
 
-/// The platform's token store: the login Keychain on macOS. Other platforms have none yet.
+/// The platform's token store under the default `"dit"` keyring service: the login Keychain on macOS.
+/// Other platforms have none yet.
 pub fn system_tokens() -> Result<Box<dyn TokenStore>, RemoteError> {
+    system_tokens_for("dit")
+}
+
+/// The platform's token store under an explicit keyring `service` name (e.g. `"dit.dev"` for dev builds).
+pub fn system_tokens_for(service: &str) -> Result<Box<dyn TokenStore>, RemoteError> {
     #[cfg(target_vendor = "apple")]
-    return Ok(Box::new(super::keychain::Keychain::open()?));
+    return Ok(Box::new(super::keychain::Keychain::open(service)?));
     #[cfg(not(target_vendor = "apple"))]
-    Err(RemoteError::NoKeyring)
+    {
+        let _ = service;
+        Err(RemoteError::NoKeyring)
+    }
 }
 
 /// Time for the polling loop, so a test can run it without waiting.

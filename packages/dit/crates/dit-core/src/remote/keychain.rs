@@ -8,20 +8,28 @@ use keyring_core::{Entry, Error};
 
 use super::{Instance, RemoteError, Token, TokenStore};
 
-/// The keyring service a token is stored under; its account is the instance's address.
-const SERVICE: &str = "dit";
+/// The default keyring service a token is stored under; its account is the instance's address.
+pub(super) const DEFAULT_SERVICE: &str = "dit";
 
-/// One generic password per instance in the login Keychain.
-pub(super) struct Keychain(Arc<Store>);
+/// One generic password per instance in the login Keychain under a chosen service name.
+pub(super) struct Keychain {
+    store: Arc<Store>,
+    service: String,
+}
 
 impl Keychain {
-    pub(super) fn open() -> Result<Self, RemoteError> {
-        Store::new().map(Keychain).map_err(keyring_error)
+    pub(super) fn open(service: &str) -> Result<Self, RemoteError> {
+        Store::new()
+            .map(|store| Keychain {
+                store,
+                service: service.to_string(),
+            })
+            .map_err(keyring_error)
     }
 
     fn entry(&self, instance: &Instance) -> Result<Entry, RemoteError> {
-        self.0
-            .build(SERVICE, instance.url(), None)
+        self.store
+            .build(&self.service, instance.url(), None)
             .map_err(keyring_error)
     }
 }

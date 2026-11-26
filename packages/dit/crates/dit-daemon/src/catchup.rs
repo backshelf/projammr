@@ -64,7 +64,12 @@ mod tests {
 
         let found: Vec<_> = find_repos(base, &["Samples"])
             .into_iter()
-            .map(|path| path.strip_prefix(base).unwrap().display().to_string())
+            .map(|path| {
+                path.strip_prefix(base)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
             .collect();
 
         assert_eq!(

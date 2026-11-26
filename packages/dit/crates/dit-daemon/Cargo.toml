@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 dit-core = { path = "../dit-core" }
+getrandom.workspace = true
 lofty = "0.25.4"
 notify = "8.2.0"
 sha2.workspace = true

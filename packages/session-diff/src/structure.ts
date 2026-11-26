@@ -9,20 +9,112 @@ const sameDevices = (a: SessionTrack, b: SessionTrack): boolean =>
   a.devices.length === b.devices.length &&
   a.devices.every((device, i) => device === b.devices[i]);
 
+const countValues = (items: readonly string[]): Map<string, number> => {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    counts.set(item, (counts.get(item) ?? 0) + 1);
+  }
+  return counts;
+};
+
+const multisetDiff = (
+  before: readonly string[],
+  after: readonly string[]
+): { added: string[]; removed: string[] } => {
+  const beforeCounts = countValues(before);
+  const added: string[] = [];
+  for (const device of after) {
+    const remaining = beforeCounts.get(device) ?? 0;
+    if (remaining > 0) beforeCounts.set(device, remaining - 1);
+    else added.push(device);
+  }
+
+  const afterCounts = countValues(after);
+  const removed: string[] = [];
+  for (const device of before) {
+    const remaining = afterCounts.get(device) ?? 0;
+    if (remaining > 0) afterCounts.set(device, remaining - 1);
+    else removed.push(device);
+  }
+  return { added, removed };
+};
+
 /**
- * The tracks present in `b` but not `a`, and vice versa, matched by name. A
- * track keeps its identity across a save as long as it keeps its name.
+ * Pairs tracks across two saves: first by stable DAW track id when both sides
+ * carry one, then by name occurrence order so duplicate track names pair 1-to-1
+ * rather than colliding.
+ */
+function matchTracks(
+  before: SessionTrack[],
+  after: SessionTrack[]
+): {
+  pairs: Map<SessionTrack, SessionTrack>;
+  added: SessionTrack[];
+  removed: SessionTrack[];
+} {
+  const pairs = new Map<SessionTrack, SessionTrack>();
+  const usedBefore = new Set<SessionTrack>();
+  const usedAfter = new Set<SessionTrack>();
+
+  const beforeById = new Map<number, SessionTrack[]>();
+  for (const track of before) {
+    if (track.id != null) {
+      const list = beforeById.get(track.id);
+      if (list) list.push(track);
+      else beforeById.set(track.id, [track]);
+    }
+  }
+  for (const track of after) {
+    if (track.id == null) continue;
+    const candidates = beforeById.get(track.id);
+    const matched = candidates?.find((candidate) => !usedBefore.has(candidate));
+    if (matched) {
+      pairs.set(track, matched);
+      usedBefore.add(matched);
+      usedAfter.add(track);
+    }
+  }
+
+  const beforeByName = new Map<string, SessionTrack[]>();
+  for (const track of before) {
+    if (usedBefore.has(track)) continue;
+    const list = beforeByName.get(track.name);
+    if (list) list.push(track);
+    else beforeByName.set(track.name, [track]);
+  }
+  for (const track of after) {
+    if (usedAfter.has(track)) continue;
+    const candidates = beforeByName.get(track.name);
+    // Avoid pairing two tracks that carry distinct explicit DAW ids.
+    const matched = candidates?.find(
+      (candidate) =>
+        !usedBefore.has(candidate) &&
+        (candidate.id == null || track.id == null || candidate.id === track.id)
+    );
+    if (matched) {
+      pairs.set(track, matched);
+      usedBefore.add(matched);
+      usedAfter.add(track);
+    }
+  }
+
+  return {
+    pairs,
+    added: after.filter((t) => !usedAfter.has(t)),
+    removed: before.filter((t) => !usedBefore.has(t)),
+  };
+}
+
+/**
+ * The tracks present in `after` but not `before`, and vice versa, preferring
+ * stable track id when present and otherwise matching duplicate names by occurrence.
  */
 export function partitionTracks(
   before: SessionTrack[],
   after: SessionTrack[]
 ): { added: SessionTrack[]; removed: SessionTrack[] } {
-  const beforeNames = new Set(before.map((t) => t.name));
-  const afterNames = new Set(after.map((t) => t.name));
-  return {
-    added: after.filter((t) => !beforeNames.has(t.name)),
-    removed: before.filter((t) => !afterNames.has(t.name)),
-  };
+  const { added, removed } = matchTracks(before, after);
+  return { added, removed };
 }
 
 /**
@@ -68,15 +160,51 @@ export function pairRenames(
   };
 }
 
-/** Both saves' tracks, split into what was added, removed and renamed. */
+/** Both saves' tracks, paired and split into what was added, removed and renamed. */
 function trackChanges(before: SaveMeta | null, after: SaveMeta) {
   const a = before?.structure?.tracks ?? [];
   const b = after.structure?.tracks ?? [];
-  const partitioned = partitionTracks(a, b);
+  const matched = matchTracks(a, b);
+  const idRenames: { from: string; to: string }[] = [];
+  const renamedTrack = new Map<SessionTrack, string>();
+
+  for (const [now, was] of matched.pairs) {
+    if (was.name !== now.name) {
+      idRenames.push({ from: was.name, to: now.name });
+      renamedTrack.set(now, was.name);
+    }
+  }
+
+  const indexRenames: { from: string; to: string }[] = [];
+  const pairedAdds = new Set<SessionTrack>();
+  const pairedRemoves = new Set<SessionTrack>();
+  for (const gone of matched.removed) {
+    const index = a.indexOf(gone);
+    const candidate = b[index];
+    if (
+      candidate &&
+      matched.added.includes(candidate) &&
+      !pairedAdds.has(candidate) &&
+      candidate.kind === gone.kind &&
+      sameDevices(candidate, gone) &&
+      (gone.id == null || candidate.id == null || gone.id === candidate.id)
+    ) {
+      indexRenames.push({ from: gone.name, to: candidate.name });
+      matched.pairs.set(candidate, gone);
+      renamedTrack.set(candidate, gone.name);
+      pairedAdds.add(candidate);
+      pairedRemoves.add(gone);
+    }
+  }
+
   return {
     a,
     b,
-    ...pairRenames(partitioned.added, partitioned.removed, a, b),
+    pairs: matched.pairs,
+    renamedTrack,
+    renames: [...idRenames, ...indexRenames],
+    added: matched.added.filter((t) => !pairedAdds.has(t)),
+    removed: matched.removed.filter((t) => !pairedRemoves.has(t)),
   };
 }
 
@@ -86,21 +214,17 @@ function trackChanges(before: SaveMeta | null, after: SaveMeta) {
  * into a single count.
  */
 function deviceChips(
-  before: SessionTrack[],
-  after: SessionTrack[]
+  after: SessionTrack[],
+  pairs: Map<SessionTrack, SessionTrack>
 ): DiffChip[] {
-  const beforeByName = new Map(before.map((t) => [t.name, t]));
   const chips: DiffChip[] = [];
   let extra = 0;
 
   for (const track of after) {
-    const was = beforeByName.get(track.name);
+    const was = pairs.get(track);
     if (!was) continue;
 
-    const had = new Set(was.devices);
-    const has = new Set(track.devices);
-    const added = track.devices.filter((d) => !had.has(d));
-    const removed = was.devices.filter((d) => !has.has(d));
+    const { added, removed } = multisetDiff(was.devices, track.devices);
 
     const entries: { label: string; sign: "add" | "remove" }[] = [
       ...added.map((d) => ({
@@ -139,7 +263,7 @@ export const structureFacet: Facet = {
   id: "structure",
   capability: "structure",
   compare(before, after) {
-    const { a, b, renames, added, removed } = trackChanges(before, after);
+    const { b, pairs, renames, added, removed } = trackChanges(before, after);
     const chips: DiffChip[] = [];
 
     if (added.length > 0) {
@@ -151,7 +275,7 @@ export const structureFacet: Facet = {
     for (const { from, to } of renames) {
       chips.push({ kind: "rename", label: `${from} → ${to}`, from, to });
     }
-    chips.push(...deviceChips(a, b));
+    chips.push(...deviceChips(b, pairs));
 
     return chips.length > 0 ? { chips } : null;
   },
@@ -202,7 +326,7 @@ export function diffStructure(
   before: SaveMeta | null,
   after: SaveMeta
 ): StructureDiff {
-  const { a, b, renames, removed } = trackChanges(before, after);
+  const { a, b, pairs, renamedTrack, removed } = trackChanges(before, after);
   const plugins = {
     ...before?.structure?.plugins,
     ...after.structure?.plugins,
@@ -217,28 +341,31 @@ export function diffStructure(
     };
   };
 
-  const renamedTo = new Map(renames.map((r) => [r.to, r.from]));
-  const beforeByName = new Map(a.map((t) => [t.name, t]));
-  for (const { from, to } of renames)
-    beforeByName.set(to, beforeByName.get(from)!);
-
   const deviceRows = (
     was: SessionTrack | undefined,
     now: SessionTrack
   ): DeviceRow[] => {
     if (!was) return now.devices.map((name) => device(name, "same"));
-    const had = new Set(was.devices);
-    const has = new Set(now.devices);
-    // The new chain in order, with additions marked, then whatever the chain
-    // dropped appended at the end.
-    return [
-      ...now.devices.map((name) =>
-        device(name, had.has(name) ? "same" : "added")
-      ),
-      ...was.devices
-        .filter((d) => !has.has(d))
-        .map((name) => device(name, "removed")),
-    ];
+    const hadRemaining = countValues(was.devices);
+    const hasRemaining = countValues(now.devices);
+    const currentRows = now.devices.map((name) => {
+      const remaining = hadRemaining.get(name) ?? 0;
+      if (remaining > 0) {
+        hadRemaining.set(name, remaining - 1);
+        return device(name, "same");
+      }
+      return device(name, "added");
+    });
+    const removedRows: DeviceRow[] = [];
+    for (const name of was.devices) {
+      const remaining = hasRemaining.get(name) ?? 0;
+      if (remaining > 0) {
+        hasRemaining.set(name, remaining - 1);
+      } else {
+        removedRows.push(device(name, "removed"));
+      }
+    }
+    return [...currentRows, ...removedRows];
   };
 
   const rows: TrackRow[] = [];
@@ -268,11 +395,12 @@ export function diffStructure(
 
   b.forEach((now, i) => {
     while (nextRemoved <= i) pushRemoved(nextRemoved++);
-    const was = beforeByName.get(now.name);
+    const was = pairs.get(now);
+    const formerName = renamedTrack.get(now);
     const devices = deviceRows(before ? was : undefined, now);
     const status: TrackRow["status"] = !before
       ? "same"
-      : renamedTo.has(now.name)
+      : formerName != null
         ? "renamed"
         : !was
           ? "added"
@@ -283,7 +411,7 @@ export function diffStructure(
       key: `${status}:${now.name}:${rows.length}`,
       kind: now.kind,
       name: now.name,
-      was: renamedTo.get(now.name),
+      was: formerName,
       status,
       devices,
       id: now.id,

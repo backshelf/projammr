@@ -215,6 +215,7 @@ impl Driver {
             return Err(BackfillError::Nothing);
         }
         let lock = self.lock()?;
+        self.clear_pause();
         State::update(&self.config.state, |state| state.begin(plan))
             .map_err(BackfillError::state)?;
         let ended = self.go(remote, lock, out);
@@ -229,6 +230,7 @@ impl Driver {
         out: &mut dyn FnMut(Event),
     ) -> Result<Summary, BackfillError> {
         let lock = self.lock()?;
+        self.clear_pause();
         let held = State::update(&self.config.state, |state| {
             state.paused = false;
             !state.plan.folders.is_empty()
@@ -466,8 +468,14 @@ impl Driver {
             let pushed = self.hub(reporter, index, path, &host, |reporter| {
                 remote::push_observed(&repo, remote, &options, &mut |progress| {
                     if let PushProgress::Uploaded { bytes } = progress {
-                        sent += bytes;
-                        reporter.progress(path, FolderState::Uploading { sent, of: of_bytes });
+                        sent = sent.saturating_add(bytes);
+                        reporter.progress(
+                            path,
+                            FolderState::Uploading {
+                                sent: sent.min(of_bytes),
+                                of: of_bytes,
+                            },
+                        );
                     }
                     if self.stopped() {
                         ControlFlow::Break(())

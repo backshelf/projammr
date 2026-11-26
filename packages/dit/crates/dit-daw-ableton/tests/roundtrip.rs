@@ -403,7 +403,7 @@ fn an_empty_document_has_no_parts() {
 
 #[test]
 fn refuses_malformed_documents() {
-    let cases: [&[u8]; 12] = [
+    let cases: [&[u8]; 15] = [
         b"<Ableton></LiveSet>",
         b"</Ableton>",
         b"<Ableton><LiveSet>",
@@ -416,6 +416,9 @@ fn refuses_malformed_documents() {
         b"<Ableton>< LiveSet/></Ableton>",
         b"<Ableton></></Ableton>",
         b"<Ableton><LiveSet><Tracks><\xffTrack /></Tracks></LiveSet></Ableton>",
+        b"\0\0\0\0",
+        b"plain non-xml garbage",
+        b"<?xml version=\"1.0\"?>",
     ];
     for doc in cases {
         assert!(

@@ -117,7 +117,7 @@ pub struct ScriptServer {
 
 fn random_nonce() -> io::Result<String> {
     let mut bytes = [0u8; 16];
-    fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
+    getrandom::fill(&mut bytes).map_err(|error| io::Error::other(error.to_string()))?;
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 

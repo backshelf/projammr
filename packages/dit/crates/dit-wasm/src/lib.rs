@@ -25,6 +25,7 @@ mod pack;
 #[cfg(test)]
 mod tests;
 
+use std::alloc::Layout;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -177,13 +178,20 @@ pub extern "C" fn dit_last_error() -> u32 {
 /// `BadArgument` for 0 bytes or a size memory cannot grow to.
 #[unsafe(no_mangle)]
 pub extern "C" fn dit_alloc(bytes: usize) -> *mut u8 {
-    let mut buffer = Vec::<u8>::new();
-    if bytes == 0 || buffer.try_reserve_exact(bytes).is_err() {
+    if bytes == 0 {
         record::<()>(Err(ErrorCode::BadArgument));
         return std::ptr::null_mut();
     }
-    let ptr = buffer.as_mut_ptr();
-    std::mem::forget(buffer);
+    let Ok(layout) = Layout::from_size_align(bytes, 1) else {
+        record::<()>(Err(ErrorCode::BadArgument));
+        return std::ptr::null_mut();
+    };
+    // SAFETY: `bytes` is non-zero, so `layout` has non-zero size.
+    let ptr = unsafe { std::alloc::alloc(layout) };
+    if ptr.is_null() {
+        record::<()>(Err(ErrorCode::BadArgument));
+        return std::ptr::null_mut();
+    }
     record(Ok(()));
     ptr
 }
@@ -201,9 +209,12 @@ pub unsafe extern "C" fn dit_free(ptr: *mut u8, bytes: usize) {
     if ptr.is_null() || bytes == 0 {
         return;
     }
+    let Ok(layout) = Layout::from_size_align(bytes, 1) else {
+        return;
+    };
     // SAFETY: the caller guarantees `dit_alloc(bytes)` returned `ptr`, which
-    // reserved a buffer of exactly `bytes` bytes; length 0 drops no elements.
-    drop(unsafe { Vec::from_raw_parts(ptr, 0, bytes) });
+    // allocated with this same layout.
+    unsafe { std::alloc::dealloc(ptr, layout) };
 }
 
 /// Parses the decoded XML document of a set into its `SetMeta`, as JSON. The

@@ -191,6 +191,7 @@ pub fn synced_by(path: &Path) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::os::unix::fs::symlink;
     use std::time::Duration;
 
@@ -215,7 +216,12 @@ mod tests {
     fn find(root: &Path) -> Vec<String> {
         find_with(root, &AtomicBool::new(false), &mut |_| {})
             .into_iter()
-            .map(|path| path.strip_prefix(root).unwrap().display().to_string())
+            .map(|path| {
+                path.strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
             .collect()
     }
 
@@ -286,6 +292,7 @@ mod tests {
         assert_eq!(found, [inside]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_symlink_loop_ends_and_a_project_is_found_once() {
         let root = tempfile::tempdir().unwrap();
@@ -301,6 +308,7 @@ mod tests {
         assert!(found[0].ends_with("a Project") || found[0].ends_with("again Project"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_symlinked_folder_is_followed() {
         let root = tempfile::tempdir().unwrap();

@@ -710,3 +710,81 @@ fn a_long_foreign_chain_takes_a_bounded_number_of_requests() {
         restored.requests
     );
 }
+
+#[test]
+fn restore_validates_branch_name_and_local_collisions_before_fetching_objects() {
+    let world = world(0, documents());
+    let (bad, _) = run(&world, 12, Some("bad/name"));
+    assert!(matches!(
+        bad,
+        Err(RestoreError::Repo(crate::RepoError::BadBranchName(_)))
+    ));
+    assert_eq!(paths(&world.server), ["GET /api/commits/12"]);
+
+    fs::write(world.here.root().join("Song @taken.tset"), b"mine").unwrap();
+    let (collided, _) = run(&world, 12, Some("taken"));
+    assert!(matches!(
+        collided,
+        Err(RestoreError::BranchFileExists { .. })
+    ));
+    assert_eq!(
+        paths(&world.server),
+        ["GET /api/commits/12", "GET /api/commits/12"],
+        "no object fetch requests when target file already exists"
+    );
+}
+
+#[test]
+fn restore_rejects_cyclic_parent_hash_history_without_looping() {
+    let world = world(0, documents());
+    let c1 = world.commits[1];
+    let c2 = world.commits[2];
+    let s1 = world.saves[1];
+    let s2 = world.saves[2];
+    let cycle_views = vec![
+        (
+            12,
+            json!({
+                "id": 12, "hash": c2.to_string(),
+                "parentHash": c1.to_string(), "saveHash": s2.to_string(),
+                "message": "c2", "kind": "user", "committedAt": 2, "branch": "main",
+                "ditSetId": world.set, "repoId": REPO_ID, "sessionId": 11, "sessionName": "Song",
+            }),
+        ),
+        (
+            11,
+            json!({
+                "id": 11, "hash": c1.to_string(),
+                "parentHash": c2.to_string(), "saveHash": s1.to_string(),
+                "message": "c1", "kind": "user", "committedAt": 1, "branch": "main",
+                "ditSetId": world.set, "repoId": REPO_ID, "sessionId": 11, "sessionName": "Song",
+            }),
+        ),
+    ];
+    let server = {
+        let store = world.other.store().clone();
+        MockServer::route(move |request: &Recorded| {
+            answer(request, &store, &cycle_views, &Control::default())
+        })
+    };
+    world
+        .here
+        .bind_remote(&RemoteBinding {
+            instance: server.url.clone(),
+            repo: REPO_ID,
+        })
+        .unwrap();
+
+    let result = restore(
+        &[world.here.root().to_path_buf()],
+        &registry(),
+        &remote_to(&server),
+        12,
+        Some("cycle"),
+        &mut |_| {},
+    );
+    assert!(
+        matches!(result, Err(RestoreError::BadAnswer(ref msg)) if msg.contains("cycle")),
+        "{result:?}"
+    );
+}

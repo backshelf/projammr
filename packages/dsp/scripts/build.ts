@@ -1,12 +1,20 @@
 // Builds pkg/dsp.wasm: the crate for wasm32-unknown-unknown, then wasm-opt,
 // then a gzipped size gate. Needs cargo (rust/rust-toolchain.toml picks the
 // toolchain) and wasm-opt 116 or later on PATH.
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { $ } from "bun";
 
-const CRATE = new URL("../rust/", import.meta.url).pathname;
-const PKG = new URL("../pkg/", import.meta.url).pathname;
-const OUT = `${PKG}dsp.wasm`;
-const RAW = `${CRATE}target/wasm32-unknown-unknown/release/projammr_dsp.wasm`;
+const CRATE = fileURLToPath(new URL("../rust/", import.meta.url));
+const PKG = fileURLToPath(new URL("../pkg/", import.meta.url));
+const OUT = join(PKG, "dsp.wasm");
+const RAW = join(
+  CRATE,
+  "target",
+  "wasm32-unknown-unknown",
+  "release",
+  "projammr_dsp.wasm"
+);
 
 /** Gzipped bytes the module may not exceed; the client downloads it once per deployment. */
 const SIZE_GATE_GZIP = 160 * 1024;

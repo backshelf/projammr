@@ -53,18 +53,45 @@ const CHUNK: usize = 1 << 16;
 #[cfg(feature = "gzip")]
 const MAX_FEED: usize = uInt::MAX as usize;
 
+/// Maximum decompressed set XML size (512 MiB), guarding against gzip bombs.
+#[cfg(feature = "gzip")]
+const MAX_DECOMPRESSED_BYTES: usize = 512 * 1024 * 1024;
+
+/// Maximum initial capacity pre-allocated before inflating.
+#[cfg(feature = "gzip")]
+const MAX_INITIAL_CAPACITY: usize = 64 * 1024 * 1024;
+
+/// Whether a non-gzipped payload looks like an XML document rather than zero-filled or binary data.
+#[cfg(feature = "gzip")]
+fn looks_like_xml(file: &[u8]) -> bool {
+    if file.contains(&0) {
+        return false;
+    }
+    let trimmed = file
+        .strip_prefix(&[0xEF, 0xBB, 0xBF])
+        .unwrap_or(file)
+        .trim_ascii_start();
+    trimmed.starts_with(b"<?xml")
+        || trimmed.starts_with(b"<!")
+        || trimmed.starts_with(b"<Ableton")
+        || (trimmed.starts_with(b"<") && trimmed.get(1).is_some_and(u8::is_ascii_alphabetic))
+}
+
 /// Gunzips a set file, or passes it through when it does not start with the gzip magic (a plain XML set).
-/// An empty file is never a set, and anything short of one complete gzip member with a matching CRC32 and length
-/// is `Corrupt`.
+/// An empty file or non-XML binary payload is rejected as `Corrupt`, and anything short of one complete
+/// gzip member with a matching CRC32 and length (or exceeding [`MAX_DECOMPRESSED_BYTES`]) is `Corrupt`.
 #[cfg(feature = "gzip")]
 pub(crate) fn decode(file: &[u8]) -> Result<Vec<u8>, DawError> {
     if file.is_empty() {
         return Err(corrupt("empty file".to_string()));
     }
     if !file.starts_with(&MAGIC) {
+        if !looks_like_xml(file) {
+            return Err(corrupt("file is neither gzip nor Ableton XML".to_string()));
+        }
         return Ok(file.to_vec());
     }
-    inflate_gzip(file)
+    inflate_gzip_limited(file, MAX_DECOMPRESSED_BYTES)
 }
 
 /// Gzips a document the way Live does: header `1f 8b 08 00 00000000 00 <os>` (no flags, no mtime, no extra
@@ -81,7 +108,7 @@ pub(crate) fn encode(doc: &[u8]) -> Result<Vec<u8>, DawError> {
 }
 
 #[cfg(feature = "gzip")]
-fn inflate_gzip(file: &[u8]) -> Result<Vec<u8>, DawError> {
+fn inflate_gzip_limited(file: &[u8], max_bytes: usize) -> Result<Vec<u8>, DawError> {
     let mut stream = MaybeUninit::<z_stream>::zeroed();
     // SAFETY: zlib reads a zeroed `zalloc`, `zfree` and `opaque` as "use the default allocator", and the version
     // and size passed are libz-sys's own, so the struct layout matches the linked library.
@@ -99,7 +126,12 @@ fn inflate_gzip(file: &[u8]) -> Result<Vec<u8>, DawError> {
     // SAFETY: a successful init set `zalloc` and `zfree` to zlib's allocators, so every field now holds a valid
     // value; the stream stays in this frame, where zlib's back-pointer to it expects it.
     let stream = unsafe { stream.assume_init_mut() };
-    let mut doc = Vec::with_capacity(file.len().saturating_mul(8));
+    let initial = file
+        .len()
+        .saturating_mul(8)
+        .min(max_bytes)
+        .min(MAX_INITIAL_CAPACITY);
+    let mut doc = Vec::with_capacity(initial);
     let mut buf = vec![0u8; CHUNK];
     let mut input = file;
     let result = loop {
@@ -114,7 +146,13 @@ fn inflate_gzip(file: &[u8]) -> Result<Vec<u8>, DawError> {
         // SAFETY: `next_in` and `next_out` point into `file` and `buf` for `avail_in` and `avail_out` bytes, both
         // alive across the call, and zlib only reads through `next_in`.
         let ret = unsafe { inflate(stream, Z_NO_FLUSH) };
-        doc.extend_from_slice(&buf[..CHUNK - stream.avail_out as usize]);
+        let produced = CHUNK - stream.avail_out as usize;
+        if doc.len().saturating_add(produced) > max_bytes {
+            break Err(corrupt(format!(
+                "decompressed set exceeds maximum size of {max_bytes} bytes"
+            )));
+        }
+        doc.extend_from_slice(&buf[..produced]);
         match ret {
             Z_OK => {}
             Z_STREAM_END if stream.avail_in == 0 && input.is_empty() => break Ok(doc),
@@ -176,6 +214,7 @@ fn deflate_raw(doc: &[u8], out: &mut Vec<u8>) -> Result<u32, DawError> {
         out.extend_from_slice(&buf[..CHUNK - stream.avail_out as usize]);
         match ret {
             Z_OK => {}
+            #[allow(clippy::unnecessary_cast)]
             Z_STREAM_END => break Ok(crc as u32),
             _ => break Err(corrupt(format!("zlib failed to deflate ({ret})"))),
         }
@@ -198,4 +237,37 @@ pub(crate) fn decode(_file: &[u8]) -> Result<Vec<u8>, DawError> {
 #[cfg(not(feature = "gzip"))]
 pub(crate) fn encode(_doc: &[u8]) -> Result<Vec<u8>, DawError> {
     Err(DawError::Unsupported)
+}
+
+#[cfg(all(test, feature = "gzip"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_rejects_zero_filled_and_non_xml_payloads() {
+        for bad in [
+            vec![0u8; 4096],
+            b"not xml at all".to_vec(),
+            b"<Ableton>\0</Ableton>".to_vec(),
+        ] {
+            assert!(
+                matches!(decode(&bad), Err(DawError::Corrupt(_))),
+                "payload should be rejected as corrupt"
+            );
+        }
+    }
+
+    #[test]
+    fn inflate_gzip_rejects_payloads_over_decompressed_size_cap() {
+        let bomb_body = vec![b'A'; 256 * 1024];
+        let compressed = encode(&bomb_body).unwrap();
+        assert!(matches!(
+            inflate_gzip_limited(&compressed, 64 * 1024),
+            Err(DawError::Corrupt(_))
+        ));
+        assert_eq!(
+            inflate_gzip_limited(&compressed, bomb_body.len()).unwrap(),
+            bomb_body
+        );
+    }
 }

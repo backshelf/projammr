@@ -287,7 +287,33 @@ fn login_signs_in_as_the_resolved_machine_and_leaves_the_config_naming_none() {
     assert_eq!(config.load().machine, None);
     assert_eq!(
         server.requests()[1].header("X-Device-Name"),
-        Some(name.as_str())
+        Some(client::sanitize_device_name_header(&name).as_str())
+    );
+}
+
+#[test]
+fn curly_apostrophe_machine_name_sanitizes_device_name_header_and_succeeds() {
+    let server = MockServer::start(vec![code(1800, 5), token(), session()]);
+    let config = ConfigFile::with(&UserConfig {
+        instance: Some(Instance::parse(&server.url).unwrap()),
+        machine: Some("Alex\u{2019}s MacBook Pro".to_string()),
+        ..UserConfig::default()
+    });
+
+    let signed_in = login(
+        &config.path,
+        &MemoryTokens::default(),
+        &FakeClock::new(),
+        None,
+        |_| {},
+        |_| {},
+    )
+    .unwrap();
+
+    assert_eq!(signed_in.machine, "Alex\u{2019}s MacBook Pro");
+    assert_eq!(
+        server.requests()[1].header("X-Device-Name"),
+        Some("Alex's MacBook Pro")
     );
 }
 

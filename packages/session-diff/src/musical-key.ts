@@ -21,16 +21,42 @@ export function keyParts(musicalKey: string): {
   return { tonic: tonic || null, scale: scale.join(" ") || null };
 }
 
+/** Enharmonic flat tonics normalized to the sharp spelling the circle uses. */
+const FLAT_TO_SHARP: Readonly<Record<string, string>> = {
+  Db: "C♯",
+  "D♭": "C♯",
+  Eb: "D♯",
+  "E♭": "D♯",
+  Gb: "F♯",
+  "G♭": "F♯",
+  Ab: "G♯",
+  "A♭": "G♯",
+  Bb: "A♯",
+  "B♭": "A♯",
+  Cb: "B",
+  "C♭": "B",
+  Fb: "E",
+  "F♭": "E",
+};
+
+function normalizeTonic(tonic: string): string {
+  const canonical =
+    tonic.length >= 1
+      ? `${tonic[0]!.toUpperCase()}${tonic.slice(1)}`
+      : tonic;
+  return FLAT_TO_SHARP[canonical] ?? canonical.replace("#", "♯");
+}
+
 /** A tonic and a mode as the circle reads them, or null for a mode other
  *  than major or minor. */
 function keyFromParts(tonic: string, mode: string): ParsedKey | null {
   const scale = mode.toLowerCase();
   if (!tonic || (scale !== "major" && scale !== "minor")) return null;
-  return { tonic: tonic.replace("#", "♯"), scale };
+  return { tonic: normalizeTonic(tonic), scale };
 }
 
 export function parseMusicalKey(musicalKey: string): ParsedKey | null {
-  const [tonic, mode] = musicalKey.split(" ");
+  const [tonic, mode] = musicalKey.trim().split(/\s+/);
   return tonic && mode ? keyFromParts(tonic, mode) : null;
 }
 
@@ -107,7 +133,7 @@ const written = (tonic: string, scale: string | null) =>
   scale ? `${tonic} ${scale}` : tonic;
 
 const flatName = (tonic: string) =>
-  FLAT_NAMES[tonic.replace("#", "♯")] ?? tonic;
+  FLAT_NAMES[normalizeTonic(tonic)] ?? tonic;
 
 /** One notation: how it writes a whole key, and how it labels a spoke of
  *  the major ring. */

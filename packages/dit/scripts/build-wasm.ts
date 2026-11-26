@@ -1,12 +1,20 @@
 // Builds pkg/dit.wasm: the dit-wasm crate for wasm32-unknown-unknown, then
 // wasm-opt, then a gzipped size gate. Needs cargo (rust-toolchain.toml picks
 // the toolchain) and wasm-opt 116 or later on PATH.
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { $ } from "bun";
 
-const ROOT = new URL("../", import.meta.url).pathname;
-const PKG = `${ROOT}pkg/`;
-const OUT = `${PKG}dit.wasm`;
-const RAW = `${ROOT}target/wasm32-unknown-unknown/release/dit_wasm.wasm`;
+const ROOT = fileURLToPath(new URL("../", import.meta.url));
+const PKG = join(ROOT, "pkg");
+const OUT = join(PKG, "dit.wasm");
+const RAW = join(
+  ROOT,
+  "target",
+  "wasm32-unknown-unknown",
+  "release",
+  "dit_wasm.wasm"
+);
 
 /** Gzipped bytes the module may not exceed. */
 const SIZE_GATE_GZIP = 1024 * 1024;

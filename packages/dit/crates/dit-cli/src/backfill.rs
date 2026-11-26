@@ -18,8 +18,8 @@ use dit_core::{Registry, RepoList};
 use dit_daemon::backfill::propose::{self, Hub};
 use dit_daemon::backfill::{
     BackfillControl, BackfillError, Checked, Config, Control, Doubt, Driver, Event, FolderPlan,
-    FolderState, FolderStatus, Plan, Recorder, RunStatus, SetPlan, State, Summary, check, discard,
-    find_projects, project_facts, storage,
+    FolderState, FolderStatus, Plan, Recorder, RunLock, RunStatus, SetPlan, State, Summary, check,
+    discard, find_projects, project_facts, storage,
 };
 use serde::{Deserialize, Serialize};
 
@@ -388,12 +388,13 @@ fn plan_of(
     checked: &[Checked],
 ) -> Result<Plan, CliError> {
     let hub: Hub = propose::read(remote, project).map_err(error)?;
+    let proposer = propose::Proposer::new(&hub);
     let mut folders = Vec::with_capacity(checked.len());
     let mut taken = HashSet::new();
     for folder in checked {
         let recorded = folder.sets.iter().filter(|set| set.set_id.is_some());
         let mut sets = Vec::new();
-        for (set, proposal) in recorded.zip(propose::propose(&hub, folder, &mut taken)) {
+        for (set, proposal) in recorded.zip(proposer.propose(folder, &mut taken)) {
             if let Some(matched) = &proposal.matched {
                 cx.say(format!("{} matches '{}'", name_of(&set.file), matched.name));
             }
@@ -583,6 +584,13 @@ pub fn run(
     let wanted = not_in_dit(cx, wanted, &repos, &held)?;
     let project = choose_project(&remote, project, &state_file)?;
 
+    // Acquire the backfill run lock before `check_all` creates `.dit/` in any folder,
+    // so a concurrent backfill run fails fast without mutating disk state. Release it
+    // immediately before `control.start` hands ownership to the driver.
+    let pre_lock = RunLock::take(&state_file)
+        .map_err(error)?
+        .ok_or_else(|| error(BackfillError::Busy))?;
+
     let checked = check_all(cx, &recorder, wanted);
     if checked.is_empty() {
         return Err(error(BackfillError::Nothing));
@@ -590,6 +598,7 @@ pub fn run(
     let plan = plan_of(cx, &remote, &registry, &repos, project, &checked)
         .and_then(|plan| check_room(cx, &remote, project, &checked).map(|()| plan))
         .inspect_err(|_| undo(&checked))?;
+    drop(pre_lock);
 
     let paths: Vec<PathBuf> = plan
         .folders
@@ -598,10 +607,15 @@ pub fn run(
         .collect();
     let mut narrator = Narrator::default();
     let mut hung_up = false;
-    let catching = interrupt::Catching::start();
+    // Only install a process-wide SIGINT handler when running directly in the CLI process;
+    // over IPC (`cx.backfill.is_some()`), the command executes inside the running dit app.
+    let catch_sigint = cx.backfill.is_none();
+    let catching = catch_sigint.then(interrupt::Catching::start);
     let finished = AtomicBool::new(false);
     let ended = std::thread::scope(|scope| {
-        scope.spawn(|| interrupt::watch(control, &finished));
+        if catch_sigint {
+            scope.spawn(|| interrupt::watch(control, &finished));
+        }
         let ended = control.start(plan, &mut |event| {
             if hung_up {
                 return;

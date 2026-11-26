@@ -360,56 +360,108 @@ const DEVICE_CLAUSES: usize = 3;
 struct TrackMoves {
     renames: Vec<Clause>,
     devices: Vec<Clause>,
-    /// The names, in `after`, of the tracks a clause above already speaks for.
-    explained: HashSet<String>,
+    /// How many tracks of each name in `after` a rename or device clause already speaks for.
+    explained: HashMap<String, usize>,
+}
+
+/// Counts occurrences of each device name on a track chain.
+fn device_counts(devices: &[String]) -> HashMap<&str, usize> {
+    let mut counts = HashMap::with_capacity(devices.len());
+    for device in devices {
+        *counts.entry(device.as_str()).or_insert(0) += 1;
+    }
+    counts
 }
 
 /// Pairs each track of `after` with its track in `before`: by the DAW's track id when both have one, else by
-/// name. A pair with another name is a rename; a pair with other devices names the devices it gained and lost.
+/// name occurrence order so duplicate track names pair 1-to-1 rather than colliding. A pair with another name
+/// is a rename; a pair with other devices names the devices it gained and lost using multiset counts.
 /// Past `DEVICE_CLAUSES` the rest of the device changes are one clause.
 fn track_moves(before: &SetMeta, after: &SetMeta) -> TrackMoves {
     let (Some(was), Some(now)) = (&before.structure, &after.structure) else {
         return TrackMoves::default();
     };
-    let mut moves = TrackMoves::default();
-    let mut device_changes = 0;
-    for track in &now.tracks {
-        let Some(earlier) = was
-            .tracks
-            .iter()
-            .find(|earlier| match (earlier.id, track.id) {
-                (Some(a), Some(b)) => a == b,
-                _ => earlier.name == track.name,
-            })
-        else {
+    let mut used_before = vec![false; was.tracks.len()];
+    let mut matched: Vec<Option<usize>> = vec![None; now.tracks.len()];
+
+    // First pass: pair tracks with matching explicit DAW ids.
+    for (now_idx, track) in now.tracks.iter().enumerate() {
+        let Some(track_id) = track.id else {
             continue;
         };
+        if let Some((was_idx, _)) = was
+            .tracks
+            .iter()
+            .enumerate()
+            .find(|(idx, earlier)| !used_before[*idx] && earlier.id == Some(track_id))
+        {
+            used_before[was_idx] = true;
+            matched[now_idx] = Some(was_idx);
+        }
+    }
+
+    // Second pass: pair remaining tracks by name occurrence without crossing distinct ids.
+    for (now_idx, track) in now.tracks.iter().enumerate() {
+        if matched[now_idx].is_some() {
+            continue;
+        }
+        if let Some((was_idx, _)) = was.tracks.iter().enumerate().find(|(idx, earlier)| {
+            !used_before[*idx]
+                && earlier.name == track.name
+                && (earlier.id.is_none() || track.id.is_none() || earlier.id == track.id)
+        }) {
+            used_before[was_idx] = true;
+            matched[now_idx] = Some(was_idx);
+        }
+    }
+
+    let mut moves = TrackMoves::default();
+    let mut device_changes = 0;
+    for (now_idx, track) in now.tracks.iter().enumerate() {
+        let Some(was_idx) = matched[now_idx] else {
+            continue;
+        };
+        let earlier = &was.tracks[was_idx];
+        let mut track_explained = false;
         if earlier.name != track.name {
             moves.renames.push(Clause::new(
                 ClauseKind::Rename,
                 format!("{} \u{2192} {}", earlier.name, track.name),
             ));
-            moves.explained.insert(track.name.clone());
+            track_explained = true;
         }
-        let had: HashSet<&str> = earlier.devices.iter().map(String::as_str).collect();
-        let has: HashSet<&str> = track.devices.iter().map(String::as_str).collect();
-        let added = track
-            .devices
-            .iter()
-            .filter(|device| !had.contains(device.as_str()))
-            .map(|device| format!("+{device} on {}", track.name));
-        let removed = earlier
-            .devices
-            .iter()
-            .filter(|device| !has.contains(device.as_str()))
-            .map(|device| format!("\u{2212}{device} on {}", track.name));
-        for text in added.chain(removed) {
-            moves.explained.insert(track.name.clone());
+        let mut had = device_counts(&earlier.devices);
+        let mut added = Vec::new();
+        for device in &track.devices {
+            if let Some(count) = had.get_mut(device.as_str())
+                && *count > 0
+            {
+                *count -= 1;
+            } else {
+                added.push(format!("+{device} on {}", track.name));
+            }
+        }
+        let mut has = device_counts(&track.devices);
+        let mut removed = Vec::new();
+        for device in &earlier.devices {
+            if let Some(count) = has.get_mut(device.as_str())
+                && *count > 0
+            {
+                *count -= 1;
+            } else {
+                removed.push(format!("\u{2212}{device} on {}", track.name));
+            }
+        }
+        for text in added.into_iter().chain(removed) {
+            track_explained = true;
             if moves.devices.len() < DEVICE_CLAUSES {
                 moves.devices.push(Clause::new(ClauseKind::Devices, text));
             } else {
                 device_changes += 1;
             }
+        }
+        if track_explained {
+            *moves.explained.entry(track.name.clone()).or_insert(0) += 1;
         }
     }
     if device_changes > 0 {
@@ -479,17 +531,20 @@ pub fn summary_clauses(
         }
     }
     let metas = before.zip(after);
-    let moves = metas.map_or_else(TrackMoves::default, |(before, after)| {
+    let mut moves = metas.map_or_else(TrackMoves::default, |(before, after)| {
         track_moves(before, after)
     });
     clauses.extend(moves.renames);
     clauses.extend(moves.devices);
-    clauses.extend(
-        diff.tracks_changed
-            .iter()
-            .filter(|name| !moves.explained.contains(*name))
-            .map(|name| Clause::new(ClauseKind::TrackEdit, format!("~{name}"))),
-    );
+    for name in &diff.tracks_changed {
+        if let Some(count) = moves.explained.get_mut(name)
+            && *count > 0
+        {
+            *count -= 1;
+            continue;
+        }
+        clauses.push(Clause::new(ClauseKind::TrackEdit, format!("~{name}")));
+    }
     clauses.extend(
         diff.sections_changed
             .iter()
@@ -1398,5 +1453,40 @@ mod tests {
             }]
         );
         assert_eq!(clauses[0].text, INITIAL_COMMIT);
+    }
+
+    #[test]
+    fn device_diffing_is_multiset_aware_and_disambiguates_duplicate_track_names() {
+        let with_devices = |id: Option<i64>, name: &str, devices: &[&str]| StructureTrack {
+            kind: TrackKind::Audio,
+            name: name.to_owned(),
+            devices: devices.iter().map(|d| (*d).to_owned()).collect(),
+            id,
+            group_id: None,
+            color: None,
+        };
+        let a_meta = meta_with_tracks(vec![
+            with_devices(Some(1), "Audio", &["EQ Eight"]),
+            with_devices(Some(2), "Audio", &["Reverb", "Reverb"]),
+        ]);
+        let b_meta = meta_with_tracks(vec![
+            with_devices(Some(1), "Audio", &["EQ Eight", "EQ Eight"]),
+            with_devices(Some(2), "Audio", &["Reverb"]),
+        ]);
+        let a = tree(vec![track("1", "a1"), track("2", "a2")]);
+        let b = tree(vec![track("1", "b1"), track("2", "b2")]);
+        let diff = diff_trees(&a, Some(&a_meta), &b, Some(&b_meta));
+        let line = summary_line(&diff, Some(&a_meta), Some(&b_meta));
+        assert_eq!(line, "+EQ Eight on Audio, \u{2212}Reverb on Audio");
+
+        // When one duplicate-named track gains a device and the other only edits XML,
+        // the second track still reports `~Audio` instead of being swallowed.
+        let b_meta_one_dev = meta_with_tracks(vec![
+            with_devices(Some(1), "Audio", &["EQ Eight", "EQ Eight"]),
+            with_devices(Some(2), "Audio", &["Reverb", "Reverb"]),
+        ]);
+        let diff_one_dev = diff_trees(&a, Some(&a_meta), &b, Some(&b_meta_one_dev));
+        let line_one_dev = summary_line(&diff_one_dev, Some(&a_meta), Some(&b_meta_one_dev));
+        assert_eq!(line_one_dev, "+EQ Eight on Audio, ~Audio");
     }
 }

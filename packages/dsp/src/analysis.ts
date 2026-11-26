@@ -71,18 +71,23 @@ export class AnalysisSession {
       "analysis_new"
     );
     if (flags & ANALYSIS_SPECTRUM) {
-      dsp.check(
-        dsp.exports.analysis_spectrum_layout(
-          this.handle,
-          layout.bands,
-          layout.lowHz,
-          layout.highHz,
-          layout.fftSize,
-          layout.tiltDbPerOctave,
-          layout.floorDb
-        ),
-        "analysis_spectrum_layout"
-      );
+      try {
+        dsp.check(
+          dsp.exports.analysis_spectrum_layout(
+            this.handle,
+            layout.bands,
+            layout.lowHz,
+            layout.highHz,
+            layout.fftSize,
+            layout.tiltDbPerOctave,
+            layout.floorDb
+          ),
+          "analysis_spectrum_layout"
+        );
+      } catch (error) {
+        this.free();
+        throw error;
+      }
     }
   }
 

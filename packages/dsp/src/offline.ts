@@ -280,23 +280,23 @@ export class OfflineAnalyses {
 
   /** The stored feature buffers, or `null` without the features flag. */
   get features(): Features | null {
-    const read = (name: SeriesName): QuantisedSeries => {
+    const read = (name: SeriesName): QuantisedSeries | null => {
       const series = SERIES[name];
       const { exports } = this.dsp;
       const len = exports.analysis_feature_len(this.handle, series);
-      const bytes = this.dsp.readU8(
-        exports.analysis_feature_ptr(this.handle, series),
-        len
-      );
-      const [min, max] = this.dsp.readF32(
-        exports.analysis_feature_range(this.handle, series),
-        2
-      );
+      const dataPtr = exports.analysis_feature_ptr(this.handle, series);
+      const rangePtr = exports.analysis_feature_range(this.handle, series);
+      if (len === 0 || dataPtr === 0 || rangePtr === 0) return null;
+      const bytes = this.dsp.readU8(dataPtr, len);
+      const [min, max] = this.dsp.readF32(rangePtr, 2);
       return { bytes, min: min!, max: max! };
     };
     const onset = read("onset");
-    if (onset.bytes.length === 0) return null;
-    return { onset, mel: read("mel"), chroma: read("chroma") };
+    if (!onset) return null;
+    const mel = read("mel");
+    const chroma = read("chroma");
+    if (!mel || !chroma) return null;
+    return { onset, mel, chroma };
   }
 
   private f32(
@@ -382,6 +382,11 @@ export class FeatureSet {
  * within ±30 s correlates well enough to call them aligned.
  */
 export function alignFeatures(a: FeatureSet, b: FeatureSet): number | null {
+  if (a.dsp !== b.dsp) {
+    throw new RangeError(
+      "alignFeatures requires both FeatureSets to belong to the same Dsp instance"
+    );
+  }
   const offset = a.dsp.exports.offline_align(a.handle, b.handle);
   return offset === -(2 ** 31) ? null : offset;
 }
@@ -392,6 +397,11 @@ export function diffFeatures(
   b: FeatureSet,
   offsetMs: number
 ): Diff {
+  if (a.dsp !== b.dsp) {
+    throw new RangeError(
+      "diffFeatures requires both FeatureSets to belong to the same Dsp instance"
+    );
+  }
   const { dsp } = a;
   const { exports } = dsp;
   const handle = dsp.nonZero(
@@ -399,22 +409,28 @@ export function diffFeatures(
     "offline_diff_new"
   );
   try {
-    const change = Array.from(
-      dsp.readF32(
-        exports.offline_diff_change_ptr(handle),
-        exports.offline_diff_change_len(handle)
-      ),
-      (value) => decimal(value, 2)
-    );
-    const loudnessDelta = Array.from(
-      dsp.readF32(
-        exports.offline_diff_loudness_ptr(handle),
-        exports.offline_diff_loudness_len(handle)
-      ),
-      (lu) => decimal(lu, 1)
+    const changeLen = exports.offline_diff_change_len(handle);
+    const changePtr = exports.offline_diff_change_ptr(handle);
+    const change =
+      changeLen === 0 || changePtr === 0
+        ? []
+        : Array.from(dsp.readF32(changePtr, changeLen), (value) =>
+            decimal(value, 2)
+          );
+    const loudnessLen = exports.offline_diff_loudness_len(handle);
+    const loudnessPtr = exports.offline_diff_loudness_ptr(handle);
+    const loudnessDelta =
+      loudnessLen === 0 || loudnessPtr === 0
+        ? []
+        : Array.from(dsp.readF32(loudnessPtr, loudnessLen), (lu) =>
+            decimal(lu, 1)
+          );
+    const summaryPtr = dsp.nonZero(
+      exports.offline_diff_summary(handle),
+      "offline_diff_summary"
     );
     const [changedSeconds, changedShare, startMs, endMs, similarity] =
-      dsp.readF32(exports.offline_diff_summary(handle), 5);
+      dsp.readF32(summaryPtr, 5);
     return {
       change,
       loudnessDelta,

@@ -459,7 +459,12 @@ impl Client {
     }
 
     fn prepare<B>(&self, request: RequestBuilder<B>, token: Option<&Token>) -> RequestBuilder<B> {
-        let request = request.header(DEVICE_NAME_HEADER, &self.machine);
+        let device_name = sanitize_device_name_header(&self.machine);
+        let request = if device_name.is_empty() {
+            request
+        } else {
+            request.header(DEVICE_NAME_HEADER, &device_name)
+        };
         let request = match &self.machine_id {
             Some(id) => request.header(MACHINE_ID_HEADER, id),
             None => request,
@@ -495,6 +500,26 @@ impl Client {
             }
         }
     }
+}
+
+/// Normalizes a machine name to visible ASCII bytes safe for an HTTP header value.
+/// macOS host names commonly include typographic punctuation (such as U+2019 in "Alex’s MacBook Pro"),
+/// which `http::HeaderValue` rejects.
+pub(crate) fn sanitize_device_name_header(machine: &str) -> String {
+    let mut out = String::with_capacity(machine.len());
+    for ch in machine.chars() {
+        match ch {
+            '\u{2018}' | '\u{2019}' | '\u{02BC}' => out.push('\''),
+            '\u{201C}' | '\u{201D}' => out.push('"'),
+            '\u{2010}'..='\u{2015}' | '\u{2212}' => out.push('-'),
+            '\u{00A0}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => {
+                out.push(' ')
+            }
+            c if c.is_ascii_graphic() || c == ' ' => out.push(c),
+            _ => {}
+        }
+    }
+    out.trim().to_string()
 }
 
 /// A certificate rustls refused, whether `ureq` hands the rustls error over directly or inside the I/O error of the

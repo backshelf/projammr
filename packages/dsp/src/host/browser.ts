@@ -5,18 +5,31 @@ export const dspModuleUrl = new URL("../../pkg/dsp.wasm", import.meta.url);
 
 let compiled: Promise<WebAssembly.Module> | undefined;
 
+async function fetchAndCompile(): Promise<WebAssembly.Module> {
+  const response = await fetch(dspModuleUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch dsp.wasm: HTTP ${response.status}`);
+  }
+  if (typeof WebAssembly.compileStreaming === "function") {
+    try {
+      return await WebAssembly.compileStreaming(response.clone());
+    } catch {
+      // Fall back to `WebAssembly.compile` when the server omits `application/wasm`.
+    }
+  }
+  return WebAssembly.compile(await response.arrayBuffer());
+}
+
 /**
  * Compiles the module once per page. The `WebAssembly.Module` is also what an
  * AudioWorkletNode receives in `processorOptions` (see `host/worklet.ts`). A
  * failed compile is forgotten, so the next call tries again.
  */
 export function compileDsp(): Promise<WebAssembly.Module> {
-  compiled ??= WebAssembly.compileStreaming(fetch(dspModuleUrl)).catch(
-    (error: unknown) => {
-      compiled = undefined;
-      throw error;
-    }
-  );
+  compiled ??= fetchAndCompile().catch((error: unknown) => {
+    compiled = undefined;
+    throw error;
+  });
   return compiled;
 }
 

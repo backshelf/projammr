@@ -20,12 +20,28 @@ export function rowTree(rows: TrackRow[]): RowNode[] {
     if (node.row.id != null) byId.set(node.row.id, node);
   }
 
+  const parentOf = new Map<RowNode, RowNode>();
+  const createsCycle = (node: RowNode, candidate: RowNode): boolean => {
+    const visited = new Set<RowNode>([node]);
+    let cursor: RowNode | undefined = candidate;
+    while (cursor) {
+      if (visited.has(cursor)) return true;
+      visited.add(cursor);
+      cursor = parentOf.get(cursor);
+    }
+    return false;
+  };
+
   const roots: RowNode[] = [];
   for (const node of nodes) {
     const { groupId } = node.row;
     const parent = groupId == null ? undefined : byId.get(groupId);
-    if (parent && parent !== node) parent.children.push(node);
-    else roots.push(node);
+    if (parent && !createsCycle(node, parent)) {
+      parent.children.push(node);
+      parentOf.set(node, parent);
+    } else {
+      roots.push(node);
+    }
   }
   return roots;
 }

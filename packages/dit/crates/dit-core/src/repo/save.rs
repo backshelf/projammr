@@ -206,6 +206,17 @@ impl Repo {
             if file_updated_at <= latest.file_updated_at {
                 file_updated_at = latest.file_updated_at + 1;
             }
+        } else if let (Some((id, branch)), Some(latest)) = (&known, &latest)
+            && file_updated_at <= latest.file_updated_at
+        {
+            let occupied: std::collections::HashSet<i64> = self
+                .saves(id, branch)?
+                .into_iter()
+                .map(|save| save.file_updated_at)
+                .collect();
+            while occupied.contains(&file_updated_at) {
+                file_updated_at += 1;
+            }
         }
 
         let (set_id, branch) = match known {

@@ -189,7 +189,9 @@ mod tests {
         let dir = project();
         backup(dir.path(), "notes.txt", 100);
         backup(dir.path(), "Song A.als", 100);
+        #[cfg(not(windows))]
         backup(dir.path(), "Song A [2026-03-05 14:30:22].als", 100);
+        backup(dir.path(), "Song A [2026-03-05 14-30-22].als", 100);
         backup(dir.path(), "Song A [2026-03-05 143022].als.bak", 100);
 
         assert_eq!(list_backups(&dir.path().join("Song A.als")).unwrap(), []);

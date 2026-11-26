@@ -234,6 +234,20 @@ describe("comparing versions", () => {
     };
     expect(() => new FeatureSet(dsp, broken)).toThrow(DspError);
   });
+
+  test("rejects FeatureSets belonging to different Dsp instances", async () => {
+    const otherDsp = await loadDsp();
+    const features = featuresOf(plucks(5, 2));
+    const a = new FeatureSet(dsp, features);
+    const b = new FeatureSet(otherDsp, features);
+    try {
+      expect(() => alignFeatures(a, b)).toThrow(RangeError);
+      expect(() => diffFeatures(a, b, 0)).toThrow(RangeError);
+    } finally {
+      a.free();
+      b.free();
+    }
+  });
 });
 
 test("section groups letter A to Z, then AA onwards", () => {

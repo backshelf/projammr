@@ -73,7 +73,7 @@ fn show_code(err: &mut dyn Write, code: &DeviceCode) {
 }
 
 fn open_browser(url: &str) -> io::Result<()> {
-    let status = browser_command(url)
+    let status = browser_command(url)?
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()?;
@@ -84,23 +84,79 @@ fn open_browser(url: &str) -> io::Result<()> {
     }
 }
 
+fn validate_browser_url(url: &str) -> io::Result<()> {
+    let allowed_scheme = url.starts_with("https://") || url.starts_with("http://");
+    let has_control = url.chars().any(char::is_control);
+    if !allowed_scheme || has_control {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "refusing to open a non-HTTP(S) address in a browser",
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
-fn browser_command(url: &str) -> Command {
+fn browser_command(url: &str) -> io::Result<Command> {
+    validate_browser_url(url)?;
     let mut command = Command::new("open");
     command.arg(url);
-    command
+    Ok(command)
 }
 
 #[cfg(windows)]
-fn browser_command(url: &str) -> Command {
-    let mut command = Command::new("cmd");
-    command.args(["/C", "start", "", url]);
-    command
+fn browser_command(url: &str) -> io::Result<Command> {
+    validate_browser_url(url)?;
+    let mut command = Command::new("rundll32.exe");
+    command.args(["url.dll,FileProtocolHandler", url]);
+    Ok(command)
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
-fn browser_command(url: &str) -> Command {
+fn browser_command(url: &str) -> io::Result<Command> {
+    validate_browser_url(url)?;
     let mut command = Command::new("xdg-open");
     command.arg(url);
-    command
+    Ok(command)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn browser_command_passes_ampersand_urls_without_shell_interpolation() {
+        let url = "https://hub.example.test/device?user_code=ABCD-1234&extra=calc";
+        let command = browser_command(url).unwrap();
+        let program = command.get_program().to_string_lossy();
+        let args: Vec<String> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+
+        assert_ne!(program.to_ascii_lowercase(), "cmd");
+        assert_ne!(program.to_ascii_lowercase(), "cmd.exe");
+        #[cfg(windows)]
+        {
+            assert_eq!(program, "rundll32.exe");
+            assert_eq!(args, ["url.dll,FileProtocolHandler", url]);
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(args, [url]);
+        }
+    }
+
+    #[test]
+    fn browser_command_rejects_non_http_schemes_and_control_characters() {
+        for bad in [
+            "file:///C:/Windows/System32/calc.exe",
+            "javascript:alert(1)",
+            "calc.exe",
+            "https://hub.example.test/\r\nevil",
+        ] {
+            let error = browser_command(bad).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput, "{bad}");
+        }
+    }
 }

@@ -106,6 +106,36 @@ describe("parseMusicalKey", () => {
     expect(parseMusicalKey("C dorian")).toBeNull();
     expect(parseMusicalKey("")).toBeNull();
   });
+
+  it("normalizes flat tonics (Bb, Eb, Ab, Db, Gb) to their sharp equivalents", () => {
+    expect(parseMusicalKey("Bb minor")).toEqual({
+      tonic: "A♯",
+      scale: "minor",
+    });
+    expect(parseMusicalKey("Eb Major")).toEqual({
+      tonic: "D♯",
+      scale: "major",
+    });
+    expect(parseMusicalKey("Ab minor")).toEqual({
+      tonic: "G♯",
+      scale: "minor",
+    });
+    expect(parseMusicalKey("Db Major")).toEqual({
+      tonic: "C♯",
+      scale: "major",
+    });
+    expect(parseMusicalKey("Gb Major")).toEqual({
+      tonic: "F♯",
+      scale: "major",
+    });
+    expect(parseMusicalKey("B♭ minor")).toEqual({
+      tonic: "A♯",
+      scale: "minor",
+    });
+    expect(spellKey("Bb", "minor", "camelot")).toBe("3A");
+    expect(spellKey("Eb", "Major", "openkey")).toBe("10d");
+    expect(spellKey("Bb", "minor", "flats")).toBe("B♭ minor");
+  });
 });
 
 describe("circleOfFifthsPosition", () => {

@@ -64,7 +64,7 @@ pub fn is_stem_name(name: &str) -> bool {
 /// folders, the macOS `Library` and its `Application Support`, trash, and the folders Live keeps its own working
 /// files and its library in. Names starting with a dot are excluded as a class ([`is_excluded_name`]), which covers
 /// `.git`, `.Trash`, `.DS_Store`, `.Spotlight-V100`, `.fseventsd` and the Dropbox folders.
-const EXCLUDED_NAMES: [&str; 10] = [
+pub const EXCLUDED_NAMES: [&str; 10] = [
     "node_modules",
     "library",
     "application support",

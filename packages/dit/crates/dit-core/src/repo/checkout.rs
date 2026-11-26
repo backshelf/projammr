@@ -4,13 +4,13 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use super::refs::{MAIN_BRANCH, check_branch_name, write_sets};
+use super::refs::{BRANCH_NAME_MAX, MAIN_BRANCH, check_branch_name, write_sets};
 use super::{Repo, RepoError, Save, io_error};
 use crate::store::ObjectId;
 
 /// `<main file stem> @<branch>.<main file extension>` beside the main file
 /// named `main_rel`, relative to the project folder with `/` separators.
-fn branch_file_name(main_rel: &str, branch: &str) -> String {
+pub fn branch_file_name(main_rel: &str, branch: &str) -> String {
     let (dir, file) = main_rel.rsplit_once('/').unwrap_or(("", main_rel));
     let file = Path::new(file);
     let stem = file
@@ -55,21 +55,35 @@ impl Repo {
             .collect();
         let free = |name: &str| {
             let folded = name.to_lowercase();
-            folded != MAIN_BRANCH
+            check_branch_name(name).is_ok()
+                && folded != MAIN_BRANCH
                 && !taken.contains(&folded)
                 && !self.root.join(branch_file_name(main_rel, name)).exists()
         };
-        // `fix-2` is asked for again: the next is `fix-3`, not `fix-2-2`.
-        let stem = match wanted.rsplit_once('-') {
+        // `fix-5` is asked for again: the next is `fix-6`, not `fix-2` or `fix-5-2`.
+        let (stem, start) = match wanted.rsplit_once('-') {
             Some((stem, count))
-                if !count.is_empty() && count.bytes().all(|b| b.is_ascii_digit()) =>
+                if !stem.is_empty()
+                    && !count.is_empty()
+                    && count.bytes().all(|b| b.is_ascii_digit()) =>
             {
-                stem
+                let next = count
+                    .parse::<u64>()
+                    .ok()
+                    .and_then(|n| n.checked_add(1))
+                    .map_or(2, |n| n.max(2));
+                (stem, next)
             }
-            _ => wanted,
+            _ => (wanted, 2),
         };
         std::iter::once(wanted.to_string())
-            .chain((2..).map(|n| format!("{stem}-{n}")))
+            .chain((start..).map(|n| {
+                let suffix = format!("-{n}");
+                let max_stem = BRANCH_NAME_MAX.saturating_sub(suffix.chars().count());
+                let truncated: String = stem.chars().take(max_stem).collect();
+                let trimmed = truncated.trim_end_matches(['.', ' ']);
+                format!("{trimmed}{suffix}")
+            }))
             .find(|name| free(name))
             .ok_or_else(|| RepoError::BadBranchName(wanted.to_string()))
     }

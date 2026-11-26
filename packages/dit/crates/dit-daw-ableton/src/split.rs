@@ -22,6 +22,9 @@ const DELIMITED: [(&[u8], &[u8], &str); 3] = [
 ];
 
 pub(crate) fn split(doc: &[u8]) -> Result<Tree, DawError> {
+    if doc.contains(&0) {
+        return Err(malformed("document contains NUL bytes".to_string()));
+    }
     let mut splitter = Splitter {
         doc,
         parts: Vec::new(),
@@ -29,6 +32,7 @@ pub(crate) fn split(doc: &[u8]) -> Result<Tree, DawError> {
         open: None,
     };
     let mut stack: Vec<&[u8]> = Vec::new();
+    let mut saw_element = false;
     let mut prev_end = 0;
     while let Some(offset) = doc[prev_end..].iter().position(|&b| b == b'<') {
         let start = prev_end + offset;
@@ -39,6 +43,7 @@ pub(crate) fn split(doc: &[u8]) -> Result<Tree, DawError> {
                 attrs,
                 self_closing,
             } => {
+                saw_element = true;
                 splitter.open_tag(&stack, name, attrs, self_closing, prev_end, end)?;
                 if !self_closing {
                     stack.push(name);
@@ -72,6 +77,9 @@ pub(crate) fn split(doc: &[u8]) -> Result<Tree, DawError> {
             "<{}> is never closed",
             String::from_utf8_lossy(top)
         )));
+    }
+    if !doc.is_empty() && !saw_element {
+        return Err(malformed("document has no XML elements".to_string()));
     }
     Ok(splitter.finish())
 }

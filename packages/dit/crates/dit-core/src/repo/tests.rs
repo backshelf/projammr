@@ -2295,4 +2295,61 @@ mod time_in_set {
         assert_eq!(at(134, 30), "2h 14m");
         assert_eq!(format_span(-5), "<1m");
     }
+
+    #[test]
+    fn xml_edit_with_colliding_mtime_bumps_file_updated_at() {
+        let (_root, repo) = repo();
+        let set_mtime = |seconds: u64| {
+            fs::File::options()
+                .write(true)
+                .open(set_path(&repo))
+                .unwrap()
+                .set_modified(UNIX_EPOCH + Duration::from_secs(seconds))
+                .unwrap();
+        };
+        write_set(&set_path(&repo), &xml(1, 2, "first"));
+        set_mtime(1000);
+        let first = repo.record_save(&set_path(&repo)).unwrap().unwrap();
+        write_set(&set_path(&repo), &xml(1, 2, "second"));
+        set_mtime(1000);
+        let second = repo.record_save(&set_path(&repo)).unwrap().unwrap();
+
+        assert_eq!(repo.read_save(&first).unwrap().file_updated_at, 1_000_000);
+        assert_eq!(repo.read_save(&second).unwrap().file_updated_at, 1_000_001);
+    }
+
+    #[test]
+    fn missing_sample_appearing_later_marks_set_stale() {
+        let (_root, repo) = repo();
+        let doc = "<doc>\n<sample kind=\"project\" path=\"/p/Samples/k.wav\" rel=\"Samples/k.wav\"/>\n<blob>b";
+        write_set(&set_path(&repo), doc);
+        let first = repo.record_save(&set_path(&repo)).unwrap().unwrap();
+        assert_eq!(repo.read_save(&first).unwrap().samples[0].object, None);
+        assert!(!repo.stale(&set_path(&repo)).unwrap());
+
+        fs::create_dir_all(repo.root().join("Samples")).unwrap();
+        fs::write(repo.root().join("Samples/k.wav"), b"kick bytes").unwrap();
+        assert!(repo.stale(&set_path(&repo)).unwrap());
+    }
+
+    #[test]
+    fn free_branch_name_increments_trailing_number_and_fits_length_limit() {
+        let (_root, repo) = repo();
+        write_set(&set_path(&repo), &xml(1, 2, "v1"));
+        repo.record_save(&set_path(&repo)).unwrap().unwrap();
+        let set = set_id(&repo);
+        let commit = repo
+            .commit(&set, "main", "init", "me", CommitKind::User)
+            .unwrap();
+
+        repo.checkout_new_branch(&commit, "fix-5").unwrap();
+        assert_eq!(repo.free_branch_name(&set, "fix-5").unwrap(), "fix-6");
+
+        let max_len = "a".repeat(crate::BRANCH_NAME_MAX);
+        repo.checkout_new_branch(&commit, &max_len).unwrap();
+        let next = repo.free_branch_name(&set, &max_len).unwrap();
+        assert!(next.chars().count() <= crate::BRANCH_NAME_MAX, "{next}");
+        assert!(crate::check_branch_name(&next).is_ok(), "{next}");
+        assert!(next.ends_with("-2"), "{next}");
+    }
 }

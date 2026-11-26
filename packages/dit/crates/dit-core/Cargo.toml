@@ -19,6 +19,7 @@ remote = [
   "dep:dirs",
   "dep:toml",
   "dep:gethostname",
+  "dep:getrandom",
 ]
 # The scripted instance on a loopback port and the signed-in connection to it that the tests of everything talking to
 # an instance use, for crates whose own tests do too.
@@ -27,6 +28,7 @@ test-support = ["remote"]
 [dependencies]
 dirs = { workspace = true, optional = true }
 gethostname = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
 hex.workspace = true
 rustls = { workspace = true, optional = true }
 serde.workspace = true

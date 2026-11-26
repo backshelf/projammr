@@ -134,10 +134,31 @@ impl HubCatalogue {
                 let Some(file) = files.get(&set_id) else {
                     continue;
                 };
-                let save_times_ms = repo
-                    .saves(&set_id, "main")
-                    .map(|saves| saves.iter().map(|save| save.file_updated_at).collect())
-                    .unwrap_or_default();
+                let mut branches = vec!["main".to_string()];
+                if let Ok(branch_files) = repo.branch_files(&set_id) {
+                    for branch in branch_files.into_keys() {
+                        if !branches.contains(&branch) {
+                            branches.push(branch);
+                        }
+                    }
+                }
+                for branch in pushed.branches.keys() {
+                    if !branches.contains(branch) {
+                        branches.push(branch.clone());
+                    }
+                }
+                let mut save_times_ms: Vec<i64> = branches
+                    .iter()
+                    .flat_map(|branch| {
+                        repo.saves(&set_id, branch)
+                            .map(|saves| {
+                                saves.into_iter().map(|save| save.file_updated_at).collect()
+                            })
+                            .unwrap_or_else(|_| Vec::new())
+                    })
+                    .collect();
+                save_times_ms.sort_unstable();
+                save_times_ms.dedup();
                 sets.push(SetRef {
                     session_id: pushed.session_id,
                     set_path: repo.root().join(file),
@@ -208,6 +229,8 @@ pub trait RenderControl: Send + Sync {
     fn set_scope(&self, roots: Vec<PathBuf>, excluded: Vec<PathBuf>) -> Result<(), String>;
     /// Replaces the size limit, in MiB (0 for no limit), for renders judged from now on.
     fn set_max_upload_mb(&self, max_upload_mb: u64);
+    /// Reloads the ledger's `never_here` folder exclusions in place without restarting the service.
+    fn reload_never_here(&self) {}
 }
 
 /// The parts of the engine the app's calls reach.
@@ -268,7 +291,7 @@ impl RenderControl for Control {
     }
 
     fn set_scope(&self, roots: Vec<PathBuf>, excluded: Vec<PathBuf>) -> Result<(), String> {
-        let roots: Vec<PathBuf> = if roots.is_empty() {
+        let mut roots: Vec<PathBuf> = if roots.is_empty() {
             vec![self.home.clone()]
         } else {
             roots
@@ -276,22 +299,40 @@ impl RenderControl for Control {
                 .map(|root| root.canonicalize().unwrap_or(root))
                 .collect()
         };
+        // Coalesce nested or duplicate roots so one file change is never delivered twice.
+        roots.sort_by_key(|root| root.components().count());
+        let mut deduped: Vec<PathBuf> = Vec::with_capacity(roots.len());
+        for root in roots {
+            if !deduped.iter().any(|existing| root.starts_with(existing)) {
+                deduped.push(root);
+            }
+        }
+        let roots = deduped;
+
+        let mut subscriptions = self
+            .subscriptions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let sender = self
             .fs_events
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone();
-        // Subscribe the new roots before the old ones go, so a failure leaves what was watched.
+        // Gate the fresh subscriptions off until the previous batch is dropped so events
+        // are never delivered by both batches, while a watch error leaves the old scope intact.
+        let active = Arc::new(AtomicBool::new(false));
         let mut fresh = Vec::new();
         for root in &roots {
             let exclusions = self.exclusions.clone();
             let home = self.home.clone();
+            let active = active.clone();
             let subscription = self
                 .fswatch
                 .subscribe(
                     root,
                     move |path| {
-                        is_audio_path(path)
+                        active.load(Ordering::Acquire)
+                            && is_audio_path(path)
                             && !exclusions
                                 .read()
                                 .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -310,10 +351,10 @@ impl RenderControl for Control {
             exclusions.set_roots(&roots);
             exclusions.set_excluded(&excluded);
         }
-        *self
-            .subscriptions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = fresh;
+        // Drop old subscriptions before activating the fresh ones.
+        subscriptions.clear();
+        active.store(true, Ordering::Release);
+        *subscriptions = fresh;
         Ok(())
     }
 
@@ -323,6 +364,15 @@ impl RenderControl for Control {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .send(Input::MaxUpload(max_upload_mb));
+    }
+
+    fn reload_never_here(&self) {
+        if let Ok(ledger) = Ledger::load(&self.ledger_path) {
+            self.exclusions
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .set_never_here(&ledger.never_here);
+        }
     }
 }
 
@@ -335,6 +385,14 @@ enum Input {
     Stop,
 }
 
+/// Coordinates shutdown with the uploader thread so shutdown never joins a thread that just
+/// entered an upload and the uploader never starts an upload after shutdown has begun.
+#[derive(Default)]
+struct UploadGate {
+    stopping: bool,
+    uploading: bool,
+}
+
 /// A running render engine. Dropping it stops it.
 pub struct Service {
     control: Arc<Control>,
@@ -343,7 +401,7 @@ pub struct Service {
     stop: Arc<AtomicBool>,
     threads: Vec<JoinHandle<()>>,
     uploader: Option<JoinHandle<()>>,
-    uploading: Arc<AtomicBool>,
+    upload_gate: Arc<Mutex<UploadGate>>,
 }
 
 impl Service {
@@ -378,7 +436,7 @@ impl Service {
         let stop = Arc::new(AtomicBool::new(false));
         let (inputs, input_rx) = mpsc::channel::<Input>();
         let (uploads, upload_rx) = mpsc::channel::<u64>();
-        let uploading = Arc::new(AtomicBool::new(false));
+        let upload_gate = Arc::new(Mutex::new(UploadGate::default()));
         let control = Arc::new(Control {
             ledger_path: options.ledger_path.clone(),
             events: events.clone(),
@@ -391,6 +449,10 @@ impl Service {
             inputs: Mutex::new(inputs.clone()),
             subscriptions: Mutex::new(Vec::new()),
         });
+        // Watch roots before spawning any background threads so a setup failure leaks nothing.
+        control
+            .set_scope(options.roots, options.excluded)
+            .map_err(io::Error::other)?;
         // The hub's lists are read off this thread: attaching a hub never waits for the network. The engine reads
         // the ledger for each file it follows, so what comes in applies from the next one; the folders it keeps
         // in a filter of its own are replaced here.
@@ -411,9 +473,6 @@ impl Service {
                 }
             });
         }
-        control
-            .set_scope(options.roots, options.excluded)
-            .map_err(io::Error::other)?;
 
         let catalogue =
             HubCatalogue::new(registry.clone(), repos_file, remote.clone(), clock.clone());
@@ -454,7 +513,7 @@ impl Service {
         });
         let uploader = {
             let stop = stop.clone();
-            let uploading = uploading.clone();
+            let upload_gate = upload_gate.clone();
             let remote = remote.clone();
             let inputs = inputs.clone();
             let ledger_path = options.ledger_path;
@@ -466,7 +525,7 @@ impl Service {
                     events,
                     inputs,
                     stop,
-                    uploading,
+                    upload_gate,
                 );
             })
         };
@@ -477,7 +536,7 @@ impl Service {
             stop,
             threads,
             uploader: Some(uploader),
-            uploading,
+            upload_gate,
         })
     }
 
@@ -504,8 +563,16 @@ impl Service {
         for thread in self.threads.drain(..) {
             let _ = thread.join();
         }
+        let should_join = {
+            let mut gate = self
+                .upload_gate
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            gate.stopping = true;
+            !gate.uploading
+        };
         if let Some(uploader) = self.uploader.take()
-            && !self.uploading.load(Ordering::SeqCst)
+            && should_join
         {
             let _ = uploader.join();
         }
@@ -581,7 +648,7 @@ fn upload_loop(
     events: Sender<DaemonEvent>,
     inputs: Sender<Input>,
     stop: Arc<AtomicBool>,
-    uploading: Arc<AtomicBool>,
+    upload_gate: Arc<Mutex<UploadGate>>,
 ) {
     while !stop.load(Ordering::SeqCst) {
         let id = match jobs.recv_timeout(Duration::from_millis(100)) {
@@ -589,11 +656,24 @@ fn upload_loop(
             Err(RecvTimeoutError::Timeout) => continue,
             Err(RecvTimeoutError::Disconnected) => return,
         };
-        uploading.store(true, Ordering::SeqCst);
+        {
+            let mut gate = upload_gate
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if gate.stopping {
+                return;
+            }
+            gate.uploading = true;
+        }
         let end = run_upload(&remote.get(), &ledger_path, id, &mut |proposal| {
             let _ = events.send(DaemonEvent::Render(RenderEvent::of(proposal)));
         });
-        uploading.store(false, Ordering::SeqCst);
+        {
+            let mut gate = upload_gate
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            gate.uploading = false;
+        }
         let _ = inputs.send(Input::UploadEnded(id, end));
     }
 }

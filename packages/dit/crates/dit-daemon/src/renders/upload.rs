@@ -79,24 +79,48 @@ struct Uploaded {
     id: i64,
 }
 
+/// Why uploading a render file failed: either the local file could not be read
+/// (a permanent local failure, never queued offline) or the hub refused/dropped the request.
+#[derive(Debug)]
+pub enum UploadError {
+    Local(String),
+    Remote(RemoteError),
+}
+
+impl std::fmt::Display for UploadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UploadError::Local(message) => f.write_str(message),
+            UploadError::Remote(error) => write!(f, "{error}"),
+        }
+    }
+}
+
+impl std::error::Error for UploadError {}
+
+impl From<RemoteError> for UploadError {
+    fn from(error: RemoteError) -> Self {
+        UploadError::Remote(error)
+    }
+}
+
 /// Uploads the file at `path` to `project_id` as an asset carrying `fingerprint`, and returns the asset's id. The
 /// caller persists the id before [`accept`].
 ///
 /// The request is a `multipart/form-data` body of known length, streamed from the disk in chunks so a large file is
 /// never held in memory. `progress(sent, total)` is called as the body is read, with the bytes of the whole body read
 /// so far (nondecreasing) and its length; the last call has `sent == total`. A file that changes length while it is
-/// read fails the upload. The instance refusing the file (over its size limit, not audio) is
-/// [`RemoteError::Refused`] with the instance's message.
+/// read fails the upload. A missing or unreadable local file is [`UploadError::Local`]; the instance refusing the
+/// file (over its size limit, not audio) is [`UploadError::Remote`] carrying [`RemoteError::Refused`].
 pub fn upload(
     remote: &Remote,
     project_id: i64,
     fingerprint: &str,
     path: &Path,
     progress: &mut dyn FnMut(u64, u64),
-) -> Result<i64, RemoteError> {
-    let io_failure = |error: io::Error| RemoteError::Unexpected {
-        host: remote.client().instance().host().to_string(),
-        detail: format!("could not read {}: {error}", path.display()),
+) -> Result<i64, UploadError> {
+    let io_failure = |error: io::Error| {
+        UploadError::Local(format!("could not read {}: {error}", path.display()))
     };
     let file = File::open(path).map_err(io_failure)?;
     let size = file.metadata().map_err(io_failure)?.len();
@@ -406,7 +430,12 @@ mod tests {
     #[test]
     fn upload_sends_a_well_formed_envelope_with_the_file_intact() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("My \"Mix\".wav");
+        let file_name = if cfg!(windows) {
+            "My Mix.wav"
+        } else {
+            "My \"Mix\".wav"
+        };
+        let path = dir.path().join(file_name);
         let bytes = noise(3 * 1024 * 1024 + 17);
         fs::write(&path, &bytes).unwrap();
         let (server, remote) = server(vec![Reply::json(201, r#"{"id":77,"name":"x"}"#)]);
@@ -429,9 +458,22 @@ mod tests {
         assert_eq!(parts[0].3, b"5");
         assert_eq!(parts[1].3, b"dit:1:abc");
         let (_, filename, kind, content) = &parts[2];
-        assert_eq!(filename.as_deref(), Some("My \\\"Mix\\\".wav"));
+        let expected_filename = if cfg!(windows) {
+            "My Mix.wav"
+        } else {
+            "My \\\"Mix\\\".wav"
+        };
+        assert_eq!(filename.as_deref(), Some(expected_filename));
         assert_eq!(kind.as_deref(), Some("audio/wav"));
         assert!(content == &bytes, "the file's bytes arrive intact");
+
+        let quoted = Envelope::new("b", &[], "My \"Mix\".wav", "audio/wav", 0);
+        let mut head = Vec::new();
+        quoted.reader(&[][..], 0).read_to_end(&mut head).unwrap();
+        assert!(
+            String::from_utf8_lossy(&head).contains("filename=\"My \\\"Mix\\\".wav\""),
+            "envelope escapes quotes in filename on all platforms"
+        );
     }
 
     #[test]
@@ -481,7 +523,7 @@ mod tests {
         let error = upload(&remote, 1, "dit:f", &path, &mut |_, _| {}).unwrap_err();
 
         assert!(
-            matches!(&error, RemoteError::Refused { status: 413, message, .. }
+            matches!(&error, UploadError::Remote(RemoteError::Refused { status: 413, message, .. })
                 if message == "File is over the 1 MB upload limit"),
             "{error:?}"
         );
@@ -501,7 +543,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(error, RemoteError::Unexpected { .. }), "{error:?}");
+        assert!(matches!(error, UploadError::Local(_)), "{error:?}");
         assert!(server.requests().is_empty());
     }
 
@@ -528,7 +570,10 @@ mod tests {
 
         let error = upload(&remote, 1, "dit:f", &path, &mut |_, _| {}).unwrap_err();
 
-        assert!(matches!(error, RemoteError::SignedOut { .. }), "{error:?}");
+        assert!(
+            matches!(error, UploadError::Remote(RemoteError::SignedOut { .. })),
+            "{error:?}"
+        );
     }
 
     #[test]

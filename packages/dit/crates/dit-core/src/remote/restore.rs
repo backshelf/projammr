@@ -17,7 +17,7 @@
 //!
 //! A commit that is already in this repo's store is checked out with no request beyond the one that names it.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -164,7 +164,33 @@ pub fn restore(
     let set_id = view.dit_set_id.clone();
 
     let branch = match name {
-        Some(name) => name.to_string(),
+        Some(name) => {
+            crate::repo::check_branch_name(name)?;
+            if name.eq_ignore_ascii_case(MAIN_BRANCH) {
+                return Err(RepoError::BadBranchName(name.to_string()).into());
+            }
+            let folded = name.to_lowercase();
+            let branches = repo.branch_files(&set_id)?;
+            if let Some(existing) = branches.keys().find(|key| key.to_lowercase() == folded) {
+                return Err(RestoreError::BranchExists {
+                    suggestion: suggestion(&repo, &set_id, name),
+                    name: existing.clone(),
+                });
+            }
+            let sets = repo.sets()?;
+            if let Some(main_rel) = sets.get(&set_id) {
+                let target = repo
+                    .root()
+                    .join(crate::repo::branch_file_name(main_rel, name));
+                if target.exists() {
+                    return Err(RestoreError::BranchFileExists {
+                        suggestion: suggestion(&repo, &set_id, name),
+                        path: target,
+                    });
+                }
+            }
+            name.to_string()
+        }
         None => repo.free_branch_name(&set_id, &format!("restore-{}", &view.hash[..7]))?,
     };
     let mut fetch = Fetch {
@@ -364,9 +390,16 @@ impl Fetch<'_> {
                 Some((id, (parent, save)))
             })
             .collect();
+        let mut visited = HashSet::new();
+        visited.insert(hash);
         let mut chain = Vec::new();
         let mut at = hash;
         while let Some((Some(parent), _)) = by_hash.get(&at) {
+            if !visited.insert(*parent) {
+                return Err(RestoreError::BadAnswer(
+                    "commit history contains a cycle".to_string(),
+                ));
+            }
             if self.repo.store().contains(parent) {
                 break;
             }

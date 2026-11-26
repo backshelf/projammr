@@ -20,4 +20,5 @@ pub mod upload;
 mod test_hub;
 
 pub use event::{RenderEvent, RenderFile, RenderProgress, RenderState};
+pub use rules::EXCLUDED_NAMES;
 pub use service::{RenderControl, RenderOptions};

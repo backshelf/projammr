@@ -49,7 +49,7 @@ use thiserror::Error;
 pub use adopt::{Adoption, SetAdoption, SetTarget, adopt_sets};
 pub use auth::{
     Clock, DeviceCode, Logout, SessionUser, SignedIn, SystemClock, TokenStore, login, logout,
-    system_tokens, whoami,
+    system_tokens, system_tokens_for, whoami,
 };
 pub use client::{
     Client, HTTPS_DOCS_URL, Instance, Remote, Token, download_timeout, upload_timeout,
@@ -174,8 +174,7 @@ impl UserConfig {
             return Ok(id.to_string());
         }
         let mut random = [0u8; MACHINE_ID_BYTES];
-        fs::File::open("/dev/urandom")
-            .and_then(|mut source| io::Read::read_exact(&mut source, &mut random))
+        getrandom::fill(&mut random)
             .map_err(|error| config_error(path, format!("can't make a machine id: {error}")))?;
         let id = hex::encode(random);
         self.machine_id = Some(id.clone());

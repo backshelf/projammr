@@ -36,11 +36,13 @@ use thiserror::Error;
 use crate::daw::{Daw, DawError};
 use crate::store::{Store, StoreError};
 
+pub use checkout::branch_file_name;
 pub use commit::{Commit, CommitKind, HistoryEntry};
 pub use import::{BROUGHT_IN, ImportReport, SetOutcome};
 pub use layout::{PushSamples, RemoteBinding};
 pub use pushed::{PushedBranch, PushedSet};
 pub(crate) use refs::MAIN_BRANCH;
+pub use refs::{BRANCH_NAME_MAX, check_branch_name};
 pub use save::Save;
 pub use time::{Segment, Source, format_span};
 

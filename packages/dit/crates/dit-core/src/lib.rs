@@ -32,8 +32,9 @@ pub use meta::{
 pub use openset::{KitStatus, LogState, OpenSet, ScriptKit, Signal, TitleHint};
 #[cfg(feature = "store")]
 pub use repo::{
-    BROUGHT_IN, Commit, CommitKind, HistoryEntry, ImportReport, PushSamples, RemoteBinding, Repo,
-    RepoError, Save, Segment, SetOutcome, Source, format_span,
+    BRANCH_NAME_MAX, BROUGHT_IN, Commit, CommitKind, HistoryEntry, ImportReport, PushSamples,
+    RemoteBinding, Repo, RepoError, Save, Segment, SetOutcome, Source, branch_file_name,
+    check_branch_name, format_span,
 };
 #[cfg(feature = "remote")]
 pub use repos::RepoList;

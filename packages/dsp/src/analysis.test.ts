@@ -217,4 +217,32 @@ describe("lifecycle", () => {
     expect(() => session.push(new Float32Array(3))).toThrow(RangeError);
     session.free();
   });
+
+  test("frees its WASM handle if analysis_spectrum_layout throws during construction", () => {
+    let freedHandle = 0;
+    const originalFree = dsp.exports.analysis_free;
+    const spyExports = {
+      ...dsp.exports,
+      analysis_free(handle: number) {
+        freedHandle = handle;
+        return originalFree(handle);
+      },
+    };
+    const spyDsp = Object.assign(Object.create(Object.getPrototypeOf(dsp)), {
+      exports: spyExports,
+    }) as Dsp;
+
+    expect(
+      () =>
+        new AnalysisSession(spyDsp, RATE, 1, ANALYSIS_SPECTRUM, {
+          bands: 0,
+          lowHz: 20,
+          highHz: 20_000,
+          fftSize: 4096,
+          tiltDbPerOctave: 0,
+          floorDb: -90,
+        })
+    ).toThrow(DspError);
+    expect(freedHandle).toBeGreaterThan(0);
+  });
 });

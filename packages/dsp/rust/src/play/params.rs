@@ -427,7 +427,9 @@ mod tests {
     #[test]
     fn the_committed_params_ts_matches_the_table() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../src/params.ts");
-        let committed = std::fs::read_to_string(path).unwrap_or_default();
+        let committed = std::fs::read_to_string(path)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
         assert!(
             committed == typescript(),
             "src/params.ts is stale: run `bun run params` in packages/dsp"

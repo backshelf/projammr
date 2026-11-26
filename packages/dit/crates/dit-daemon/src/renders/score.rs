@@ -906,8 +906,9 @@ pub fn score(evidence: &Evidence) -> Score {
     let support = locality.max(timing).max(length_support).min(1.0);
     let value = confidence_of(identity, support);
 
+    let above_gate = identity > GATE_FLOOR;
     // Support is only a reason for a file whose name is plausible: below the gate it counts for nothing.
-    if identity > GATE_FLOOR {
+    if above_gate {
         if let Some(reason) = evidence.place.reason() {
             reasons.push(reason);
         }
@@ -923,9 +924,9 @@ pub fn score(evidence: &Evidence) -> Score {
     }
 
     let reason_kinds = ReasonKinds {
-        named: closest.is_some() && name_score >= NAMES_A_TRACK,
-        in_folder: evidence.place.reason().is_some(),
-        near_save: save_delta.is_some() && timing >= 0.5,
+        named: above_gate && closest.is_some() && name_score >= NAMES_A_TRACK,
+        in_folder: above_gate && evidence.place.reason().is_some(),
+        near_save: above_gate && save_delta.is_some() && timing >= 0.5,
     };
     Score {
         value,
@@ -1547,10 +1548,15 @@ mod tests {
             file_stem: "voice memo",
             names: &["Canopy"],
             place: Place::ExportFolder,
+            mtime_ms: 100_000,
+            save_times_ms: &[99_000],
             ..Evidence::default()
         });
         assert!(got.value < ASK_CONFIDENCE);
         assert!(got.reasons.is_empty(), "{:?}", got.reasons);
+        assert!(!got.reason_kinds.named);
+        assert!(!got.reason_kinds.in_folder);
+        assert!(!got.reason_kinds.near_save);
     }
 
     #[test]

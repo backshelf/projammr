@@ -64,7 +64,8 @@ fn library_root(cfg: &str) -> Option<PathBuf> {
     let user_library = &user_library[..user_library.find("</UserLibrary>")?];
     let value = &user_library
         [user_library.find("<ProjectPath Value=\"")? + "<ProjectPath Value=\"".len()..];
-    Some(PathBuf::from(&value[..value.find('"')?]))
+    let raw = &value[..value.find('"')?];
+    Some(PathBuf::from(crate::parse::decode_entities(raw).as_ref()))
 }
 
 /// The folders `Library.cfg`'s `UserFolderInfoList` names: the places the producer keeps projects and samples.
@@ -79,7 +80,8 @@ pub(crate) fn user_folders(cfg: &str) -> Vec<PathBuf> {
         .filter_map(|entry| {
             let at = entry.find(" Path=\"")? + " Path=\"".len();
             let end = entry[at..].find('"')?;
-            Some(PathBuf::from(&entry[at..at + end]))
+            let raw = &entry[at..at + end];
+            Some(PathBuf::from(crate::parse::decode_entities(raw).as_ref()))
         })
         .collect()
 }
@@ -238,7 +240,7 @@ pub(crate) fn title_stem(title: &str) -> Option<String> {
     if let Some(at) = name.find(" - Ableton Live") {
         name = &name[..at];
     }
-    if let Some(at) = name.find(" [") {
+    if let Some(at) = name.rfind(" [") {
         name = &name[..at];
     }
     let name = name.trim().trim_end_matches('*').trim();
@@ -413,6 +415,20 @@ mod tests {
     }
 
     #[test]
+    fn library_cfg_paths_unescape_xml_entities() {
+        let cfg = "<UserLibrary><ProjectPath Value=\"/Volumes/R&amp;B/Ableton&#32;Lib\" /></UserLibrary>\
+<UserFolderInfoList><UserFolderInfo Id=\"1\" Path=\"/Users/me/Drum &amp; Bass/Sets\" /></UserFolderInfoList>";
+        assert_eq!(
+            library_root(cfg),
+            Some(PathBuf::from("/Volumes/R&B/Ableton Lib"))
+        );
+        assert_eq!(
+            user_folders(cfg),
+            [PathBuf::from("/Users/me/Drum & Bass/Sets")]
+        );
+    }
+
+    #[test]
     fn titles_lose_their_decoration() {
         for title in [
             "yes crj",
@@ -423,6 +439,10 @@ mod tests {
         ] {
             assert_eq!(title_stem(title).as_deref(), Some("yes crj"), "{title}");
         }
+        assert_eq!(
+            title_stem("Song [WIP] [Song Project] - Ableton Live 12 Suite").as_deref(),
+            Some("Song [WIP]")
+        );
         for title in ["", "Live", "Ableton Live 12 Suite", "  "] {
             assert_eq!(title_stem(title), None, "{title}");
         }

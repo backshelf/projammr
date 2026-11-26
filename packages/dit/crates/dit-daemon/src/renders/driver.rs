@@ -284,6 +284,7 @@ fn begin(path: &Path, id: u64) -> Result<Result<Proposal, UploadEnd>, UploadEnd>
             ProposalState::Waiting
                 | ProposalState::Proposed
                 | ProposalState::QueuedOffline
+                | ProposalState::OverLimit
                 | ProposalState::Uploading
         ) && proposal.session_id.is_some()
         {
@@ -297,9 +298,6 @@ fn begin(path: &Path, id: u64) -> Result<Result<Proposal, UploadEnd>, UploadEnd>
         Some(ProposalState::Rejected) => {
             Err(failed(format!("Render {id} was rejected as not a bounce.")))
         }
-        Some(ProposalState::OverLimit) => Err(UploadEnd::Refused {
-            message: OVER_LIMIT_MESSAGE.to_string(),
-        }),
         _ if proposal.session_id.is_none() => Err(failed(format!(
             "Render {id} has no session yet. Say which one with --set."
         ))),
@@ -359,7 +357,11 @@ fn steps(
                             on_change(&written);
                         }
                     },
-                )?
+                )
+                .map_err(|error| match error {
+                    super::upload::UploadError::Local(message) => Stop::Local(message),
+                    super::upload::UploadError::Remote(error) => Stop::Hub(error),
+                })?
             }
         };
         current = update(path, id, |proposal| {
@@ -406,8 +408,9 @@ fn steps(
 /// proposed for when `None`). The proposal moves to [`ProposalState::Uploading`], which is what [`run_upload`]
 /// resumes and what a crash leaves for the next launch to continue. Returns the proposal as it is then.
 ///
-/// A proposal that is added, rejected, over the size limit or already being uploaded is an error in the sentence
-/// the producer reads, as is one with no session to go to.
+/// A proposal that is added, rejected or already being uploaded is an error in the sentence
+/// the producer reads, as is one with no session to go to. An over-limit proposal is accepted
+/// when explicitly chosen by the producer.
 pub fn request_accept(
     ledger_path: &Path,
     id: u64,
@@ -422,16 +425,13 @@ pub fn request_accept(
             ProposalState::Rejected => {
                 return Err(format!("{} was rejected as not a bounce.", proposal.name));
             }
-            ProposalState::OverLimit => {
-                return Err(format!(
-                    "{}: {OVER_LIMIT_MESSAGE}. Raise the limit to add it.",
-                    proposal.name
-                ));
-            }
             ProposalState::Uploading => {
                 return Err(format!("{} is being added already.", proposal.name));
             }
-            ProposalState::Waiting | ProposalState::Proposed | ProposalState::QueuedOffline => {}
+            ProposalState::Waiting
+            | ProposalState::Proposed
+            | ProposalState::QueuedOffline
+            | ProposalState::OverLimit => {}
         }
         if let Some(session) = set_session {
             proposal.session_id = Some(session);
@@ -787,17 +787,40 @@ mod tests {
         assert_eq!(error, "There is no render 99.");
 
         setup.change(|proposal| proposal.state = ProposalState::OverLimit);
-        assert!(
-            request_accept(&setup.ledger, setup.id, None)
-                .unwrap_err()
-                .contains("size limit")
-        );
+        let over_limit = request_accept(&setup.ledger, setup.id, None).unwrap();
+        assert_eq!(over_limit.state, ProposalState::Uploading);
+
         setup.change(|proposal| proposal.state = ProposalState::Added);
         assert!(
             request_accept(&setup.ledger, setup.id, None)
                 .unwrap_err()
                 .contains("added already")
         );
+    }
+
+    #[test]
+    fn over_limit_proposal_can_be_explicitly_accepted_and_uploaded() {
+        let (_server, hub, remote) = hub();
+        let setup = setup();
+        setup.change(|proposal| {
+            proposal.state = ProposalState::OverLimit;
+            proposal.message = Some(OVER_LIMIT_MESSAGE.to_string());
+        });
+
+        let accepted = request_accept(&setup.ledger, setup.id, None).unwrap();
+        assert_eq!(accepted.state, ProposalState::Uploading);
+        assert_eq!(accepted.message, None);
+        assert_eq!(setup.run(&remote), UploadEnd::Added);
+        assert_eq!(setup.proposal().state, ProposalState::Added);
+
+        // Also verify calling `run_upload` directly on an OverLimit proposal succeeds.
+        setup.change(|proposal| {
+            proposal.state = ProposalState::OverLimit;
+            proposal.upload.asset_id = None;
+        });
+        assert_eq!(setup.run(&remote), UploadEnd::Added);
+        let hub = hub.lock().unwrap();
+        assert_eq!(hub.accepts, 2);
     }
 
     #[test]

@@ -252,6 +252,13 @@ impl Running {
         }
     }
 
+    /// Reloads the render engine's `never_here` folder exclusions from the ledger in place.
+    pub fn reload_render_never_here(&self) {
+        if let Some(control) = self.render_control() {
+            control.reload_never_here();
+        }
+    }
+
     /// Stops the worker and the helpers, waiting for them.
     pub fn stop(mut self) {
         self.shutdown();

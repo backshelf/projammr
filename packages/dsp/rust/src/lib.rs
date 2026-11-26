@@ -110,13 +110,19 @@ pub extern "C" fn analysis_new(rate: u32, channels: u32, flags: u32) -> u32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn analysis_push(handle: u32, ptr: *const f32, frames: u32) -> i32 {
     let result = ANALYSES.with_object(handle, |session| {
-        let len = frames as usize * session.channels() as usize;
-        // `from_raw_parts` disallows a null pointer even for a zero-length
-        // slice, which `ptr` is whenever the host passes an empty buffer.
+        let Some(len) = (frames as usize)
+            .checked_mul(session.channels() as usize)
+            .filter(|&samples| samples <= (isize::MAX as usize) / size_of::<f32>())
+        else {
+            return Err(DspError::BadArgument);
+        };
         let interleaved = if len == 0 {
             &[]
+        } else if ptr.is_null() {
+            return Err(DspError::BadArgument);
         } else {
-            // SAFETY: forwarded from this function's own contract.
+            // SAFETY: `ptr` is non-null, `len * size_of::<f32>() <= isize::MAX`,
+            // and the caller guarantees `len` readable samples.
             unsafe { std::slice::from_raw_parts(ptr, len) }
         };
         session.push(interleaved)
@@ -802,5 +808,21 @@ mod tests {
             dsp_free(std::ptr::null_mut(), 16);
             dsp_free(std::ptr::NonNull::<u8>::dangling().as_ptr(), 0);
         }
+    }
+
+    #[test]
+    fn analysis_push_rejects_null_pointer_with_nonzero_frames() {
+        let handle = analysis_new(48_000, 2, 1);
+        assert_ne!(handle, 0);
+        // SAFETY: null with zero frames is a documented empty slice; null with
+        // non-zero frames is rejected before `from_raw_parts`.
+        unsafe {
+            assert_eq!(analysis_push(handle, std::ptr::null(), 0), 0);
+            assert_eq!(
+                analysis_push(handle, std::ptr::null(), 128),
+                DspError::BadArgument as i32
+            );
+        }
+        assert_eq!(analysis_free(handle), 0);
     }
 }

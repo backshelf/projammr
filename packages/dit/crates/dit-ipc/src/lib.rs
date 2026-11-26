@@ -9,12 +9,13 @@
 //! [`Handler`]. The socket is a Unix socket: on other platforms this crate has the wire and nothing to connect with.
 
 mod protocol;
-mod wire;
 
 #[cfg(unix)]
 mod client;
 #[cfg(unix)]
 mod server;
+#[cfg(unix)]
+mod wire;
 
 use std::io;
 use std::path::PathBuf;
@@ -56,6 +57,7 @@ pub enum IpcError {
     Protocol(String),
 }
 
+#[cfg(unix)]
 impl IpcError {
     pub(crate) fn io(context: impl Into<String>, source: io::Error) -> Self {
         IpcError::Io {

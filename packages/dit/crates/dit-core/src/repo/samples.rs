@@ -148,14 +148,17 @@ impl Repo {
 
 impl Repo {
     /// Whether any file a save's samples name is not the one the cache read: its size or modification time differs
-    /// from what the cache holds, or the cache holds nothing for it. A file that is gone is not a change here.
+    /// from what the cache holds, the cache holds nothing for it, or the sample was missing at the save and now
+    /// exists on disk. A file that is gone is not a change here.
     pub(super) fn samples_drifted(&self, cache: &SampleCache, samples: &[SampleRef]) -> bool {
         samples.iter().any(|sample| {
-            let (Some(relative), Some(_)) = (&sample.relative, &sample.object) else {
+            let Some(relative) = &sample.relative else {
                 return false;
             };
             match fs::metadata(self.root.join(relative)) {
-                Ok(meta) if meta.is_file() => cache.current(relative, &meta).is_none(),
+                Ok(meta) if meta.is_file() => {
+                    sample.object.is_none() || cache.current(relative, &meta).is_none()
+                }
                 _ => false,
             }
         })

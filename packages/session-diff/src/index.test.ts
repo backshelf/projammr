@@ -2,6 +2,7 @@ import type { SaveMeta, SessionTrack } from "./meta.js";
 import { describe, expect, it } from "bun:test";
 import { diffFormat } from "./format.js";
 import { diffSaves, diffSave, diffStructure } from "./index.js";
+import { rowTree } from "./tree.js";
 
 const track = (
   name: string,
@@ -588,5 +589,101 @@ describe("diffSave", () => {
       first: false,
       changed: false,
     });
+  });
+
+  it("ignores invalid tempo strings instead of emitting NaN", () => {
+    expect(
+      diffSaves(meta({ tempo: "abc" }), meta({ tempo: "NaN" }))
+    ).toEqual([]);
+    expect(diffSaves(meta({ tempo: "126" }), meta({ tempo: "" }))).toEqual([]);
+    expect(
+      labels(diffSaves(meta({ tempo: "invalid" }), meta({ tempo: "128" })))
+    ).toEqual(["tempo — → 128"]);
+  });
+
+  it("diffs duplicate device instances as a multiset", () => {
+    const before = meta({
+      structure: structure([track("Bass", ["EQ Eight"])]),
+    });
+    const added = meta({
+      structure: structure([track("Bass", ["EQ Eight", "EQ Eight"])]),
+    });
+    expect(labels(diffSaves(before, added))).toEqual(["+EQ Eight on Bass"]);
+    expect(
+      diffStructure(before, added).rows[0]?.devices.map((d) => [
+        d.name,
+        d.status,
+      ])
+    ).toEqual([
+      ["EQ Eight", "same"],
+      ["EQ Eight", "added"],
+    ]);
+
+    expect(labels(diffSaves(added, before))).toEqual(["−EQ Eight on Bass"]);
+    expect(
+      diffStructure(added, before).rows[0]?.devices.map((d) => [
+        d.name,
+        d.status,
+      ])
+    ).toEqual([
+      ["EQ Eight", "same"],
+      ["EQ Eight", "removed"],
+    ]);
+  });
+
+  it("disambiguates duplicate track names and prefers track IDs when present", () => {
+    const beforeDup = meta({
+      structure: structure([track("Audio", ["Reverb"]), track("Audio", [])]),
+    });
+    const afterDup = meta({
+      structure: structure([
+        track("Audio", ["Reverb"]),
+        track("Audio", ["Delay"]),
+        track("Audio", []),
+      ]),
+    });
+    expect(labels(diffSaves(beforeDup, afterDup))).toEqual([
+      "+1 track",
+      "+Delay on Audio",
+    ]);
+
+    const beforeById = meta({
+      structure: structure([
+        { kind: "audio", name: "Vox", devices: ["Reverb"], id: 1 },
+        { kind: "audio", name: "Vox", devices: ["Delay"], id: 2 },
+      ]),
+    });
+    const afterById = meta({
+      structure: structure([
+        {
+          kind: "audio",
+          name: "Lead Vox",
+          devices: ["Reverb", "EQ Eight"],
+          id: 1,
+        },
+        { kind: "audio", name: "Vox", devices: ["Delay"], id: 2 },
+      ]),
+    });
+    expect(labels(diffSaves(beforeById, afterById))).toEqual([
+      "Vox → Lead Vox",
+      "+EQ Eight on Lead Vox",
+    ]);
+  });
+
+  it("guards rowTree against multi-node groupId cycles", () => {
+    const rows = diffStructure(
+      null,
+      meta({
+        structure: structure([
+          { kind: "group", name: "Group A", devices: [], id: 1, groupId: 2 },
+          { kind: "group", name: "Group B", devices: [], id: 2, groupId: 1 },
+        ]),
+      })
+    ).rows;
+    const roots = rowTree(rows);
+    expect(roots).toHaveLength(1);
+    expect(roots[0]?.row.id).toBe(2);
+    expect(roots[0]?.children.map((c) => c.row.id)).toEqual([1]);
+    expect(roots[0]?.children[0]?.children).toEqual([]);
   });
 });

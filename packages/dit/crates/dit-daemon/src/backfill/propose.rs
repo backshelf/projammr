@@ -131,6 +131,26 @@ fn recorded_paths(hub: &Hub) -> Vec<Option<(PathBuf, Option<PathBuf>)>> {
         .collect()
 }
 
+/// Pre-resolved candidate paths for a [`Hub`], so proposing across many folders
+/// canonicalizes each hub session's recorded path once rather than once per folder.
+pub struct Proposer<'a> {
+    hub: &'a Hub,
+    paths: Vec<Option<(PathBuf, Option<PathBuf>)>>,
+}
+
+impl<'a> Proposer<'a> {
+    pub fn new(hub: &'a Hub) -> Self {
+        Self {
+            hub,
+            paths: recorded_paths(hub),
+        }
+    }
+
+    pub fn propose(&self, checked: &Checked, taken: &mut HashSet<i64>) -> Vec<Proposal> {
+        propose_with_paths(self.hub, &self.paths, checked, taken)
+    }
+}
+
 /// Proposes a target for each recorded set of `checked`, in the order of its sets. A set Check could not record has
 /// no set id and is left out.
 ///
@@ -138,13 +158,21 @@ fn recorded_paths(hub: &Hub) -> Vec<Option<(PathBuf, Option<PathBuf>)>> {
 /// this call matches are added to it, so one `taken` passed for every folder of a run keeps two folders from
 /// matching the same session. A set that would match a taken session is proposed as a new session.
 pub fn propose(hub: &Hub, checked: &Checked, taken: &mut HashSet<i64>) -> Vec<Proposal> {
+    Proposer::new(hub).propose(checked, taken)
+}
+
+fn propose_with_paths(
+    hub: &Hub,
+    paths: &[Option<(PathBuf, Option<PathBuf>)>],
+    checked: &Checked,
+    taken: &mut HashSet<i64>,
+) -> Vec<Proposal> {
     let sets: Vec<_> = checked
         .sets
         .iter()
         .filter(|set| set.set_id.is_some())
         .collect();
     let mut matches: Vec<Option<(usize, MatchedBy)>> = vec![None; sets.len()];
-    let paths = recorded_paths(hub);
 
     for (at, set) in sets.iter().enumerate() {
         let found = hub.sessions.iter().enumerate().find(|(index, session)| {

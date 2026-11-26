@@ -814,7 +814,7 @@ fn a_set_that_cannot_be_read_is_noted_and_kept() {
         &["Empty Set.als"],
         1_000_000_000,
     );
-    fs::write(folder.join("Broken.als"), b"not a set").unwrap();
+    fs::write(folder.join("Broken.als"), b"<Ableton><LiveSet>").unwrap();
     let bench = Bench::start(root, Hub::one_project(json!([])));
     let fake = Fake::new();
 

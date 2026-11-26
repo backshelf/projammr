@@ -79,12 +79,17 @@ struct Slot {
     told_busy: bool,
 }
 
-/// What recording a settled path came to.
-enum Recorded {
-    Saved(Vec<(PathBuf, ObjectId)>),
+/// Why recording a settled path stopped before finishing every referencing set.
+enum RecordStop {
     Torn,
     Locked,
     Failed(String),
+}
+
+/// What recording a settled path came to: every save that succeeded, plus an optional stop on a later file.
+struct Recorded {
+    saved: Vec<(PathBuf, ObjectId)>,
+    stop: Option<RecordStop>,
 }
 
 pub struct Daemon {
@@ -177,15 +182,20 @@ impl Daemon {
                     repo: self.config.repos_file.clone(),
                     message: error.to_string(),
                 });
+                self.emit(DaemonEvent::Launched);
                 return;
             }
         };
-        self.declined = declined.into_iter().collect();
+        self.declined = declined
+            .into_iter()
+            .map(|path| path.canonicalize().unwrap_or(path))
+            .collect();
         for repo in repos {
             self.track(&repo, Some(Origin::CatchUp));
         }
         self.report_newest_save();
         self.refresh_open();
+        self.emit(DaemonEvent::Launched);
     }
 
     /// Takes one input. A tick also looks at everything that is due.
@@ -358,31 +368,37 @@ impl Daemon {
     }
 
     fn adopt(&mut self, folder: &Path) {
-        let Some(daw) = self.config.registry.for_project_folder(folder) else {
+        let canonical = folder
+            .canonicalize()
+            .unwrap_or_else(|_| folder.to_path_buf());
+        let Some(daw) = self.config.registry.for_project_folder(&canonical) else {
             self.emit(DaemonEvent::RepoError {
                 repo: folder.to_path_buf(),
                 message: "not a project folder of a DAW dit knows".into(),
             });
+            self.emit(DaemonEvent::Adopted { folder: canonical });
             return;
         };
-        if let Err(error) = Repo::init(folder, daw) {
+        if let Err(error) = Repo::init(&canonical, daw) {
             self.emit(DaemonEvent::RepoError {
                 repo: folder.to_path_buf(),
                 message: error.to_string(),
             });
+            self.emit(DaemonEvent::Adopted { folder: canonical });
             return;
         }
-        let canonical = folder
-            .canonicalize()
-            .unwrap_or_else(|_| folder.to_path_buf());
         let _ = RepoList::update(&self.config.repos_file, |list| list.add(&canonical));
         self.declined.remove(&canonical);
         self.track(&canonical, Some(Origin::Adopt));
+        self.emit(DaemonEvent::Adopted { folder: canonical });
     }
 
     fn decline(&mut self, folder: &Path) {
-        let _ = RepoList::update(&self.config.repos_file, |list| list.decline(folder));
-        self.declined.insert(folder.to_path_buf());
+        let canonical = folder
+            .canonicalize()
+            .unwrap_or_else(|_| folder.to_path_buf());
+        let _ = RepoList::update(&self.config.repos_file, |list| list.decline(&canonical));
+        self.declined.insert(canonical);
     }
 
     /// Rebuilds which sample files the latest saves of a repo reference.
@@ -519,40 +535,42 @@ impl Daemon {
             }
             Verdict::Gone => {}
             Verdict::GaveUp => self.gave_up(&slot.repo, path),
-            Verdict::Ready => match self.record(&slot.repo.clone(), path, kind) {
-                Recorded::Saved(saved) => {
-                    for (file, id) in saved {
-                        self.saved(&slot.repo, &file, id, Origin::Watch);
-                    }
+            Verdict::Ready => {
+                let recorded = self.record(&slot.repo.clone(), path, kind);
+                for (file, id) in recorded.saved {
+                    self.saved(&slot.repo, &file, id, Origin::Watch);
                 }
-                Recorded::Torn => match slot.settle.tear(now) {
-                    Verdict::GaveUp => self.gave_up(&slot.repo, path),
-                    _ => {
+                match recorded.stop {
+                    None => {}
+                    Some(RecordStop::Torn) => match slot.settle.tear(now) {
+                        Verdict::GaveUp => self.gave_up(&slot.repo, path),
+                        _ => {
+                            self.slots.insert(path.to_path_buf(), slot);
+                        }
+                    },
+                    Some(RecordStop::Locked) => {
+                        let since = *slot.locked_since.get_or_insert(now);
+                        let waited = now - since;
+                        if waited >= LOCKED_FOR_MS && !slot.told_busy {
+                            slot.told_busy = true;
+                            self.emit(DaemonEvent::RepoBusy {
+                                repo: slot.repo.clone(),
+                            });
+                        }
+                        let retry = if waited < LOCKED_FOR_MS {
+                            LOCKED_RETRY_MS
+                        } else {
+                            BUSY_RETRY_MS
+                        };
+                        slot.settle.defer(now + retry);
                         self.slots.insert(path.to_path_buf(), slot);
                     }
-                },
-                Recorded::Locked => {
-                    let since = *slot.locked_since.get_or_insert(now);
-                    let waited = now - since;
-                    if waited >= LOCKED_FOR_MS && !slot.told_busy {
-                        slot.told_busy = true;
-                        self.emit(DaemonEvent::RepoBusy {
-                            repo: slot.repo.clone(),
-                        });
-                    }
-                    let retry = if waited < LOCKED_FOR_MS {
-                        LOCKED_RETRY_MS
-                    } else {
-                        BUSY_RETRY_MS
-                    };
-                    slot.settle.defer(now + retry);
-                    self.slots.insert(path.to_path_buf(), slot);
+                    Some(RecordStop::Failed(message)) => self.emit(DaemonEvent::RepoError {
+                        repo: slot.repo.clone(),
+                        message,
+                    }),
                 }
-                Recorded::Failed(message) => self.emit(DaemonEvent::RepoError {
-                    repo: slot.repo.clone(),
-                    message,
-                }),
-            },
+            }
         }
     }
 
@@ -566,7 +584,10 @@ impl Daemon {
     /// Records a settled path: the set file itself, or every working file that references the sample.
     fn record(&mut self, root: &Path, path: &Path, kind: Kind) -> Recorded {
         let Some(tracked) = self.repos.get(root) else {
-            return Recorded::Saved(Vec::new());
+            return Recorded {
+                saved: Vec::new(),
+                stop: None,
+            };
         };
         let files = match kind {
             Kind::Set => vec![path.to_path_buf()],
@@ -578,21 +599,34 @@ impl Daemon {
                 .unwrap_or_default(),
         };
         let mut saved = Vec::new();
+        let mut stop = None;
         for file in files {
             match tracked.repo.record_save(&file) {
                 Ok(Some(id)) => saved.push((file, id)),
                 Ok(None) => {}
-                Err(RepoError::Locked(_)) => return Recorded::Locked,
-                Err(RepoError::Daw(DawError::Corrupt(_))) => return Recorded::Torn,
+                Err(RepoError::Locked(_)) => {
+                    return Recorded {
+                        saved,
+                        stop: Some(RecordStop::Locked),
+                    };
+                }
+                Err(RepoError::Daw(DawError::Corrupt(_))) => {
+                    stop.get_or_insert(RecordStop::Torn);
+                }
                 // Gone between the settle and the record, or never a set of this repo: nothing to record.
                 Err(RepoError::NotASet(_)) => {}
                 Err(RepoError::Io(message)) if !file.exists() => {
                     let _ = message;
                 }
-                Err(error) => return Recorded::Failed(format!("{}: {error}", file.display())),
+                Err(error) => {
+                    return Recorded {
+                        saved,
+                        stop: Some(RecordStop::Failed(format!("{}: {error}", file.display()))),
+                    };
+                }
             }
         }
-        Recorded::Saved(saved)
+        Recorded { saved, stop }
     }
 
     /// A save was recorded: tell the shell and, when it came from the watcher, count the activity, look for a
@@ -748,6 +782,9 @@ impl Daemon {
         }
         self.update_running();
         self.emit(DaemonEvent::Script(event.clone()));
+        // Update `open_key` before stamping activity so switching sets or opening an unsaved set
+        // never records a phantom 0 ms segment on the previous set.
+        self.refresh_open();
         // Anything the script says is the set being used; the transport says it continuously.
         if let Some((key, _)) = self.open_key.clone() {
             let upserts = match event {
@@ -902,8 +939,14 @@ impl Daemon {
 
     /// `(repo, key)` of a set file a tracked repo has registered.
     fn resolve(&self, path: &Path) -> Option<(PathBuf, Key)> {
-        let root = self.repo_of(path)?;
-        let (set_id, branch) = self.repos.get(&root)?.repo.working_file(path).ok()??;
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let root = self.repo_of(&canonical)?;
+        let (set_id, branch) = self
+            .repos
+            .get(&root)?
+            .repo
+            .working_file(&canonical)
+            .ok()??;
         Some((root, Key { set_id, branch }))
     }
 
@@ -911,10 +954,14 @@ impl Daemon {
         if info.repo.is_some() || info.signal == Signal::Saves {
             return;
         }
-        let Some(folder) = info.path.parent().map(Path::to_path_buf) else {
+        let canonical_path = info
+            .path
+            .canonicalize()
+            .unwrap_or_else(|_| info.path.clone());
+        let Some(folder) = canonical_path.parent().map(Path::to_path_buf) else {
             return;
         };
-        if self.repo_of(&info.path).is_some()
+        if self.repo_of(&canonical_path).is_some()
             || self.declined.contains(&folder)
             || self.config.registry.for_project_folder(&folder).is_none()
             || !self.offered.insert(folder.clone())
@@ -923,7 +970,7 @@ impl Daemon {
         }
         self.emit(DaemonEvent::AdoptOffer {
             folder,
-            set: info.path.clone(),
+            set: canonical_path,
         });
     }
 }
@@ -1659,11 +1706,80 @@ mod tests {
                 .any(|e| matches!(e, DaemonEvent::RepoTracked { .. }))
         );
         assert!(events.iter().any(|e| matches!(e, DaemonEvent::SaveRecorded { origin: Origin::Adopt, file, .. } if file == "New.fset")));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            DaemonEvent::Adopted { folder } if folder == &other.canonicalize().unwrap()
+        )));
         assert!(
             RepoList::load(&h.repos_file)
                 .unwrap()
                 .repos
                 .contains(&other.canonicalize().unwrap())
+        );
+    }
+
+    #[test]
+    fn switching_to_unsaved_set_after_idle_records_no_phantom_zero_ms_segment() {
+        let mut h = with_recorded_set();
+        let set_id = h.set_id();
+        let path = h.set();
+        h.at(0);
+        h.daemon.on_event(Input::Script(ScriptEvent::Connected {
+            live: "12.0".into(),
+            script: "1".into(),
+        }));
+        h.daemon.on_event(Input::Script(ScriptEvent::Message(
+            ScriptMessage::Document {
+                path: Some(path.display().to_string()),
+                at: T0,
+            },
+        )));
+        h.at(60 * S);
+        h.daemon.tick();
+        // Go idle (past 15 minutes) so the open segment closes at T0 + 0.
+        h.at(20 * 60 * S);
+        h.daemon.tick();
+        let before = h.repo.segments(&set_id, "main").unwrap();
+        assert_eq!(before.len(), 1);
+
+        // File -> New arrives at T0 + 25 min: must not open a phantom [t, t] segment on the previous set.
+        h.at(25 * 60 * S);
+        h.daemon.on_event(Input::Script(ScriptEvent::Message(
+            ScriptMessage::Document {
+                path: None,
+                at: T0 + 25 * 60 * S,
+            },
+        )));
+        let after = h.repo.segments(&set_id, "main").unwrap();
+        assert_eq!(after, before);
+    }
+
+    #[test]
+    fn multi_set_sample_save_emits_first_set_even_if_second_set_is_torn() {
+        let mut h = launched(|dir, repo| {
+            fs::create_dir_all(dir.join("Samples")).unwrap();
+            fs::write(dir.join("Samples/k.wav"), b"kick").unwrap();
+            write_set(&dir.join("A.fset"), &with_sample("a0"), T0 - 3_600_000);
+            write_set(&dir.join("B.fset"), &with_sample("b0"), T0 - 3_600_000);
+            repo.record_save(&dir.join("A.fset")).unwrap();
+            repo.record_save(&dir.join("B.fset")).unwrap();
+        });
+        h.at(0);
+        // Replace the shared sample and make B.fset torn/corrupt.
+        fs::write(h.dir.join("Samples/k.wav"), b"snare").unwrap();
+        fs::write(h.dir.join("B.fset"), b"half written torn set").unwrap();
+        h.fs(&h.dir.join("Samples/k.wav"), false);
+
+        h.at(5_100);
+        h.daemon.tick();
+
+        let events = h.drain();
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                DaemonEvent::SaveRecorded { file, .. } if file == "A.fset"
+            )),
+            "Set A's SaveRecorded must not be dropped when Set B is torn: {events:?}"
         );
     }
 

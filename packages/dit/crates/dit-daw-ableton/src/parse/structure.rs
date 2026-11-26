@@ -295,14 +295,18 @@ impl Current {
         if let (Some(index), "Name" | "PlugName") = (self.pending_plugin, element) {
             self.track.devices[index].clone_from(&value);
             self.pending_plugin = None;
-            self.plugins.insert(
-                value.clone(),
-                PluginInfo {
-                    host: host.to_string(),
-                    manufacturer: None,
-                },
-            );
-            self.last_plugin = Some(value);
+            if value.is_empty() {
+                self.last_plugin = None;
+            } else {
+                self.plugins.insert(
+                    value.clone(),
+                    PluginInfo {
+                        host: host.to_string(),
+                        manufacturer: None,
+                    },
+                );
+                self.last_plugin = Some(value);
+            }
         } else if element == "Manufacturer" {
             let plugin = self
                 .last_plugin
@@ -971,5 +975,21 @@ mod tests {
         assert_eq!(meta(&live_set("")).structure, None);
         assert_eq!(meta(r#"<Ableton><LiveSet/></Ableton>"#).structure, None);
         assert_eq!(meta(&live_set(r#"<AudioTrack Id="1" />"#)).structure, None);
+    }
+
+    #[test]
+    fn empty_plugin_name_is_not_inserted_into_plugins_map() {
+        let plugin = r#"<PluginDevice Id="1"><Vst3PluginInfo><Name Value="" /><Manufacturer Value="Acme" /></Vst3PluginInfo></PluginDevice>"#;
+        let doc = live_set(&format!(
+            r#"<AudioTrack Id="1">{}{}</AudioTrack>"#,
+            named("Vox"),
+            chain(plugin)
+        ));
+        let s = structure(&doc);
+        assert!(
+            s.plugins.as_ref().is_none_or(|p| !p.contains_key("")),
+            "{:?}",
+            s.plugins
+        );
     }
 }

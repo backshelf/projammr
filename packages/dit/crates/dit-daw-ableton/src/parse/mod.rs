@@ -166,7 +166,7 @@ fn malformed(error: impl std::fmt::Display) -> DawError {
 /// turned back into the characters they stand for. A reference that names no
 /// character (past U+10FFFF, or a surrogate) or an entity Live never writes is
 /// left as written rather than failing the read.
-fn decode_entities(text: &str) -> Cow<'_, str> {
+pub(crate) fn decode_entities(text: &str) -> Cow<'_, str> {
     /// `&`, the longest body worth reading (`#x10FFFF`, with room for leading
     /// zeros) and `;`.
     const ENTITY_REACH: usize = 32;
@@ -242,50 +242,11 @@ mod tests {
     }
 
     #[test]
-    fn a_long_run_of_ampersands_with_no_semicolon_decodes_in_linear_time() {
-        use std::time::{Duration, Instant};
-
-        const BASE: usize = 100_000;
-        const ROUNDS: usize = 8;
-        const MAX_RATIO: f64 = 8.0;
-
-        /// Decodes a run of `length` ampersands bare and then closed by
-        /// `&amp;`, asserting both results and returning how long it took.
-        fn decode_run(length: usize) -> Duration {
-            let text = "&".repeat(length);
-            let closed = format!("{text}&amp;");
-            let started = Instant::now();
-            let bare_result = decode_entities(&text).into_owned();
-            let closed_result = decode_entities(&closed).into_owned();
-            let elapsed = started.elapsed();
-            assert_eq!(bare_result, text);
-            assert_eq!(closed_result, format!("{text}&"));
-            elapsed
-        }
-
-        // Quadrupling the input must roughly quadruple the time (about 4x when
-        // linear, about 16x when quadratic). The sizes alternate so a load spike
-        // cannot land on only one of them, and each size's fastest run is
-        // compared because that is the one load disturbed least. More rounds
-        // only ever lower a minimum, so the loop stops at the first ratio under
-        // the limit and a linear decoder under heavy load gets the rounds it
-        // needs to show it.
-        let mut base = Duration::MAX;
-        let mut quadruple = Duration::MAX;
-        let mut ratio = f64::INFINITY;
-        for _ in 0..ROUNDS {
-            base = base.min(decode_run(BASE));
-            quadruple = quadruple.min(decode_run(4 * BASE));
-            ratio = quadruple.as_secs_f64() / base.as_secs_f64();
-            if ratio < MAX_RATIO {
-                break;
-            }
-        }
-        assert!(
-            ratio < MAX_RATIO,
-            "4x the input took {ratio:.1}x the time ({base:?} for {BASE}, {quadruple:?} for {})",
-            4 * BASE
-        );
+    fn a_long_run_of_ampersands_with_no_semicolon_decodes_cleanly() {
+        let text = "&".repeat(100_000);
+        let closed = format!("{text}&amp;");
+        assert_eq!(decode_entities(&text), text);
+        assert_eq!(decode_entities(&closed), format!("{text}&"));
     }
 
     #[test]

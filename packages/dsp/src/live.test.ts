@@ -115,4 +115,33 @@ describe("createLiveSpectrumMeter", () => {
     live.process([new Float32Array(1024)]);
     expect(live.take()).toBeNull();
   });
+
+  test("128-frame quanta perform zero WASM allocations in steady state", () => {
+    let allocCalls = 0;
+    const origAlloc = dsp.exports.dsp_alloc;
+    const spyExports = {
+      ...dsp.exports,
+      dsp_alloc(bytes: number) {
+        allocCalls++;
+        return origAlloc(bytes);
+      },
+    };
+    const spyDsp = Object.assign(Object.create(Object.getPrototypeOf(dsp)), {
+      exports: spyExports,
+    }) as Dsp;
+
+    const loudness = createLiveLoudnessMeter(spyDsp, RATE, 2);
+    const spectrum = createLiveSpectrumMeter(spyDsp, RATE, 2);
+    const allocsAfterInit = allocCalls;
+
+    const left = new Float32Array(128).fill(0.25);
+    const right = new Float32Array(128).fill(-0.25);
+    for (let i = 0; i < 16; i++) {
+      loudness.process([left, right]);
+      spectrum.process([left, right]);
+    }
+    expect(allocCalls).toBe(allocsAfterInit);
+    loudness.free();
+    spectrum.free();
+  });
 });

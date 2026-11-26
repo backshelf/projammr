@@ -121,6 +121,24 @@ fn send(remote: &Remote, items: &[Item]) -> Result<(), RemoteError> {
     Ok(())
 }
 
+/// Compares two folder paths, case-insensitively on macOS and Windows where filesystems
+/// preserve case without distinguishing it.
+fn same_folder(a: &Path, b: &Path) -> bool {
+    #[cfg(any(target_os = "macos", windows))]
+    {
+        let normalize = |path: &Path| -> Vec<String> {
+            path.components()
+                .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+                .collect()
+        };
+        normalize(a) == normalize(b)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        a == b
+    }
+}
+
 /// Tells the hub what the ledger holds that it has not heard: turn-downs made and turn-downs taken back. What the
 /// hub took leaves the ledger's waiting list; what it did not stays for the next time. A connection that names no
 /// machine leaves the folders waiting.
@@ -163,7 +181,7 @@ pub fn flush(ledger_path: &Path, remote: &Remote) -> Result<(), SyncError> {
                 .iter()
                 .find(|held| {
                     Some(held.machine_id.as_str()) == machine
-                        && Path::new(&held.folder) == folder.as_path()
+                        && same_folder(Path::new(&held.folder), folder.as_path())
                 })
                 .map(|held| held.id),
         };

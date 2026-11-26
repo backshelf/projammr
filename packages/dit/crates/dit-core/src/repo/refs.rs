@@ -21,7 +21,7 @@ pub(super) const SETS_FILE: &str = "sets.toml";
 pub(crate) const MAIN_BRANCH: &str = "main";
 
 /// The longest branch name, in characters.
-const BRANCH_NAME_MAX: usize = 64;
+pub const BRANCH_NAME_MAX: usize = 64;
 
 /// Device names Windows reserves, whatever the extension or case. The
 /// superscript digits count as port numbers too.
@@ -65,7 +65,7 @@ impl SetsFile {
 /// (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`, and `COM`/`LPT`
 /// with a superscript `¹`, `²` or `³`) in any case, with
 /// or without an extension (`con.take`). `main` passes.
-pub(super) fn check_branch_name(name: &str) -> Result<(), RepoError> {
+pub fn check_branch_name(name: &str) -> Result<(), RepoError> {
     let edge = |c: char| c == '.' || c == ' ';
     let allowed = |c: char| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.');
     let fits = (1..=BRANCH_NAME_MAX).contains(&name.chars().count());

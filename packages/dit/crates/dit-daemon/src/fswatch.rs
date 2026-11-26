@@ -35,6 +35,21 @@ struct Subscriber {
 
 type Subscribers = Arc<Mutex<Vec<Subscriber>>>;
 
+/// Removes the Windows verbatim prefix (`\\?\` or `\\?\UNC\`) that `std::fs::canonicalize`
+/// adds, so canonical prefixes match the ordinary paths `notify` emits.
+fn strip_verbatim(path: &Path) -> PathBuf {
+    let Some(text) = path.to_str() else {
+        return path.to_path_buf();
+    };
+    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{unc}"));
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\") {
+        return PathBuf::from(rest);
+    }
+    path.to_path_buf()
+}
+
 /// Sends one notify event to every subscriber whose prefix holds a path of it and whose filter wants the path.
 fn dispatch(subscribers: &Subscribers, event: &notify::Event) {
     if matches!(event.kind, EventKind::Access(_)) {
@@ -42,6 +57,7 @@ fn dispatch(subscribers: &Subscribers, event: &notify::Event) {
     }
     let subscribers = subscribers.lock().unwrap_or_else(|e| e.into_inner());
     for (at, path) in event.paths.iter().enumerate() {
+        let normalized = strip_verbatim(path);
         let removed = match event.kind {
             EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => true,
             // A rename names where the file was and where it went.
@@ -49,9 +65,9 @@ fn dispatch(subscribers: &Subscribers, event: &notify::Event) {
             _ => false,
         };
         for subscriber in subscribers.iter() {
-            if path.starts_with(&subscriber.prefix) && (subscriber.filter)(path) {
+            if normalized.starts_with(&subscriber.prefix) && (subscriber.filter)(&normalized) {
                 let _ = subscriber.sender.send(FsEvent {
-                    path: path.clone(),
+                    path: normalized.clone(),
                     removed,
                 });
             }
@@ -108,14 +124,15 @@ impl Fswatch {
         filter: impl Fn(&Path) -> bool + Send + Sync + 'static,
         sender: Sender<FsEvent>,
     ) -> notify::Result<Subscription> {
-        self.watch(prefix)?;
+        let prefix = strip_verbatim(prefix);
+        self.watch(&prefix)?;
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         self.subscribers
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(Subscriber {
                 id,
-                prefix: prefix.to_path_buf(),
+                prefix,
                 filter: Box::new(filter),
                 sender,
             });
@@ -176,7 +193,7 @@ mod tests {
         let (sender, receiver) = mpsc::channel();
         subscribers.lock().unwrap().push(Subscriber {
             id,
-            prefix: prefix.into(),
+            prefix: strip_verbatim(Path::new(prefix)),
             filter: Box::new(filter),
             sender,
         });
@@ -291,5 +308,29 @@ mod tests {
             &event(EventKind::Create(CreateKind::File), &["/p/a"]),
         );
         assert_eq!(receiver.try_iter().count(), 0);
+    }
+
+    #[test]
+    fn windows_verbatim_prefix_matches_ordinary_event_paths() {
+        let subscribers: Subscribers = Arc::default();
+        let repo = subscribe(&subscribers, 1, r"\\?\C:\Projects\Song Project", |_| true);
+        dispatch(
+            &subscribers,
+            &event(
+                EventKind::Create(CreateKind::File),
+                &[r"C:\Projects\Song Project\Song.als"],
+            ),
+        );
+        let events: Vec<_> = repo.try_iter().collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].path,
+            PathBuf::from(r"C:\Projects\Song Project\Song.als")
+        );
+
+        assert_eq!(
+            strip_verbatim(Path::new(r"\\?\UNC\server\share\Song.als")),
+            PathBuf::from(r"\\server\share\Song.als")
+        );
     }
 }

@@ -32,21 +32,104 @@ export type LiveLoudnessMeter = {
  * resampler and unbounded gating history on the audio thread for a figure
  * nothing reads.
  */
+/** Standard AudioWorklet render quantum size in frames. */
+const DEFAULT_QUANTUM_FRAMES = 128;
+
+/**
+ * Reusable WASM-side interleaved scratch buffer for live AudioWorklet meters.
+ * Pre-allocated at construction so steady-state 128-frame quanta incur zero
+ * JS or WASM allocations.
+ */
+class LiveScratch {
+  private readonly dsp: Dsp;
+  private readonly channels: number;
+  private ptr = 0;
+  private capacity = 0;
+  private view: Float32Array | null = null;
+  private buffer: ArrayBuffer | null = null;
+
+  constructor(dsp: Dsp, channels: number) {
+    this.dsp = dsp;
+    this.channels = channels;
+    if (channels > 0) {
+      this.ensure(DEFAULT_QUANTUM_FRAMES * channels);
+    }
+  }
+
+  private ensure(samples: number): Float32Array {
+    if (samples > this.capacity) {
+      this.release();
+      const bytes = samples * Float32Array.BYTES_PER_ELEMENT;
+      this.ptr = this.dsp.nonZero(this.dsp.exports.dsp_alloc(bytes), "dsp_alloc");
+      this.capacity = samples;
+      this.buffer = null;
+    }
+    const currentBuffer = this.dsp.exports.memory.buffer;
+    if (this.view === null || this.buffer !== currentBuffer) {
+      this.buffer = currentBuffer;
+      this.view = new Float32Array(currentBuffer, this.ptr, this.capacity);
+    }
+    return this.view;
+  }
+
+  push(session: AnalysisSession, frames: Float32Array[]): void {
+    const count = this.channels;
+    if (count === 0) return;
+    const length = frames[0]?.length ?? 0;
+    if (length === 0) return;
+    const view = this.ensure(length * count);
+    for (let i = 0; i < length; i++) {
+      const base = i * count;
+      for (let c = 0; c < count; c++) {
+        view[base + c] = frames[c]?.[i] ?? 0;
+      }
+    }
+    this.dsp.check(
+      this.dsp.exports.analysis_push(session.handle, this.ptr, length),
+      "analysis_push"
+    );
+  }
+
+  release(): void {
+    if (this.ptr !== 0) {
+      this.dsp.exports.dsp_free(
+        this.ptr,
+        this.capacity * Float32Array.BYTES_PER_ELEMENT
+      );
+      this.ptr = 0;
+      this.capacity = 0;
+      this.view = null;
+      this.buffer = null;
+    }
+  }
+}
+
 export function createLiveLoudnessMeter(
   dsp: Dsp,
   sampleRate: number,
   channels: number
 ): LiveLoudnessMeter {
   const session = new AnalysisSession(dsp, sampleRate, channels, ANALYSIS_LIVE);
+  let scratch: LiveScratch;
+  try {
+    scratch = new LiveScratch(dsp, channels);
+  } catch (error) {
+    session.free();
+    throw error;
+  }
   return {
     process(frames) {
-      session.push(interleave(frames, channels));
+      scratch.push(session, frames);
     },
     take() {
       return session.takeLoudness();
     },
     free() {
-      session.free();
+      try {
+        scratch.release();
+      } finally {
+        session.free();
+      }
     },
   };
 }
@@ -77,28 +160,26 @@ export function createLiveSpectrumMeter(
     ANALYSIS_SPECTRUM | ANALYSIS_LIVE,
     layout
   );
+  let scratch: LiveScratch;
+  try {
+    scratch = new LiveScratch(dsp, channels);
+  } catch (error) {
+    session.free();
+    throw error;
+  }
   return {
     process(frames) {
-      session.push(interleave(frames, channels));
+      scratch.push(session, frames);
     },
     take() {
       return session.takeSpectrum();
     },
     free() {
-      session.free();
+      try {
+        scratch.release();
+      } finally {
+        session.free();
+      }
     },
   };
-}
-
-/** Interleaves planar render-quantum channels the way every session expects. */
-function interleave(channels: Float32Array[], count: number): Float32Array {
-  if (count === 0) return new Float32Array(0);
-  const length = channels[0]?.length ?? 0;
-  const out = new Float32Array(length * count);
-  for (let i = 0; i < length; i++) {
-    for (let c = 0; c < count; c++) {
-      out[i * count + c] = channels[c]?.[i] ?? 0;
-    }
-  }
-  return out;
 }
