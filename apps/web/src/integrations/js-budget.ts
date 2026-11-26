@@ -77,7 +77,7 @@ export function jsBudget(): AstroIntegration {
         const readAsset = (path: string) => readFile(join(root, path), "utf8");
         const over: string[] = [];
         for (const file of await htmlFiles(root)) {
-          const page = "/" + relative(root, file);
+          const page = "/" + relative(root, file).replaceAll("\\", "/");
           if (page.startsWith("/docs/")) continue;
           const bytes = await pageScriptBytes(
             await readFile(file, "utf8"),

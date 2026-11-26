@@ -37,7 +37,7 @@ describe("groups/index.ts", () => {
       .sort();
     const lines = readFileSync(new URL("./index.ts", import.meta.url), "utf8")
       .trim()
-      .split("\n");
+      .split(/\r?\n/);
     expect(lines).toEqual(
       files.map(
         (file) =>

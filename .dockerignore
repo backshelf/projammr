@@ -39,14 +39,21 @@ apps/dit-app
 # never part of the self-hosted stack.
 apps/web
 
+# Test harness, demo fixtures and release tooling never ship in an image.
+apps/e2e
+packages/demo
+packages/release
+
 # Tooling and documentation.
 .agents
 .claude
+.enola
 **/.idea
 samples
 **/*.md
 Dockerfile
 docker-compose.yml
+docker-compose.*.yml
 .dockerignore
 
 # Repository documentation assets; nothing in an image reads them.

@@ -27,9 +27,15 @@ jobs:
         with:
           dsp: "false"
       - uses: docker/setup-buildx-action@v4
-      # Builds both targets from the compose files, reading any layers an
-      # earlier run cached under the same scopes.
+      # Builds both targets from the compose files, reading and updating cached
+      # layers under the same scopes.
       - uses: docker/bake-action@v7
+        env:
+          # `docker-compose.yml` interpolates these with `:?` even when bake
+          # only reads the `build:` blocks; nothing built here embeds them
+          # (`stack.ts` generates fresh secrets at runtime).
+          BETTER_AUTH_SECRET: ci-bake-placeholder
+          NOTES_MASTER_KEY: ci-bake-placeholder
         with:
           source: .
           files: |
@@ -42,7 +48,9 @@ jobs:
           set: |
             *.args.SOURCE_REVISION=${{ github.sha }}
             api.cache-from=type=gha,scope=api
+            api.cache-to=type=gha,mode=max,scope=api
             web.cache-from=type=gha,scope=web
+            web.cache-to=type=gha,mode=max,scope=web
       # A fresh stack every run: the suite's first spec signs up the instance
       # admin, and the first sign-up is the only one an instance accepts.
       - run: bun apps/e2e/src/stack.ts up

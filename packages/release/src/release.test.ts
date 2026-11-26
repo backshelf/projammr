@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -73,6 +79,19 @@ describe("rewriteChangelog", () => {
     );
     expect(out).toBe("## [Unreleased]\n\n## [1.0.0] - 2026-10-01\n\n- A.\n");
   });
+
+  test("handles CRLF line endings", () => {
+    const crlf = changelog.replaceAll("\n", "\r\n");
+    expect(hasUnreleasedSection(crlf)).toBe(true);
+    const out = rewriteChangelog(crlf, "1.0.0", "2026-10-01");
+    expect(out).toContain("## [1.0.0] - 2026-10-01");
+    expect(out).toContain(
+      "[Unreleased]: https://github.com/o/r/compare/v1.0.0...HEAD"
+    );
+    expect(out).toContain(
+      "[1.0.0]: https://github.com/o/r/compare/v0.9.0...v1.0.0"
+    );
+  });
 });
 
 describe("hasUnreleasedSection", () => {
@@ -108,7 +127,7 @@ describe("release", () => {
       join(dir, "package.json"),
       `{\n  "name": "root",\n  "version": "0.9.0",\n  "workspaces": [\n    "packages/*"\n  ]\n}\n`
     );
-    Bun.spawnSync(["mkdir", "-p", join(dir, "packages/a")]);
+    mkdirSync(join(dir, "packages/a"), { recursive: true });
     writeFileSync(
       join(dir, "packages/a/package.json"),
       `{\n  "name": "a",\n  "version": "0.9.0"\n}\n`

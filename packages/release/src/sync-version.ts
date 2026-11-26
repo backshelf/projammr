@@ -22,7 +22,7 @@ export function setCargoTomlVersion(text: string, version: string): string {
 /** Replaces the version of the workspace's own crate in a Cargo.lock. */
 export function setCargoLockVersion(text: string, version: string): string {
   return text.replace(
-    new RegExp(`^(name = "${CRATE_NAME}"\\nversion = ")[^"]*(")`, "m"),
+    new RegExp(`^(name = "${CRATE_NAME}"\\r?\\nversion = ")[^"]*(")`, "m"),
     `$1${version}$2`
   );
 }
@@ -35,7 +35,9 @@ export function setCargoWorkspaceVersion(
   text: string,
   version: string
 ): string {
-  const section = /^\[workspace\.package\]\n(?:(?!\[).*\n?)*/m.exec(text);
+  const section = /^\[workspace\.package\]\r?\n(?:(?!\[).*(?:\r?\n|$))*/m.exec(
+    text
+  );
   const line = section && /^(version = ")[^"]*(")/m.exec(section[0]);
   if (!section || !line) {
     throw new Error("no version under [workspace.package]");
@@ -58,7 +60,7 @@ export function setCargoLockVersions(
   isMember: (name: string) => boolean
 ): string {
   return text.replace(
-    /^(name = "([^"]*)"\nversion = ")[^"]*(")(?=\n(?!source ))/gm,
+    /^(name = "([^"]*)"\r?\nversion = ")[^"]*(")(?=\r?\n(?!source ))/gm,
     (whole, head: string, name: string, tail: string) =>
       isMember(name) ? `${head}${version}${tail}` : whole
   );
@@ -78,15 +80,20 @@ export function setBunLockVersions(
   version: string,
   workspaceDirs: string[]
 ): string {
-  const start = text.indexOf('\n  "workspaces": {\n');
-  const end = text.indexOf("\n  },\n", start);
-  if (start === -1 || end === -1) return text;
+  const header = /\r?\n {2}"workspaces": \{\r?\n/.exec(text);
+  if (!header) return text;
+  const start = header.index;
+  const rest = text.slice(start + header[0].length);
+  const footer = /\r?\n {2}\},\r?\n/.exec(rest);
+  if (!footer) return text;
+  const end = start + header[0].length + footer.index;
   let block = text.slice(start, end);
   for (const dir of workspaceDirs) {
-    const escaped = dir.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+    const normalized = dir.replaceAll("\\", "/");
+    const escaped = normalized.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
     block = block.replace(
       new RegExp(
-        `^( {4}"${escaped}": \\{\\n {6}"name": "[^"]*",\\n {6}"version": ")[^"]*(")`,
+        `^( {4}"${escaped}": \\{\\r?\\n {6}"name": "[^"]*",\\r?\\n {6}"version": ")[^"]*(")`,
         "m"
       ),
       `$1${version}$2`
@@ -111,9 +118,11 @@ export function readRootVersion(root: string): string {
 export function workspaceManifests(root: string): string[] {
   const patterns = readManifest(join(root, "package.json")).workspaces ?? [];
   return patterns
-    .flatMap((pattern) => [
-      ...new Bun.Glob(`${pattern}/package.json`).scanSync({ cwd: root }),
-    ])
+    .flatMap((pattern) =>
+      [...new Bun.Glob(`${pattern}/package.json`).scanSync({ cwd: root })].map(
+        (file) => file.replaceAll("\\", "/")
+      )
+    )
     .sort();
 }
 
@@ -122,7 +131,7 @@ function managedFiles(
   root: string
 ): [string, (text: string, v: string) => string][] {
   const manifests = workspaceManifests(root);
-  const dirs = manifests.map((file) => dirname(file));
+  const dirs = manifests.map((file) => dirname(file).replaceAll("\\", "/"));
   return [
     ...manifests.map((file): [string, typeof setManifestVersion] => [
       file,

@@ -75,6 +75,8 @@ beforeEach(() => {
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+const toCrlf = (text: string) => text.replaceAll("\n", "\r\n");
+
 describe("version setters", () => {
   test("setManifestVersion changes only the top-level version", () => {
     const text = `{\n  "version": "1.0.0",\n  "nested": {\n    "version": "2.0.0"\n  }\n}\n`;
@@ -93,6 +95,9 @@ describe("version setters", () => {
     expect(setCargoLockVersion(cargoLock("0.0.0"), "0.9.0")).toBe(
       cargoLock("0.9.0")
     );
+    expect(setCargoLockVersion(toCrlf(cargoLock("0.0.0")), "0.9.0")).toBe(
+      toCrlf(cargoLock("0.9.0"))
+    );
   });
 });
 
@@ -100,6 +105,9 @@ describe("setCargoWorkspaceVersion", () => {
   test("changes the workspace package version and leaves dependency versions alone", () => {
     expect(setCargoWorkspaceVersion(ditToml("0.0.0"), "0.9.0")).toBe(
       ditToml("0.9.0")
+    );
+    expect(setCargoWorkspaceVersion(toCrlf(ditToml("0.0.0")), "0.9.0")).toBe(
+      toCrlf(ditToml("0.9.0"))
     );
   });
 
@@ -118,6 +126,9 @@ describe("setCargoLockVersions", () => {
     expect(setCargoLockVersions(ditLock("0.0.0"), "0.9.0", isMember)).toBe(
       ditLock("0.9.0")
     );
+    expect(
+      setCargoLockVersions(toCrlf(ditLock("0.0.0")), "0.9.0", isMember)
+    ).toBe(toCrlf(ditLock("0.9.0")));
   });
 });
 
@@ -128,6 +139,14 @@ describe("setBunLockVersions", () => {
       "apps/b",
     ]);
     expect(out).toBe(bunLock("0.9.0", "0.9.0"));
+  });
+
+  test("handles CRLF line endings and backslash workspace paths", () => {
+    const out = setBunLockVersions(toCrlf(bunLock("0.0.1", "1.0.0")), "0.9.0", [
+      "packages\\a",
+      "apps\\b",
+    ]);
+    expect(out).toBe(toCrlf(bunLock("0.9.0", "0.9.0")));
   });
 
   test("skips a workspace whose entry carries no version", () => {

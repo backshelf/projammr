@@ -22,14 +22,13 @@ LABEL org.opencontainers.image.source="https://github.com/backshelf/projammr" \
       org.opencontainers.image.revision="$SOURCE_REVISION" \
       org.opencontainers.image.created="$BUILD_DATE" \
       org.opencontainers.image.version="" \
-      org.opencontainers.image.licenses="NOASSERTION"
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 
-# ---- DSP (Rust → WebAssembly) ------------------------------------------------
-# The crate builds once here and later stages copy pkg/, so neither the Bun
-# stages nor the runtime images carry a Rust toolchain. The image's toolchain
-# is the one packages/dsp/rust/rust-toolchain.toml names, which leaves rustup
-# only the wasm32 target and two components to add.
-FROM rust:1.97.1-slim-trixie@sha256:8e8cf8f7fd54a2d23d5a743b3a03f56e26b6c774276c33fa0595111704ebb15c AS build-dsp
+# ---- Rust → WebAssembly base ------------------------------------------------
+# Shared toolchain stage for the WebAssembly crates (`build-dsp` and
+# `build-dit`), so binaryen and Bun are installed once and neither the Bun
+# stages nor the runtime images carry a Rust toolchain.
+FROM rust:1.97.1-slim-trixie@sha256:8e8cf8f7fd54a2d23d5a743b3a03f56e26b6c774276c33fa0595111704ebb15c AS rust-wasm
 # binaryen publishes version_116 for x86_64 Linux only, so an arm64 build takes
 # trixie's binaryen package instead: a later wasm-opt that accepts the same
 # flags.
@@ -46,6 +45,12 @@ RUN apt-get update \
   esac \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
+
+# ---- DSP (Rust → WebAssembly) ------------------------------------------------
+# The crate builds once here and later stages copy pkg/. The base image's
+# toolchain matches packages/dsp/rust/rust-toolchain.toml, which leaves rustup
+# only the wasm32 target and two components to add.
+FROM rust-wasm AS build-dsp
 WORKDIR /app/packages/dsp
 COPY packages/dsp/rust/rust-toolchain.toml rust/
 RUN cd rust && rustup toolchain install --no-self-update
@@ -57,23 +62,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     bun scripts/build.ts && cp -r pkg /pkg
 
 # ---- dit (Rust → WebAssembly) ------------------------------------------------
-# Same shape as build-dsp. packages/dit is a Cargo workspace, so every member's
-# manifest is copied (the whole crates tree) for the workspace to resolve, even
-# though only dit-wasm is built.
-FROM rust:1.97.1-slim-trixie@sha256:8e8cf8f7fd54a2d23d5a743b3a03f56e26b6c774276c33fa0595111704ebb15c AS build-dit
-ARG BINARYEN_VERSION=version_116
-ARG TARGETARCH
-RUN apt-get update \
-  && case "$TARGETARCH" in \
-    amd64) \
-      apt-get install -y --no-install-recommends curl \
-      && curl -fsSL "https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN_VERSION}/binaryen-${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
-        | tar -xz -C /opt \
-      && ln -s "/opt/binaryen-${BINARYEN_VERSION}/bin/wasm-opt" /usr/local/bin/wasm-opt ;; \
-    *) apt-get install -y --no-install-recommends binaryen ;; \
-  esac \
-  && rm -rf /var/lib/apt/lists/*
-COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
+# packages/dit is a Cargo workspace, so every member's manifest is copied (the
+# whole crates tree) for the workspace to resolve, even though only dit-wasm is
+# built.
+FROM rust-wasm AS build-dit
 WORKDIR /app/packages/dit
 COPY packages/dit/rust-toolchain.toml ./
 RUN rustup toolchain install --no-self-update

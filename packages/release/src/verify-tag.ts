@@ -21,7 +21,7 @@ export function changelogSection(
   changelog: string,
   version: string
 ): string | null {
-  const lines = changelog.split("\n");
+  const lines = changelog.split(/\r?\n/);
   const prefix = releaseHeadingPrefix(version);
   const start = lines.findIndex((line) => line.startsWith(prefix));
   if (start === -1) return null;

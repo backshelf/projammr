@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { REPO_ROOT, setManifestVersion, syncVersion } from "./sync-version";
 
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+(-rc\.\d+)?$/;
-const UNRELEASED_HEADING = /^## \[Unreleased\][ \t]*$/m;
+const UNRELEASED_HEADING = /^## \[Unreleased\][ \t]*(?=\r?$)/m;
 const UNRELEASED_LINK =
-  /^\[Unreleased\]: (.*)\/compare\/(v[^.\s]+\.[^.\s]+\.[^.\s]+(?:-rc\.\d+)?)\.\.\.HEAD[ \t]*$/im;
+  /^\[Unreleased\]: (.*)\/compare\/(v[^.\s]+\.[^.\s]+\.[^.\s]+(?:-rc\.\d+)?)\.\.\.HEAD[ \t]*(?=\r?$)/im;
 
 /** The argument as a release version, or an error message naming what is wrong with it. */
 export function parseReleaseVersion(
@@ -34,17 +34,18 @@ export function rewriteChangelog(
   version: string,
   date: string
 ): string {
+  const eol = changelog.includes("\r\n") ? "\r\n" : "\n";
   const heading = `${releaseHeadingPrefix(version)}${date}`;
   let next = changelog.replace(
     UNRELEASED_HEADING,
-    `## [Unreleased]\n\n${heading}`
+    `## [Unreleased]${eol}${eol}${heading}`
   );
   const link = UNRELEASED_LINK.exec(next);
   if (link) {
     const [line, base, previous] = link;
     next = next.replace(
       line,
-      `[Unreleased]: ${base}/compare/v${version}...HEAD\n[${version}]: ${base}/compare/${previous}...v${version}`
+      `[Unreleased]: ${base}/compare/v${version}...HEAD${eol}[${version}]: ${base}/compare/${previous}...v${version}`
     );
   }
   return next;

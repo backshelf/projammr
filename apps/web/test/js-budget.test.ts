@@ -1,6 +1,10 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { pageScriptBytes } from "../src/integrations/js-budget";
+import { jsBudget, pageScriptBytes } from "../src/integrations/js-budget";
 
 const reader = (assets: Record<string, string>) => async (path: string) => {
   const body = assets[path];
@@ -97,5 +101,45 @@ describe("pageScriptBytes", () => {
       );
       expect(bytes).toBe(lazy.length);
     });
+  });
+});
+
+describe("jsBudget integration", () => {
+  let dir: string;
+  const write = async (path: string, body: string) => {
+    await mkdir(dirname(join(dir, path)), { recursive: true });
+    await writeFile(join(dir, path), body);
+  };
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), "js-budget-"));
+    await write("index.html", `<script>let a = 1;</script>`);
+    await write(
+      "pricing/index.html",
+      `<script type="module">import "../_astro/small.js";</script>`
+    );
+    await write("_astro/small.js", "export const x = 1;");
+    await write(
+      "docs/guide/index.html",
+      `<script>${"x".repeat(10_000)}</script>`
+    );
+  });
+
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("exempts nested /docs/ pages and resolves nested marketing pages", async () => {
+    const done = jsBudget().hooks["astro:build:done"]!;
+    await expect(
+      done({
+        dir: pathToFileURL(dir),
+        pages: [],
+        assets: new Map(),
+        logger: { info: () => {} } as unknown as Parameters<
+          typeof done
+        >[0]["logger"],
+      })
+    ).resolves.toBeUndefined();
   });
 });

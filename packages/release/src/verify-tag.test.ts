@@ -50,6 +50,12 @@ describe("changelogSection", () => {
     expect(changelogSection(changelog, "2.0.0")).toBeNull();
     expect(changelogSection(changelog, "Unreleased")).toBeNull();
   });
+
+  test("handles CRLF line endings", () => {
+    expect(changelogSection(changelog.replaceAll("\n", "\r\n"), "1.0.0")).toBe(
+      "### Added\n\n- Something.\n- Another thing."
+    );
+  });
 });
 
 describe("verifyTag", () => {

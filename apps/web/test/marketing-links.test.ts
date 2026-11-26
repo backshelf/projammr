@@ -20,7 +20,9 @@ async function builtFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { recursive: true, withFileTypes: true });
   return entries
     .filter((entry) => entry.isFile())
-    .map((entry) => relative(dir, join(entry.parentPath, entry.name)));
+    .map((entry) =>
+      relative(dir, join(entry.parentPath, entry.name)).replaceAll("\\", "/")
+    );
 }
 
 /** Every internal link on a marketing page (anything outside `/docs/`) that

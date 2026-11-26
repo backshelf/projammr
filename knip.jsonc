@@ -6,19 +6,10 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
-    ".": {
-      // The agent harness: scripts and hooks run by path, never imported.
-      "entry": [
-        ".claude/scripts/*.ts",
-        ".claude/jev/*.ts",
-        ".claude/hooks/*.ts",
-      ],
-      "project": [".claude/**/*.ts"],
-    },
     "apps/server": {
-      // The listener, the one-off backfills and the operator scripts the api image ships,
-      // all run by path. knip finds the migrator through the `migrate` script.
-      "entry": ["src/server.ts", "src/db/backfill-*.ts", "scripts/*.{ts,mjs}"],
+      // The one-off backfills and the operator scripts the api image ships,
+      // all run by path. knip finds server.ts and the migrator through package scripts.
+      "entry": ["src/db/backfill-*.ts", "scripts/*.{ts,mjs}"],
     },
     "apps/dit-app": {
       // The theme script index.html loads before React. knip finds the Vite config,
@@ -53,17 +44,10 @@
       // The stack driver and the smoke run by path, from CI and by hand.
       "entry": ["src/*.ts"],
     },
-    "packages/typescript-config": {
-      // nextjs.json names Next's TypeScript plugin, which TypeScript resolves from the
-      // workspace that extends it (apps/client), not from this package.
-      "ignoreUnresolved": ["next"],
-    },
   },
-  // System binaries the code spawns; none is an npm package. `check` is Bun's own
-  // `bun check`, which knip reads as a binary of that name.
+  // System binaries the code spawns; none is an npm package.
   "ignoreBinaries": [
     "agent-browser",
-    "check",
     "ffmpeg",
     "ffprobe",
     "pg_dump",

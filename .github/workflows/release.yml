@@ -100,6 +100,7 @@ jobs:
             BUILD_DATE=${{ steps.date.outputs.now }}
             ${{ matrix.image == 'api' && format('APP_VERSION={0}', env.VERSION) || '' }}
           cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           provenance: mode=max
           sbom: true
       # Attestations need a public repository on this plan.

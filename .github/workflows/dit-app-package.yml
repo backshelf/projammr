@@ -114,9 +114,7 @@ jobs:
           test -x "$app/Contents/MacOS/dit-app"
           plist="$app/Contents/Info.plist"
           test "$(plutil -extract LSUIElement raw "$plist")" = "true"
-          # The `projammr` scheme lands in CFBundleURLTypes with the deep-link
-          # plugin; assert it here then:
-          # plutil -extract CFBundleURLTypes xml1 -o - "$plist" | grep -q projammr
+          plutil -extract CFBundleURLTypes xml1 -o - "$plist" | grep -q projammr
           ls dmg/*.dmg
       # The app and the cli inside it carry the release identity, not an ad hoc
       # one, and the seal holds over every file.
