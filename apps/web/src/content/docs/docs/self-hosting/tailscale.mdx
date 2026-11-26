@@ -68,9 +68,10 @@ In the [Tailscale admin console](https://login.tailscale.com/admin):
 </Steps>
 
 <Aside type="caution" title="Create the first account before you open it up">
-  Funnel puts your sign-in page on the internet, and certificates are published in public logs, so your address can
-  be found. On a new instance the first account created becomes its admin. Create yours as soon as the stack is up,
-  or turn Funnel off until you have.
+  Funnel puts your sign-in page on the internet, and certificates are published
+  in public logs, so your address can be found. On a new instance the first
+  account created becomes its admin. Create yours as soon as the stack is up, or
+  turn Funnel off until you have.
 </Aside>
 
 ## Keeping it on your tailnet
@@ -93,7 +94,7 @@ Share links then only open for people on your tailnet.
   your tailnet as a new device.
 - **Funnel is slower for big uploads.** Traffic from the internet reaches the node through Tailscale's relays, which
   limit its bandwidth. Devices on your tailnet reach the node over the tailnet instead.
-- **The scanner connects the same way a browser does.** Point it at `https://<PUBLIC_HOST>`. It needs nothing
+- **[dit](/dit/) connects the same way a browser does.** Point it at `https://<PUBLIC_HOST>`. It needs nothing
   installed, since the certificate is publicly trusted.
 - **HSTS is on.** The override sets `TLS_MODE=acme`, so the API tells browsers to use only HTTPS for this address.
   That is safe here because the certificate is one every browser trusts.

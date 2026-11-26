@@ -12,9 +12,11 @@ itself. There is no proxy in this setup: the web app is served over plain HTTP a
 API at `http://localhost:8080`.
 
 <Aside type="caution">
-  Without the proxy there is no HTTPS. On the machine itself `localhost` still counts as a secure context, but a
-  phone or another computer opening the app over plain HTTP loses the live loudness meter and the clipboard; see
-  [HTTPS and your devices](/docs/self-hosting/https/). The Docker stack is what adds HTTPS.
+  Without the proxy there is no HTTPS. On the machine itself `localhost` still
+  counts as a secure context, but a phone or another computer opening the app
+  over plain HTTP loses the live loudness meter and the clipboard; see [HTTPS
+  and your devices](/docs/self-hosting/https/). The Docker stack is what adds
+  HTTPS.
 </Aside>
 
 ## Prerequisites
@@ -22,9 +24,9 @@ API at `http://localhost:8080`.
 - **Bun 1.4**, the version the repository's `package.json` pins.
 - **PostgreSQL.** 17 is the version the Docker stack runs.
 - **ffmpeg**, on the machine that runs the API, to decode and transcode audio.
-- **Rust 1.97.1** through rustup, with the `wasm32-unknown-unknown` target, for the audio analysis module.
-  `packages/dsp/rust/rust-toolchain.toml` pins the version, so rustup installs the toolchain, the target, clippy and
-  rustfmt on the first build.
+- **Rust 1.97.1** through rustup, with the `wasm32-unknown-unknown` target, for the `@workspace/dsp` audio analysis
+  and `@workspace/dit` DAW parser WebAssembly modules. `packages/dsp/rust/rust-toolchain.toml` pins the version, so
+  rustup installs the toolchain, the target, clippy and rustfmt on the first build.
 - **`wasm-opt` 116 or later** on your `PATH`, from `cargo install wasm-opt` or your distribution's `binaryen`
   package.
 
@@ -51,15 +53,19 @@ path. Everything else has a default; `apps/server/README.md` and `apps/client/RE
 
 <Steps>
 
-1. Install the dependencies.
+1. Install the dependencies, build the WebAssembly modules and generate the API types.
 
    ```sh
    bun install
+   bun run --filter @workspace/dsp build
+   bun run --filter @workspace/dit build
+   bun run typegen
    ```
 
-2. Apply the database migrations.
+2. Create the upload and analysis directories, then apply the database migrations.
 
    ```sh
+   mkdir -p apps/server/static/assets apps/server/static/images apps/server/static/analysis
    cd apps/server && bun run migrate && cd ../..
    ```
 
@@ -76,7 +82,7 @@ path. Everything else has a default; `apps/server/README.md` and `apps/client/RE
    cd apps/client && bun run dev
    ```
 
-4. Open `http://localhost:3000` and create the first account. To sync sessions, point the scanner at
+4. Open `http://localhost:3000` and create the first account. To push sessions and bounces, point [dit](/dit/) at
    `http://localhost:8080`.
 
 </Steps>

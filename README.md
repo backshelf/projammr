@@ -212,8 +212,8 @@ agents raise, approves each plan before production code is written, and reads an
 
 **What that review does not cover.** Small fixes are committed straight to `master` without a pull request, and a
 large pull request does not always get a line-by-line read. Assume any given line was written by an AI, and do not
-assume a human has read it. The automated gates described under [Development](#development) run on every pull
-request and every push to `master`.
+assume a human has read it. The automated build and test gates described under [Development](#development) run on
+every pull request to `master`, and the full static and end-to-end gate set runs on every release.
 
 People have their reasons for not using or not trusting AI-generated code, and many of those reasons are sound. If
 that is you, Projammr may not be the right fit, and that is completely fair. This section is here so you can make
@@ -260,20 +260,28 @@ development checkout (`bun run dev`), see [Development](#development) and the co
 
 A Bun workspace driven by Turborepo.
 
-| Path                                                                 | Package                        | What it is                                                                                                                                                              |
-| -------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`apps/client`](apps/client/README.md)                               | `client`                       | Next.js 16 web app: App Router, React 19, server components first                                                                                                       |
-| [`apps/server`](apps/server/README.md)                               | `server`                       | Hono REST API on Bun, PostgreSQL through Drizzle, Better Auth, the job runner, the MCP endpoint                                                                         |
-| [`apps/dit-app`](apps/dit-app/CLAUDE.md)                             | `dit-app`                      | Tauri 2 menu bar app: reads DAW sets, records saves as revisions and pushes them to your instance                                                                       |
-| `apps/web`                                                           | `web`                          | Static Astro + Starlight site: the project website and the docs (guide, dit, collaboration, admin, API, self-hosting, contributing), under `src/content/docs/docs/` |
-| [`packages/ui`](packages/ui/README.md)                               | `@workspace/ui`                | shadcn/ui-based component library and the design-token stylesheet every surface shares                                                                                  |
-| [`packages/api`](packages/api/README.md)                             | `@workspace/api`               | Generated API types, the `openapi-fetch` client, the Better Auth client, shared enums                                                                                   |
-| [`packages/dsp`](packages/dsp/README.md)                             | `@workspace/dsp`               | Audio analysis and the Lab's playback chain, in Rust compiled to WebAssembly, with its TypeScript loader                                                                |
-| [`packages/test`](packages/test/README.md)                           | `@workspace/test`              | The few helpers `bun:test` lacks, shared by every suite                                                                                                                 |
-| [`packages/eslint-config`](packages/eslint-config/README.md)         | `@workspace/eslint-config`     | Shared ESLint 9 flat configs                                                                                                                                            |
-| [`packages/typescript-config`](packages/typescript-config/README.md) | `@workspace/typescript-config` | Shared tsconfig presets                                                                                                                                                 |
-| `docs/screenshots`                                                   |                                | The images in this file                                                                                                                                                 |
-| `samples`                                                            |                                | A real Ableton project used as a dit fixture (gitignored)                                                                                                           |
+| Path                                                                 | Package                        | What it is                                                                                                                                                     |
+| -------------------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`apps/client`](apps/client/README.md)                               | `client`                       | Next.js 16 web app: App Router, React 19, server components first                                                                                              |
+| [`apps/server`](apps/server/README.md)                               | `server`                       | Hono REST API on Bun, PostgreSQL through Drizzle, Better Auth, the job runner, the MCP endpoint                                                                |
+| [`apps/dit-app`](apps/dit-app/CLAUDE.md)                             | `dit-app`                      | Tauri 2 menu bar app (macOS): reads DAW sets, records saves as revisions and pushes them to your instance                                                      |
+| `apps/web`                                                           | `web`                          | Static Astro + Starlight site: the project website and the docs (guide, collaboration, admin, API, self-hosting, contributing), under `src/content/docs/docs/` |
+| [`apps/e2e`](apps/e2e/CLAUDE.md)                                     | `e2e`                          | Docker Compose stack driver, boot smoke check and Playwright + axe browser suite                                                                               |
+| [`packages/ui`](packages/ui/README.md)                               | `@workspace/ui`                | shadcn/ui-based component library and the design-token stylesheet every surface shares                                                                         |
+| [`packages/api`](packages/api/README.md)                             | `@workspace/api`               | Generated API types, the `openapi-fetch` client, the Better Auth client, shared enums                                                                          |
+| [`packages/dsp`](packages/dsp/README.md)                             | `@workspace/dsp`               | Audio analysis and the Lab's playback chain, in Rust compiled to WebAssembly, with its TypeScript loader                                                       |
+| `packages/dit`                                                       | `@workspace/dit`               | Rust workspace (`dit-core`, `dit-daws`, `dit-daw-ableton`, `dit-cli`, `dit-ipc`, `dit-daemon`, `dit-wasm`) and its WebAssembly loader                          |
+| `packages/session-diff`                                              | `@workspace/session-diff`      | Pure TypeScript save-to-save diff model shared by the server, client, dit app and site                                                                         |
+| `packages/settings`                                                  | `@workspace/settings`          | Settings registry (zod schemas, defaults, metadata) and cascade resolver                                                                                       |
+| `packages/media`                                                     | `@workspace/media`             | Shared audio format metadata and helpers                                                                                                                       |
+| `packages/security-headers`                                          | `@workspace/security-headers`  | Shared HTTP security response headers for the API and web client                                                                                               |
+| `packages/demo`                                                      | `@workspace/demo`              | Demo catalogue seeder, snapshot and restore tooling used for screenshots                                                                                       |
+| `packages/release`                                                   | `@workspace/release`           | Version sync (`version:sync`/`version:check`), changelog/tag verification and release scripts                                                                  |
+| [`packages/test`](packages/test/README.md)                           | `@workspace/test`              | The few helpers `bun:test` lacks, shared by every suite                                                                                                        |
+| [`packages/eslint-config`](packages/eslint-config/README.md)         | `@workspace/eslint-config`     | Shared ESLint 10 flat configs                                                                                                                                  |
+| [`packages/typescript-config`](packages/typescript-config/README.md) | `@workspace/typescript-config` | Shared tsconfig presets                                                                                                                                        |
+| `docs/screenshots`                                                   |                                | The images in this file                                                                                                                                        |
+| `samples`                                                            |                                | A real Ableton project used as a dit fixture (gitignored)                                                                                                      |
 
 ## Development
 
@@ -283,20 +291,23 @@ Every root script is a thin Turborepo wrapper that fans out to the workspaces.
 
 | Script              | What it does                                                                                      |
 | ------------------- | ------------------------------------------------------------------------------------------------- |
-| `bun run dev`       | Start the client, the API, the dit app and the docs site (`apps/web`, :4321) in dev mode          |
-| `bun run build`     | Build every package (the DSP crate first, then the API types, then the apps)                      |
+| `bun run dev`       | Start the client, the API, the dit app (macOS) and the docs site (`apps/web`, :4321) in dev mode  |
+| `bun run build`     | Build every package (the WASM crates first, then the API types, then the apps)                    |
 | `bun run typecheck` | Regenerate the API types, then `bun check` in every workspace. **The real gate.**                 |
 | `bun run lint`      | ESLint across the workspaces. Every rule is a warning locally; CI runs it with `--max-warnings 0` |
 | `bun run test`      | Every test suite except the server's (`bun test`, colocated `*.test.ts`)                          |
-| `bun run typegen`   | Regenerate `packages/api/src/v1.d.ts` and `packages/api/src/enums.ts` from the OpenAPI document   |
+| `bun run knip`      | Check for unused files, exports, types and dependencies across workspaces                         |
+| `bun run typegen`   | Regenerate `packages/api/src/v1.d.ts`, `packages/api/src/enums.ts` and `apps/web/openapi/*.json`  |
 | `bun run format`    | Prettier, with the Tailwind class-sort plugin                                                     |
 | `bun run audit`     | `bun audit` at the `high` level                                                                   |
 
 The server suite needs a live database and runs on its own: `cd apps/server && bun run test`.
 
-The same gates run in GitHub Actions on every pull request and push to `master`
-(`.github/workflows/ci.yml`): lint, typecheck and build, the workspace tests, the server tests against a Postgres
-service, both Docker images, and the audit.
+In GitHub Actions (`.github/workflows/ci.yml`), every pull request to `master` runs `test-build` (the full workspace
+build, all workspace test suites and the server suite against a PostgreSQL 17 service). Release tags
+(`.github/workflows/release.yml`) run the remaining static gates (`lint`, `format`, `typecheck`/`knip`, `audit`), the
+Docker Compose + Playwright E2E suite (`.github/workflows/e2e.yml`), the multi-arch Docker images and the signed macOS
+dit package.
 
 ### Regenerating API types
 

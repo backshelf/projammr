@@ -7,26 +7,29 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-Every pull request and every push to `master` runs the same checks in GitHub Actions. Run them yourself before you
-open a pull request; a change is ready when they are all clean.
+Run these checks yourself before you open a pull request; a change is ready when they are all clean. GitHub Actions
+runs the build and test suites on every pull request to `master`, and runs the remaining static, end-to-end and
+packaging checks for every release.
 
 ## The checks
 
-| Command                              | What it checks                                                                            |
-| ------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `bun run typecheck`                  | Regenerates the API types, then type-checks every workspace. **The check that matters most** |
-| `bun run lint`                       | ESLint across every workspace                                                             |
-| `bun run format`                     | Formats everything with Prettier (and sorts Tailwind classes)                             |
-| `bun run test`                       | Every test suite except the API's                                                         |
-| `cd apps/server && bun run test`     | The API's suite, which needs a database                                                   |
-| `bun run build`                      | Builds every workspace: `packages/dsp` first, then the API types, then the apps           |
-| `bun run audit`                      | `bun audit` for known vulnerabilities at the `high` level                                 |
+| Command                          | What it checks                                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `bun run typecheck`              | Regenerates the API types, then type-checks every workspace. **The check that matters most**   |
+| `bun run lint`                   | ESLint and `cargo clippy` across every workspace                                               |
+| `bun run format`                 | Formats everything with Prettier (and sorts Tailwind classes) and `cargo fmt`                  |
+| `bun run knip`                   | Unused files, exports, types and dependencies across workspaces (run after `typecheck`)        |
+| `bun run version:check`          | Every workspace manifest, Rust crate and lockfile carries the root `package.json` version      |
+| `bun run test`                   | Every test suite except the API's (includes `cargo test` in `packages/dsp` and `packages/dit`) |
+| `cd apps/server && bun run test` | The API's suite, which needs a database                                                        |
+| `bun run build`                  | Builds every workspace: the WASM crates first, then the API types, then the apps               |
+| `bun run audit`                  | `bun audit` for known vulnerabilities at the `high` level                                      |
 
 All of them run from the root of the repository.
 
 ### Typecheck
 
-`bun run typecheck` runs `bun run typegen` first, so the web app and the scanner are always checked against the
+`bun run typecheck` runs `bun run typegen` first, so the web app and shared packages are always checked against the
 API as it is on your branch. A route change that breaks a caller fails here.
 
 ### Lint and format
@@ -59,22 +62,26 @@ installed. The suite calls the app in process and never listens on a port, so it
 ### Build
 
 `bun run build` builds everything the way a release would. It is the only check that catches some mistakes: a
-server-only module imported into the browser in the web app, or a broken route in the scanner. For this site, the
+server-only module imported into the browser in the web app, or a broken bundle in the dit panel. For this site, the
 build also validates every link between docs pages and fails on a broken one.
 
 ## What CI runs
 
-| Job               | What it runs                                                                               |
-| ----------------- | ------------------------------------------------------------------------------------------ |
-| `lint`            | `bun run lint:ci`, lint with no warnings allowed                                           |
-| `format`          | `bun run format`, then fails if any file changed                                           |
-| `typecheck-build` | `bun run build`, `bun run typecheck`, and a check that `packages/api/src/enums.ts` is up to date |
-| `test`            | Every suite but the API's                                                                  |
-| `server-test`     | The API's suite against a PostgreSQL 17 service, with ffmpeg installed                     |
-| `docker`          | Builds the `api` and `web` Docker images, without publishing them                           |
-| `audit`           | `bun run audit`                                                                            |
+In `.github/workflows/ci.yml`, pull requests to `master` run `test-build`. Release tags
+(`.github/workflows/release.yml`) run every job below, plus the Docker Compose + Playwright E2E suite (`e2e.yml`),
+the multi-arch Docker image build and smoke check, and the signed macOS dit package (`dit-app-package.yml`).
+
+| Job          | When           | What it runs                                                                                       |
+| ------------ | -------------- | -------------------------------------------------------------------------------------------------- |
+| `test-build` | PRs & releases | `bun run build`, `bun run test:ci` (every non-server suite), and the server suite on PostgreSQL 17 |
+| `lint`       | Releases       | `bun run lint:ci` (`--max-warnings 0`), no Jira keys in source, and `bun run version:check`        |
+| `format`     | Releases       | `bun run format`, then fails if any file changed                                                   |
+| `typecheck`  | Releases       | `bun run typecheck`, `packages/api/src/enums.ts` drift check, and `bun run knip`                   |
+| `audit`      | Releases       | `bun run audit`                                                                                    |
 
 <Aside>
-  If `enums.ts` fails the `typecheck-build` job, a route or a database enum changed without the generated file
-  being committed. Run `bun run typegen` and commit what it writes.
+  If `enums.ts` fails the `typecheck` job (or `apps/web/test/openapi.test.ts`
+  fails in `test-build`), a route or a database enum changed without the
+  generated files being committed. Run `bun run typegen` and commit what it
+  writes.
 </Aside>

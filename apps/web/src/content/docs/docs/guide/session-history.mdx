@@ -8,15 +8,15 @@ sidebar:
 import { Steps } from "@astrojs/starlight/components";
 import Screenshot from "@/components/Screenshot.astro";
 
-Every time the scanner sees a new save of a set, it records it. A session's history is that list of saves, with
-what changed between each one and the next: what you did last night, what the set looked like a month ago, and
-which save had the version you liked.
+Every time [dit](/dit/) sees a new save of a set, it records it. A session's history is that timeline of saves and
+commits, with what changed between each one and the next: what you did last night, what the set looked like a month
+ago, and which save had the version you liked.
 
 ## Where the saves come from
 
-Most saves in the history are the set as the scanner read it from the file. Ableton Live also keeps copies of
-earlier saves in the set's [`Backup` folder](/dit/). Saves read from there carry a **Backup** mark, and they fill in the
-history from before the scanner was watching.
+Most saves in the history are the set as dit read it from disk while you worked. Ableton Live also keeps copies of
+earlier saves in the set's [`Backup` folder](/dit/). Saves imported from there carry a **Backup** mark, filling in the
+history from before dit was watching.
 
 ## The history page
 
@@ -32,22 +32,22 @@ on 2 machines · first seen" and the date.
 Below it, every save is listed by day ("Today", "Yesterday", then dates), newest first. Each shows its time, the
 machine it was saved on, and small notes on what changed since the save before:
 
-| Note                           | Means                                                   |
-| ------------------------------ | ------------------------------------------------------- |
-| First save seen                | The earliest save Projammr knows about                  |
-| tempo 120 → 124                | The tempo changed                                       |
-| time sig 4/4 → 6/8             | The time signature changed                              |
-| key A minor → C major          | The key changed                                         |
-| +2 tracks, −1 track            | Tracks were added or removed                            |
-| Old name → New name            | A track was renamed                                     |
-| +EQ Eight on Bass              | A device was added to a track (`−` when removed)        |
-| 5 device changes               | More device changes than fit on one line                |
-| +12 audio clips, +3 midi clips | Clips were added                                        |
-| +2 scenes                      | Scenes were added (`−` when removed)                    |
-| +4 samples, −1 sample          | Samples were added or removed                           |
+| Note                                  | Means                                                |
+| ------------------------------------- | ---------------------------------------------------- |
+| First save seen                       | The earliest save Projammr knows about               |
+| tempo 120 → 124                       | The tempo changed                                    |
+| time sig 4/4 → 6/8                    | The time signature changed                           |
+| key A minor → C major                 | The key changed                                      |
+| +2 tracks, −1 track                   | Tracks were added or removed                         |
+| Old name → New name                   | A track was renamed                                  |
+| +EQ Eight on Bass                     | A device was added to a track (`−` when removed)     |
+| 5 device changes                      | More device changes than fit on one line             |
+| +12 audio clips, +3 midi clips        | Clips were added                                     |
+| +2 scenes                             | Scenes were added (`−` when removed)                 |
+| +4 samples, −1 sample                 | Samples were added or removed                        |
 | Ableton Live 12.2 → Ableton Live 12.3 | The set was saved in a newer Live for the first time |
 
-A save where none of that changed says "Saved, nothing the scanner tracks changed".
+A save where none of that changed says "Nothing the diff tracks changed".
 
 ## Comparing two saves
 
@@ -77,7 +77,6 @@ save in **From** as the one before:
 The comparison starts on **Changes**, which lists only the tracks that changed; **Whole set** shows every track.
 The arrows beside them, or `]` and `[`, step through the changed tracks one at a time.
 
-If the two saves are the same in everything Projammr reads, it says "Nothing the scanner reads changed between
-these saves."
+If the two saves are the same in everything Projammr reads, it says "Nothing recorded changed between these saves."
 
 The page's address holds the two saves you picked, so you can send someone a link to the exact comparison.

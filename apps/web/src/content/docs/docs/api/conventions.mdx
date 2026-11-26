@@ -109,12 +109,12 @@ Two kinds of list route cover the entities in a project:
 
 A page request takes:
 
-| Parameter  | Default | What it does                                                                                 |
-| ---------- | ------- | -------------------------------------------------------------------------------------------- |
-| `page`     | `1`     | Which page, counting from 1                                                                  |
-| `pageSize` | `50`    | Rows per page, up to 200                                                                     |
-| `sort`     |         | `<key>.<asc\|desc>`, for example `title.asc`; each route's description lists its sort keys   |
-| `q`        |         | Text search over the list                                                                    |
+| Parameter  | Default | What it does                                                                               |
+| ---------- | ------- | ------------------------------------------------------------------------------------------ |
+| `page`     | `1`     | Which page, counting from 1                                                                |
+| `pageSize` | `50`    | Rows per page, up to 200                                                                   |
+| `sort`     |         | `<key>.<asc\|desc>`, for example `title.asc`; each route's description lists its sort keys |
+| `q`        |         | Text search over the list                                                                  |
 
 Each list also takes its own filters (a track page filters by `status`, `collection`, `label`, `artist` and more);
 the reference lists them per route. The answer is:
@@ -126,7 +126,8 @@ the reference lists them per route. The answer is:
 `rowCount` is the total across every page, so the last page is `ceil(rowCount / pageSize)`.
 
 <Aside>
-  A sort key the list does not recognise is ignored rather than refused: the page comes back in its default order.
+  A sort key the list does not recognise is ignored rather than refused: the
+  page comes back in its default order.
 </Aside>
 
 Some other lists are paged the same way or not at all; a project's images and files, for instance, are paged, and a
@@ -140,13 +141,21 @@ routes (`PATCH /api/tracks/bulk`, `DELETE /api/tracks/bulk`, `POST /api/tracks/b
 works in and a `selection`, which is either a list of ids:
 
 ```json
-{ "projectId": 1, "selection": { "ids": [4, 7, 9] }, "patch": { "priority": "high" } }
+{
+  "projectId": 1,
+  "selection": { "ids": [4, 7, 9] },
+  "patch": { "priority": "high" }
+}
 ```
 
 or everything a list filter matches, with the same filters the page route takes:
 
 ```json
-{ "projectId": 1, "selection": { "all": true, "status": 2 }, "patch": { "priority": "high" } }
+{
+  "projectId": 1,
+  "selection": { "all": true, "status": 2 },
+  "patch": { "priority": "high" }
+}
 ```
 
 Ids that belong to another project are left out of the selection rather than refused. The answer counts what
@@ -158,22 +167,21 @@ Most routes are not metered. The ones that do heavy work, or that anyone can rea
 its own allowance. An allowance is a burst of requests that refills at a steady rate per minute; past it, the route
 answers `429` with a `Retry-After` header giving the seconds until the next request will be accepted.
 
-| What                                                   | Burst | Refills per minute | Counted per    |
-| ------------------------------------------------------ | ----- | ------------------ | -------------- |
-| `POST /api/auth/sign-in/email`                         | 10    | 20                 | client address |
-| `POST /api/auth/sign-up/email`                         | 5     | 5                  | client address |
-| `POST /api/assets/upload`                              | 100   | 300                | account        |
-| `POST /api/images/upload`                              | 100   | 300                | account        |
-| `POST /api/assets/{id}/convert`                        | 10    | 10                 | account        |
-| Moving one collection, track or session to another project | 10 | 20              | account        |
-| Bulk moves (`POST …/bulk/move`)                        | 5     | 10                 | account        |
-| Re-linking sessions to tracks (`POST /api/sessions/bulk/moves`) | 10 | 20           | account        |
-| `POST /api/projects/{id}/audio-backfill`               | 5     | 10                 | account        |
-| `PATCH /api/notes/{id}`                                | 60    | 120                | account        |
-| `POST /api/lyrics/analyze`                             | 60    | 120                | account        |
-| `PATCH /api/me/email`                                  | 5     | 10                 | account        |
-| Share page reads and streams                           | 60 / 20 | 120 / 60         | account or address |
-| Share page comments                                    | 5     | 10                 | account or address |
+| What                                                       | Burst   | Refills per minute | Counted per        |
+| ---------------------------------------------------------- | ------- | ------------------ | ------------------ |
+| `POST /api/auth/sign-in/email`                             | 10      | 20                 | client address     |
+| `POST /api/auth/sign-up/email`                             | 5       | 5                  | client address     |
+| `POST /api/assets/upload`                                  | 100     | 300                | account            |
+| `POST /api/images/upload`                                  | 100     | 300                | account            |
+| `POST /api/assets/{id}/convert`                            | 10      | 10                 | account            |
+| Moving one collection, track or session to another project | 10      | 20                 | account            |
+| Bulk moves (`POST …/bulk/move`)                            | 5       | 10                 | account            |
+| `POST /api/projects/{id}/audio-backfill`                   | 5       | 10                 | account            |
+| `PATCH /api/notes/{id}`                                    | 60      | 120                | account            |
+| `POST /api/lyrics/analyze`                                 | 60      | 120                | account            |
+| `PATCH /api/me/email`                                      | 5       | 10                 | account            |
+| Share page reads and streams                               | 60 / 20 | 120 / 60           | account or address |
+| Share page comments                                        | 5       | 10                 | account or address |
 
 The three single moves share one allowance: moving a track and then a collection draws on the same bucket.
 

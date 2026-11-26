@@ -29,15 +29,16 @@ the proxy answers only `PUBLIC_HOST`: to open the stack by a different name, cha
 
 ## Variables that seed a setting
 
-Five variables give a starting value to a setting an admin can change in the app, under **Settings → Instance**:
+Six variables give a starting value to a setting an admin can change in the app, under **Settings → Instance**:
 
-| Variable            | Setting                                    |
-| ------------------- | ------------------------------------------ |
-| `MAX_UPLOAD_MB`     | Limits, **Largest upload**                 |
-| `MAX_PROJECT_GB`    | Limits, **Storage per project**            |
-| `MAX_USER_GB`       | Limits, **Storage per account**            |
-| `MEDIA_CONCURRENCY` | Background work, **Jobs at once**          |
-| `LOG_LEVEL`         | Integrations, **Log level**                |
+| Variable                      | Setting                                                        |
+| ----------------------------- | -------------------------------------------------------------- |
+| `MAX_UPLOAD_MB`               | Limits, **Largest upload**                                     |
+| `MAX_PROJECT_GB`              | Limits, **Storage per project**                                |
+| `MAX_USER_GB`                 | Limits, **Storage per account**                                |
+| `MEDIA_CONCURRENCY`           | Background work, **Jobs at once**                              |
+| `SAVE_CONTENT_RETENTION_DAYS` | Background work, **Keep the content of uncommitted saves for** |
+| `LOG_LEVEL`                   | Integrations, **Log level**                                    |
 
 While a variable is set, its setting shows the value with **Environment** as its source. Changing the setting in the
 app overrides the variable at once, with no restart, and resetting the setting goes back to the variable's value. A
@@ -47,12 +48,12 @@ setting lives only in the app.
 ## The upload limit
 
 `MAX_UPLOAD_MB` is the largest file one upload can carry, 128 unless you change it and at most 2048, and the API
-refuses anything larger. The instance's **Largest upload** setting starts from it. The scanner asks for the limit when
-it scans and lists a render over it as over the limit rather than trying to send it.
+refuses anything larger. The instance's **Largest upload** setting starts from it. [dit](/dit/) asks for the limit
+when it connects and warns when a bounce is over it.
 
 A higher limit costs memory. The API holds the whole of an upload in memory while it handles it, so every upload in
-flight can take up to that limit of the server's RAM, and a scanner sends three at a time. Raise it only as far as
-the host has room for.
+flight can take up to that limit of the server's RAM, and clients may send several uploads at a time. Raise it only as
+far as the host has room for.
 
 ## Applying a change
 

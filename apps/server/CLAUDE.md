@@ -25,10 +25,15 @@ bun run typegen          # rebuild packages/api types from the in-process OpenAP
 - `src/entities/<entity>/` — schema refs, queries, routes and registration for project, collection, track,
   session, track-audio. Entity-specific routers mount **before** the generic `/:id` routes so static paths
   are not swallowed. A new entity is a new directory plus an entry in `src/entities/index.ts`.
-- `src/routes/` — non-entity routers (auth, me, images, assets, comments, statuses, jobs, notes, lyrics,
-  sharelinks, invites, track-audios). Every route is declared with `hono-openapi`.
+- `src/routes/` — non-entity routers (activity-log, admin, assets, auth, comments, commits, custom-fields,
+  entities, generic, images, instance, invites, jobs, lyrics, machines, me, notes, repo-archive, repo-history,
+  repo-objects, repos, samples, saves, session-renders, settings, share-guest, sharelinks, statuses,
+  track-audios, uploads). Every route is declared with `hono-openapi`.
+- `src/mcp/` — OAuth-protected Model Context Protocol endpoint (`/api/mcp`), actor/authorization, and tool
+  registrations (outside `/api/openapi`).
 - `src/middleware/` — `session` (global), `authenticated`, `authorizeProject` (role gate, one project per
-  request), `rate-limit` (in-memory buckets), `trusted-origin`, `request-log`.
+  request), `project-resolvers`, `request-refs`, `instance-admin`, `body-limit`, `rate-limit` (in-memory
+  buckets), `trusted-origin`, `security-headers`, `request-log`.
 - `src/db/schema/` — one file per area; `src/db/queries/` — cross-entity queries; `src/db/migrations/`.
 - `src/lib/` — storage, media (ffmpeg), jobs, notes crypto, env, palette, dictionaries.
 - `src/test/fixtures.ts` — `setupSuite(label)` gives each test file its own project with owner/editor/
@@ -57,7 +62,9 @@ bun run typegen          # rebuild packages/api types from the in-process OpenAP
   `db.select`; in `db.execute` select `to_char(col, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')` (see `db.md`, Raw-SQL gotchas).
 - A `sql` fragment with an interpolated value cannot be repeated across SELECT/GROUP BY/ORDER BY; alias it.
 - `Pool.prototype.query` spies see nothing inside `db.transaction`; spy `Client.prototype.query`.
-- `jobs.test.ts` and `static.test.ts` run serially last (they reach past their own rows); everything else
-  runs in parallel, which is why every file needs its own `setupSuite` project.
+- Files that touch process-wide or instance-wide state (`db/migrator.test.ts`, `db/queries/jobs.test.ts`,
+  `storage-audit.test.ts`, `save-retention.test.ts`, `routes/settings*.test.ts`, `static.test.ts`, etc. — the
+  full list is `test:serial` in `package.json`) run serially last under `--isolate`; everything else runs in
+  parallel, which is why every file needs its own `setupSuite` project.
 - Dictionaries (CMU, WordNet) load lazily from the listen callback; never at module scope.
 - Deleting an asset removes the file after the row commits; a crash between the two leaves an orphan file.

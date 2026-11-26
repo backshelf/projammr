@@ -28,6 +28,11 @@ projects and the accounts each add up to roughly the total on their own. Some fi
 profile picture belongs to an account and no project, and files Projammr makes itself, such as a spectrum
 image, belong to a project and nobody's account.
 
+Repository objects pushed by [dit](/dit/) are stored once across the instance and charged to the project and account
+that pushed them first; when other projects share the same sample files, the page shows how much space sharing has
+saved. Uncommitted save content past the instance's retention period (configured under **Settings → Instance →
+Background work**) is pruned automatically, freeing any sample objects nothing else references.
+
 ### Storage limits
 
 An instance can cap how much each project and each account may store. An instance admin sets the caps under

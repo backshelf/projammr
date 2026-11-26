@@ -14,7 +14,10 @@ in. Your preferences and a project's own settings are in **Settings**, covered a
 Open your profile from the account menu: select your name at the foot of the sidebar and choose **Profile**. On a
 phone, it is in the account menu at the top right.
 
-<Screenshot id="profile" alt="Your profile: name and photo, email, password and signed-in devices" />
+<Screenshot
+  id="profile"
+  alt="Your profile: name and photo, email, password and signed-in devices"
+/>
 
 ## Name and photo
 
@@ -72,9 +75,7 @@ members.
 
 </Steps>
 
-<Aside type="danger">
-  Deleting your account cannot be undone.
-</Aside>
+<Aside type="danger">Deleting your account cannot be undone.</Aside>
 
 ## Light and dark
 
@@ -87,7 +88,9 @@ device again. On a phone, the account menu has **light**, **dark** and **system*
 Select **Settings** in the sidebar or the account menu, or press <kbd>G</kbd> then <kbd>,</kbd>, from any page.
 Settings opens on your own. The list beside them (above them on a phone) holds each section you can open:
 **Personal**, which is yours wherever you sign in; **Project**, the current project's, while a project is open;
-**Instance**, [the instance's](/docs/admin/), for its admins; and **Devices**.
+**Instance**, [the instance's](/docs/admin/), for its admins; and **Devices**, which holds browser-local settings and
+your registered [dit](/dit/) machines (their open set, pushed repositories, "Never here" folders, "Not a bounce"
+files, and Remove).
 
 A setting saves as soon as you change it. The search box at the top finds a setting by name in every section, and
 so does the [command palette](/docs/guide/search-and-shortcuts/): type a setting's name and choose it to open
@@ -103,11 +106,14 @@ prefix**. See [Writing lyrics](/docs/guide/lyrics/#looking-up-rhymes-and-synonym
 
 Each project has its own settings: open Settings with the project open and choose **Project**. Its pages are:
 
-| Page        | Holds                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------- |
-| Statuses    | The project's statuses. See [Statuses, labels and priority](/docs/guide/statuses-labels-priority/#statuses). |
-| Labels      | The project's labels. See [Statuses, labels and priority](/docs/guide/statuses-labels-priority/#labels).     |
-| Images      | Every image uploaded to the project. See [Artwork and colour](/docs/guide/artwork/#every-image-in-the-project). |
-| Assets      | Storage and every file in the project. See [Every file in the project](/docs/guide/relations-attachments-links/#every-file-in-the-project). |
-| Members     | [Who is in the project, and their roles](/docs/collaboration/members-and-roles/).                              |
-| Danger zone | Deleting the project, for its owner only. See [Deleting a project](/docs/guide/creating-and-editing/#deleting-a-project). |
+| Page           | Holds                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Statuses       | The project's statuses. See [Statuses, labels and priority](/docs/guide/statuses-labels-priority/#statuses).                                                  |
+| Labels         | The project's labels. See [Statuses, labels and priority](/docs/guide/statuses-labels-priority/#labels).                                                      |
+| Priorities     | The project's priority scale. See [Statuses, labels and priority](/docs/guide/statuses-labels-priority/#priority).                                            |
+| Relation types | The project's track relation types. See [Relations, attachments and links](/docs/guide/relations-attachments-links/#relations-between-tracks).                |
+| Fields         | Custom fields defined for the project's entities.                                                                                                             |
+| Images         | Every image uploaded to the project. See [Artwork and colour](/docs/guide/artwork/#every-image-in-the-project).                                               |
+| Assets         | Storage, dit repositories and every file in the project. See [Every file in the project](/docs/guide/relations-attachments-links/#every-file-in-the-project). |
+| Members        | [Who is in the project, and their roles](/docs/collaboration/members-and-roles/).                                                                             |
+| Danger zone    | Deleting the project, for its owner only. See [Deleting a project](/docs/guide/creating-and-editing/#deleting-a-project).                                     |

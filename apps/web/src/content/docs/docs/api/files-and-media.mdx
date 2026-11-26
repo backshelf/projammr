@@ -16,10 +16,10 @@ purposes without being uploaded twice.
 
 `POST /api/assets/upload` takes `multipart/form-data` with two required fields:
 
-| Field       | What it is                                  |
-| ----------- | ------------------------------------------- |
-| `file`      | The file itself                             |
-| `projectId` | The project the file belongs to             |
+| Field       | What it is                      |
+| ----------- | ------------------------------- |
+| `file`      | The file itself                 |
+| `projectId` | The project the file belongs to |
 
 ```bash
 curl -s -X POST https://music.example.com/api/assets/upload \
@@ -51,7 +51,7 @@ It answers `201` with the new asset:
 
 - `name` keeps the file's own name; the stored copy gets a random one, which is what `assetPath` names.
 - `type` is the content type you declared for the part (`;type=audio/wav` in curl), so declare it.
-- The `local…` fields and `fingerprint` are optional form fields the scanner fills in to tie a file to where it came
+- The `local…` fields and `fingerprint` are optional form fields [dit](/dit/) fills in to tie a file to where it came
   from on disk. A script can leave them out.
 
 Uploading needs the editor role in the project.
@@ -64,7 +64,7 @@ changes it. Ask the instance rather than assuming:
 ```bash
 curl -s https://music.example.com/api/uploads/limits \
   -H "Authorization: Bearer $PROJAMMR_TOKEN"
-# {"maxBytes":134217728}
+# {"maxBytes":134217728,"pushSamplesEverywhere":false}
 ```
 
 A file over the limit answers `400` with a validation error whose `code` is `too_big`. The API reads a request body
@@ -73,8 +73,9 @@ read, with a bare `413` and no body. Check the size before sending: some HTTP cl
 they have sent the whole body.
 
 <Aside>
-  The endpoint reference on this site shows a 128 MB maximum on the upload routes: that is the default the reference
-  was built with. Your instance's own limit is whatever `GET /api/uploads/limits` says.
+  The endpoint reference on this site shows a 128 MB maximum on the upload
+  routes: that is the default the reference was built with. Your instance's own
+  limit is whatever `GET /api/uploads/limits` says.
 </Aside>
 
 ### Storage caps
@@ -107,7 +108,7 @@ curl -s -X POST https://music.example.com/api/tracks/7/audios \
 
 - `assetIds` can name several files at once; files that are not audio are skipped. The audio types are `.wav`,
   `.mp3`, `.aiff`, `.aif`, `.flac`, `.m4a`, `.aac` and `.ogg`.
-- Versions are numbered by when each file was made, oldest first: the `localFileCreatedAt` the scanner records, or
+- Versions are numbered by when each file was made, oldest first: the `localFileCreatedAt` dit records, or
   the upload time for a file uploaded without one. Linking renumbers the track's versions to keep that order.
 - Add `"primaryAssetId": 12` to make that file the track's primary version. Without it, a track that had no primary
   version gets its newest one.

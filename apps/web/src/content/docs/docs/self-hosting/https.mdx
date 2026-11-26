@@ -8,12 +8,13 @@ sidebar:
 import { Aside, TabItem, Tabs } from "@astrojs/starlight/components";
 
 Your instance is served over HTTPS only, under a certificate the proxy signs with its own local certificate authority
-(CA). Each device that opens it, including the computer that runs the scanner, trusts that CA once. After that, your
+(CA). Each device that opens it, including the Mac that runs [dit](/dit/), trusts that CA once. After that, your
 instance behaves like any other secure site.
 
 <Aside>
   With a Tailscale account, you can skip the CA altogether: [served through
-  Tailscale](/docs/self-hosting/tailscale/), your instance has a certificate every device already trusts.
+  Tailscale](/docs/self-hosting/tailscale/), your instance has a certificate
+  every device already trusts.
 </Aside>
 
 ## Why HTTPS, even at home
@@ -42,8 +43,8 @@ docker compose cp proxy:/data/caddy/pki/authorities/local/root.crt projammr-ca.c
 ```
 
 <Aside type="caution">
-  Keep the `caddy-data` volume. If it is deleted, Caddy creates a new CA the next time it starts, and every device
-  has to trust the new one.
+  Keep the `caddy-data` volume. If it is deleted, Caddy creates a new CA the
+  next time it starts, and every device has to trust the new one.
 </Aside>
 
 ## Trust it on each device
@@ -89,12 +90,11 @@ docker compose cp proxy:/data/caddy/pki/authorities/local/root.crt projammr-ca.c
   </TabItem>
 </Tabs>
 
-## The scanner
+## dit
 
-The scanner trusts what Chrome on the same computer would trust, so the steps above for that platform cover it; on
-Linux, that includes the `certutil` step. If it meets a certificate the computer does not trust, it [offers to pin
-that exact certificate](/dit/) instead. A pin trusts only that one certificate, and Caddy replaces its certificates as they
-near expiry, so trusting the CA is the arrangement that lasts.
+[dit](/dit/) verifies HTTPS certificates against macOS's system trust store only (Keychain). Following the **macOS**
+tab above covers both the menu bar app and the `dit` command-line tool. dit does not offer certificate pinning: if
+the CA is not trusted in Keychain, dit refuses to connect and asks you to install the instance's certificate first.
 
 ## The home-screen icon on iPhone and iPad
 

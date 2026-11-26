@@ -240,7 +240,7 @@ than the snapshot cannot apply):
    (`bun run --filter @workspace/dit build`). Skip it when `~/projammr-demo-audio` already holds the audio and
    `sets/*.json`: the seed reads them as they are.
 2. `bun run --cwd packages/demo demo-env`, then start the API on an empty database
-   (`.claude/hooks/worktree-setup.sh <path> --db <suffix>`): the seed refuses an instance that has accounts.
+   (for example in a linked worktree with its own Postgres database in `apps/server/.env`): the seed refuses an instance that has accounts.
 3. `bun run --cwd packages/demo seed -- --api http://localhost:<api port>`.
 4. `bun run --cwd packages/demo snapshot`, then carry on from step 4 of the fast path.
 
@@ -250,7 +250,7 @@ Each script's options are in its header; the package itself is `packages.md`'s *
 
 - `bun run typecheck` runs `astro sync` (writes the gitignored `.astro/types.d.ts`), then `scripts/typecheck.ts`:
   `tsc --noEmit --runExternalCode` with the TypeScript pinned in `apps/web/package.json`
-  (`7.1.0-dev.20260922.1`; every other workspace is on `^7`).
+  (`7.1.0-dev.20261010.1`).
 - `tsconfig.json` registers `@astrojs/ts-content-mapper` for `.astro` under `contentMappers`, which is what lets
   tsc read `.astro` files; `--runExternalCode` lets it run the mapper.
 - The mapper hands tsc every `.astro` file in the program, Astro's and Starlight's own under `node_modules`

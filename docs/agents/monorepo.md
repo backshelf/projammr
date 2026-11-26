@@ -1,11 +1,11 @@
 # Reference: Monorepo root & conventions
 
-_Updated 2026-09-19._
+_Updated 2026-11-27._
 
 ## Layout
 
 ```
-projammr-monorepo/            Bun 1.4 workspace (`packageManager` pin), turbo ^2.10.7 (Docker builds on oven/bun:1.4.2-slim)
+projammr-monorepo/            Bun 1.4.3 workspace (`packageManager` pin), turbo ^2.11.10 (Docker builds on oven/bun:1.4.2-slim)
 ├── apps/client               Next.js 16.4.0 frontend (`bun --bun next dev`)
 ├── apps/server                Hono REST API, port 8080, mounted at /api
 ├── apps/dit-app               dit's menu bar app: Tauri 2 shell in `src-tauri/` (its own Cargo workspace), React panel in `src/` (Vite); `dit.md` "The app"
@@ -13,21 +13,23 @@ projammr-monorepo/            Bun 1.4 workspace (`packageManager` pin), turbo ^2
 ├── apps/e2e                   the compose stack driver, the boot smoke check and the Playwright browser suite (private workspace, no `test` script)
 ├── packages/ui                @workspace/ui — shadcn/ui (radix-mira), heavy shared lib
 ├── packages/api                @workspace/api — shared API types + openapi-fetch client + auth-client
+├── packages/dit                @workspace/dit — Rust workspace (dit-core, dit-daws, dit-daw-ableton, dit-cli, dit-ipc, dit-daemon, dit-wasm) and WASM loader
 ├── packages/dsp               @workspace/dsp — Rust → WebAssembly audio maths (pkg/dsp.wasm) and its TypeScript loader
+├── packages/media             @workspace/media — shared audio format metadata and helpers
 ├── packages/security-headers  @workspace/security-headers — the response headers the API and the web app both send
 ├── packages/session-diff      @workspace/session-diff — the save-to-save diff model, pure TypeScript shared by the server and the client
 ├── packages/settings          @workspace/settings — the settings registry: every setting's declaration and the resolver
 ├── packages/release           @workspace/release — the version sync and release scripts (exports nothing)
 ├── packages/demo              @workspace/demo — the screenshots' demo catalogue, its seed and snapshot/restore
+├── packages/test              @workspace/test — bun:test stubs shared across suites
 ├── packages/eslint-config     @workspace/eslint-config
 ├── packages/typescript-config @workspace/typescript-config
 ├── .env.example               template for the root .env docker-compose reads (Postgres creds, secrets, URLs)
+├── fixtures/covers/           four cover images used as accent-extraction fixtures (copied into apps/web/src/assets/covers/)
 ├── docs/agents/               the area references for coding agents (these files)
 ├── docs/screenshots/          the JPEGs the READMEs embed (1600 px desktop, 585 px phone); demo data seeded through
 │                              the API under a throwaway account, never the owner's catalogue; `.dockerignore`d
-├── .omp/                      the omp harness: AGENTS.md, RULES.md, config.yml, rules/, hooks/, skills/featr, specs/, plans/
-└── .claude/                   the Claude Code harness: CLAUDE.md, settings.json, jira.json, planning.md, hooks/,
-                               skills/, rules/, plans/, docs/ (Jira, screenshots)
+└── .claude/                   local Claude Code harness (gitignored on backshelf repos; not required to contribute)
 ```
 
 Root README is real (repo summary + prerequisites). The client dev script (`apps/client/package.json`) is plain
@@ -44,15 +46,15 @@ missing tool fails `bun run build` with the tool's own message.
 `test` → `turbo run test --filter=!server` (see Testing below). Two more scripts exist only for the
 workflow: `lint:ci` → `turbo lint -- --max-warnings 0` (CI's zero-warning gate), `test:ci` → `turbo run test
 --filter=!server --concurrency=1` (one package at a time, see CI below) and `audit` → `bun audit`
-with the two advisory ignores (see CI below); `knip` runs knip over the whole repository (Formatting / linting
+with the advisory ignore (see CI below); `knip` runs knip over the whole repository (Formatting / linting
 below). The product version lives in the root `package.json`;
 `version:sync` (`bun packages/release/src/sync-version.ts`) writes it into every workspace manifest, `packages/dsp/rust/Cargo.toml`
-the `projammr_dsp` entry of `Cargo.lock`, the `[workspace.package]` version of `packages/dit/Cargo.toml`, every `dit-*` member entry of `packages/dit/Cargo.lock` and each workspace's entry under `"workspaces"` in `bun.lock`, `version:check` is the same with `--check` (writes nothing, exits non-zero
+the `projammr_dsp` entry of `Cargo.lock`, the `[workspace.package]` version of `packages/dit/Cargo.toml`, every `dit-*` member entry of `packages/dit/Cargo.lock`, `apps/dit-app/src-tauri/Cargo.toml` and `Cargo.lock`, and each workspace's entry under `"workspaces"` in `bun.lock`, `version:check` is the same with `--check` (writes nothing, exits non-zero
 listing the files that differ), and `release <x.y.z | x.y.z-rc.N>` (`packages/release/src/release.ts`) bumps the root, syncs,
 dates the changelog's `## [Unreleased]` section, commits `chore(release): x.y.z` and tags `vx.y.z` without pushing
-(see `packages/release` in `packages.md`). Every workspace declares `format`, so `turbo format` reaches all fourteen; a workspace without one is skipped
-silently. Root devDeps: knip ^6.38.0, prettier ^3.9.6, prettier-plugin-astro ^1.0.1, prettier-plugin-tailwindcss
-^0.8.1, turbo ^2.10.13, typescript ^7.0.2.
+(see `packages/release` in `packages.md`). Every workspace that declares `format` is reached by `turbo format`; a workspace without one is skipped
+silently. Root devDeps: knip ^6.44.2, prettier ^3.9.10, prettier-plugin-astro ^1.1.2, prettier-plugin-tailwindcss
+^0.8.1, turbo ^2.11.10, typescript ^7.1.0-dev.20261010.1.
 
 ## turbo.json
 
@@ -73,7 +75,7 @@ silently. Root devDeps: knip ^6.38.0, prettier ^3.9.6, prettier-plugin-astro ^1.
 - `web#build`: dependsOn `[]` and outputs `dist/**`, so `apps/web` builds with no typegen, secret or wasm
   (`docs/agents/web.md`). With no dependency task in its hash, its inputs name what the build reads from outside
   `apps/web`: `$TURBO_DEFAULT$` plus `packages/ui`'s `package.json` and `src/**` (minus its tests), and the root
-  `.env.example` and `docker-compose.yml` the environment reference imports raw. A new import from outside the
+  `.env.example`, `docker-compose.yml` and `docker-compose.tailscale.yml` the environment reference imports raw. A new import from outside the
   package needs a `$TURBO_ROOT$/…` input here, or a cache hit replays a stale `dist/`.
 - `web#typegen`: `cache: false`, outputs `openapi/**`. Root `bun run typegen`, and so root `bun run typecheck`,
   rewrites `apps/web/openapi/*.json` from the server's in-process spec on every run.
@@ -135,8 +137,8 @@ Root `tsconfig.json` just extends `@workspace/typescript-config/base.json`:
   (`docs/agents/web.md`'s **Typecheck**).
 - `apps/server` has two configs: `tsconfig.json` (editor and `src`-only settings; `bun run build` is two
   separate `bun build` invocations — `src/server.ts src/db/migrate.ts --outdir=dist`, giving `dist/server.js`
-  and `dist/db/migrate.js`, then `scripts/reset-link.ts scripts/make-admin.ts --outdir=dist/scripts` for the
-  CLI scripts (`docs/agents/server-api.md`'s **Mail**) — kept separate because folding extra entry points
+  and `dist/db/migrate.js`, then `scripts/reset-link.ts scripts/make-admin.ts scripts/rotate-notes-key.ts --outdir=dist/scripts` for the
+  CLI scripts (`docs/agents/server-api.md`'s **Mail** and **Notes**) — kept separate because folding extra entry points
   into one `bun build` call re-roots `--outdir` at their common parent instead of `src/`; no type check
   either way) and `tsconfig.typecheck.json` (`bun run typecheck` → `bun check -p tsconfig.typecheck.json`) — it
   does not extend the shared preset.
@@ -501,122 +503,20 @@ merge.
 Machine-specific servers (an IDE's MCP on a local port, a locally hosted Projammr MCP) belong in the user-level
 config, not here. Jira comes from the `atlassian` plugin, so its tools are `mcp__plugin_atlassian_atlassian__*`.
 
-## omp harness: .omp/
+## Local harness: `.claude/` (gitignored)
 
-omp reads `.claude/CLAUDE.md` and `.claude/skills/` as well, but not `.claude/settings.json` hooks, so a session started at the root runs from `.omp/`, whose `AGENTS.md` takes the project
-context slot from `.claude/CLAUDE.md`.
+`.claude/` is gitignored on `backshelf/projammr` (`.gitignore`) and stays local to the maintainer's machine rather
+than being committed to the repository. Contributors do not need it: all gates run through the root `package.json`
+scripts (`bun run lint`, `bun run typecheck`, `bun run build`, `bun run knip`, `bun run test`, and
+`cd apps/server && bun run test`).
 
-- `AGENTS.md`: the project context (where things are, planning, isolation, branches, commits, merging, PR
-  descriptions, commands), ending in an `@../AGENTS.md` import of the root principles so both load together.
-- `RULES.md`: the handful of hard rules that stay in context for the whole session (no Jira keys in source,
-  the commit format, gates before a commit, no force-push or local merge into `master`).
-- `config.yml`: project settings.
-- `rules/design.md`: the `design` rulebook entry (globs over the client, the dit app's
-  `src/` and `packages/ui`): read the matching `DESIGN.md` section before a visual change.
-- `hooks/pre/commit-message.ts`: a `tool_call` handler that blocks a `bash` `git commit`/`git merge` whose
-  inline message (`-m`, a heredoc, `-F <file>`, or `-m "$(cat <<'EOF' …)"`) is not a Conventional Commit,
-  carries an attribution trailer, or, on a `<type>/PROJ-<n>-…` branch, lacks that key. The branch is read
-  where git runs: `git -C <dir>`, a leading `cd <dir>`, the call's `cwd`, or the session's.
-- `hooks/post/format-on-edit.ts`: a `tool_result` handler that runs Prettier (rustfmt for `.rs`) on the files
-  an `edit` or `write` changed under `apps/*` and `packages/*`, skipping generated files, and tells the agent to
-  re-read a file it rewrote. Never blocks.
-- `skills/featr/`: one feature, brainstormed before the code is opened, specced, priced against the tree by
-  research subagents, then built as one PR from isolated `task` subagents (`build`, the default) or written up
-  as a plan (`plan`). No Jira epic; specs land in `.omp/specs/`, plans in `.omp/plans/`, and the run state in
-  the gitignored `.omp/plans/research/`.
+Project-scoped agent skills live in `.agents/skills/` (tracked by `skills-lock.json` — e.g. `better-auth-*`,
+`baseline-ui`/`fixing-*`, `vercel-*`, `tailwind-design-system`, `typescript-advanced-types`). Don't hand-edit
+installed skills; they are managed by their upstream skill installer.
 
-Hooks and context files load when a session starts; edit them, then start a new session.
-
-## .claude/skills/
-
-`next-dev-loop` is the one skill this repo owns. Planning and team builds go through the user-level `featr`
-skill (`~/.claude/skills/`), which reads `.claude/planning.md` (grounding, people and surfaces, reach, skills
-by area) and `.claude/jira.json` from this repo. Every other entry here is a symlink into
-`.agents/skills/`, tracked by `skills-lock.json` (source repo, path within it, and a content hash per skill —
-e.g. `better-auth-*` from `better-auth/skills`, `baseline-ui`/`fixing-*`/`improve-ui` from `ibelick/ui-skills`,
-`vercel-*` from `vercel-labs/agent-skills`). Don't hand-edit a symlinked skill's content; it's managed by
-whatever installed it.
-
-`next-dev-loop/SKILL.md` (~8KB, local): verify Next.js **runtime** behavior during `next dev` by cross-checking
-`/_next/mcp` (routes, compilation issues via `get_compilation_issues`, logs — requires Turbopack, Next 16.3+) and
-`agent-browser` CLI ≥0.31.1 (real Chrome DOM/console/network/React fiber). Key rules: worktree-scoped browser
-session (`AGENT_BROWSER_SESSION`/`--restore`), probe MCP tools/list first, after each edit check
-compile→run→behave→React-level, blank page = stale browser session (re-open with `--restore`, never curl
-fallback), MCP replies are SSE (`sed -n 's/^data: //p'`).
-
-## Claude harness: settings and hooks
-
-All checked in under `.claude/` except `settings.local.json` (gitignored, personal, not documented here). Hook
-settings hot-reload.
-
-The workflow rules are user-level, in the dotfiles repo's `claude/.claude/`, stowed into `~/.claude/`:
-`CLAUDE.md`, `docs/jira.md`, `docs/screenshots.md` and the skills above. This repo adds
-`.claude/jira.json` (project id, custom-field ids, agent account, labels), `.claude/planning.md`, and the Projammr halves of `docs/jira.md` and `docs/screenshots.md`.
-
-- `settings.json` hooks: `PreToolUse Bash` → `hooks/check-commit-message.sh` (denies `git commit`/`git merge`
-  whose subject isn't Conventional Commits — feat|fix|refactor|chore|docs|test|perf|merge, scope optional — or
-  whose message carries an attribution trailer, or whose subject lacks the `PROJ-<n>` key of a branch named for
-  one; parses `-m`, heredocs, `-F`/`--file`; a `git commit` string quoted
-  _inside_ another command is a known false positive — put such text in a file instead), then
-  `hooks/check-open-questions.ts`. `PreToolUse
-Bash|Write|Edit|MultiEdit|<Atlassian MCP writes>` → `hooks/check-open-questions.ts` (a plan write, a
-  `gh pr create|edit` body, a twg Jira description or comment, or an MCP Jira write:
-  paragraphs with a question mark or a hedging word go to Jev's `open-question` set, and one at or over 0.8 is
-  denied once with the paragraph quoted; the same paragraph resent in the same session passes, for a false
-  flag; fails open when Jev is unreachable). `PostToolUse Edit|Write`
-  → `hooks/format-on-edit.sh` (Prettier on `apps/*`/`packages/*` source files, skips generated files, never
-  blocks), then `hooks/typecheck-on-edit.sh` (runs the edited file's own package `typecheck` script, or
-  `cargo clippy` on the nearest crate for `.rs`; lists errors in the edited file and counts the rest of the
-  package, exits 2 so the result returns as feedback). Both only fire for `Edit`/`Write` — a `sed` or
-  `python` edit skips them and leaves the `LSP` tool's semantic operations answering from the pre-edit
-  program, so a change made from the shell gets `bun run format` and the package's typecheck before its commit.
-- `hooks/worktree-setup.sh <path> [--db <suffix>]`: `bun install --frozen-lockfile`, then
-  `bun run --filter @workspace/dsp build` and `bun run typegen --force` (`packages/api/src/v1.d.ts` is gitignored, so without it the worktree's first typecheck fails with
-  `Cannot find module './v1'` and ~70 cascading errors that read like real bugs; `--force` because turbo's
-  cache is shared across worktrees and would replay a hit for a file this one does not have), plus gitignored
-  fixtures copied from the main checkout (`.env` ×4, `apps/server/deps/`), `BETTER_AUTH_URL` pointed at
-  loopback, the root `.env` stripped of the live stack's `COMPOSE_FILE`, `TS_AUTHKEY` and `TRUSTED_ORIGINS`
-  with `PUBLIC_HOST=localhost` (a compose run in a worktree would otherwise join the tailnet on the main
-  checkout's key), and the empty `apps/server/static/{assets,images,analysis}` skeleton. `--db` hands over to
-  `hooks/worktree-db.sh create <path> <suffix>`, which creates `<base>_<suffix>` on the server the worktree's
-  `apps/server/.env` names (`<base>` is the main checkout's database name; the role needs CREATEDB), rewrites
-  that `.env`'s `DATABASE_URL` and migrates it. It is idempotent, so re-running it is also how a worktree's
-  database picks up a newly merged migration. `worktree-db.sh drop <path>` drops it again and refuses the main
-  checkout's own database.
-- The Bash working directory does not persist between a subagent's calls, so each
-  command is `cd <worktree> && …` or `git -C <worktree> …`.
-- `settings.json` also wires `SessionStart` (startup|resume|clear) → `hooks/session-state.sh` (prints branch and
-  dirty count, leftover worktrees, which of :3000/:8080/:5173 are bound, which Postgres/Projammr containers are
-  up; stdout becomes context, never blocks) and `Stop` → `hooks/check-gates-ran.sh` (reads the transcript; if a
-  source file under `apps/`/`packages/` was edited after the last typecheck or `run-gates.sh` run it exits 2
-  once per batch of edits, which sends Claude back to run the gate; the transcript shape is undocumented, so a
-  parse failure passes).
-- `scripts/run-gates.sh [--worktree <path>] [--with-build] [gate …]` runs the gates CI runs, in CI's order
-  (`lint typecheck enums knip test server-test audit`; `build` and `format` only when named, the first because it
-  belongs to whoever integrates, the second because it rewrites files), and prints one line per gate — verdict, the gate's own summary counts, elapsed — plus the
-  new failing locations under it, capped at `GATE_MAX_DETAIL` (40) lines each. It adds up every `bun test`
-  summary in a run rather than reading the last one, counts load-time errors, says when the server suite's
-  isolated half never ran, names an environmental red (database down, `too many clients`) instead of
-  printing a wall of it, and keeps the full logs in a temp directory it names at the end. It exits 1 if any
-  gate failed. Known red is not its business: it reports what is red, and the caller holds the list of what
-  already was.
-- **Who runs `build`.** It is the most core-hungry gate in the set — ~110 CPU-seconds at 780% of a core with
-  a cold `.next`, against 16s of wall-clock on an idle machine — so seven of them at once is most of what
-  makes parallel agents thrash. Nothing else in the default set needs it: `turbo.json` gives `typecheck`
-  `^typecheck` + `server#typegen`, and `test` `^build`, which reaches the packages a suite imports but not
-  the two leaf apps. So a task skips it and `--with-build` runs at integration. What that
-  defers is the class of failure only a build finds — a Next build error (an RSC or `"use client"`
-  boundary, a prerender). A task that touches the client's server/client boundary should name `build` itself.
-- **The gate queue.** Every `run-gates.sh` run on the machine queues against every other, from whatever
-  worktree: `GATE_SLOTS` (default 2) go at once, the rest poll every 5s and report the wait in their header
-  (`--no-queue` or `GATE_SLOTS=0` opts out; a run naming only light gates never queues). The lock is one
-  `flock` per slot under `GATE_LOCK_DIR` (`$TMPDIR/projammr-gates-<uid>/`), held for the whole run, so there
-  is no daemon and no state to clean up: the kernel releases it however the run dies. This is why seven
-  agents at once do not thrash — a full run fans turbo out over every core and holds Postgres
-  connections, so concurrent gate runs are slower each _and_ flake on hook and query timeouts.
-- `rules/design.md` is a path-scoped rule (`paths:` frontmatter; loads when Claude reads a matching file) for
-  `.tsx`/`.css` under the client, the dit app and `packages/ui`: read the matching `DESIGN.md` section
-  before a visual change.
+On machines where the maintainer's local `.claude/` harness is installed, it provides optional hooks and scripts such
+as `scripts/run-gates.sh` (queued local gate runner), `hooks/worktree-setup.sh` / `hooks/worktree-db.sh` (worktree
+bootstrap and per-worktree database management), and `hooks/format-on-edit.sh`.
 
 ## Gotchas list
 
@@ -635,14 +535,14 @@ Bash|Write|Edit|MultiEdit|<Atlassian MCP writes>` → `hooks/check-open-question
    covers it inside Docker).
 7. WebStorm MCP port is hardcoded; next-devtools MCP is the one actually enabled day to day.
 8. `git worktree add -b feat/x/y` fails when branch `feat/x` already exists (git refuses a ref nested
-    under a branch name) — use `feat/x-y` instead.
+   under a branch name) — use `feat/x-y` instead.
 9. `bun run <script> -- --flag` strips the `--`, so a turbo-wrapped script receives the flag itself and rejects it.
-    To reach the per-workspace tool, run turbo directly (`bunx turbo lint -- --max-warnings 0`) or add a root
-    script that does (`lint:ci`).
-10. `packages/dsp` is the one `packages/*` workspace with a `build` script and turbo `outputs` (`pkg/**`). Its
-    `pkg/dsp.wasm` is never committed, so anything that runs its code outside turbo builds it first (the server
-    suite, a fresh worktree), and every Dockerfile stage that copies the package's source also copies `/pkg`
-    from `build-dsp`. `rust-toolchain.toml` pins an exact patch release (`1.97.1`): rustup matches toolchains by
+   To reach the per-workspace tool, run turbo directly (`bunx turbo lint -- --max-warnings 0`) or add a root
+   script that does (`lint:ci`).
+10. `packages/dsp` and `packages/dit` are the two `packages/*` workspaces with a `build` script and turbo `outputs` (`pkg/**`). Their
+    `pkg/*.wasm` binaries are never committed, so anything that runs their code outside turbo builds them first (the server
+    suite, a fresh worktree), and every Dockerfile stage that copies either package's source also copies `/pkg`
+    from `build-dsp` / `build-dit`. `rust-toolchain.toml` pins an exact patch release (`1.97.1`): rustup matches toolchains by
     name, and the official Rust image names its toolchain `1.97.1`, so a `1.97` channel would download a second
     toolchain inside `rust:1.97.1-slim-trixie`. `wasm-opt` 116 refuses Rust's output unless run with
     `--enable-bulk-memory` (plus `simd`, `nontrapping-float-to-int`, `sign-ext`, `mutable-globals`,

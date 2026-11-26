@@ -31,8 +31,8 @@ when the set was last saved, such as "saved 2 days ago".
   the clips, such as "212 audio · 38 midi clips".
 - **Attachments**: files that belong with this session. Its drop zone asks for "a bounce or an export from this
   session".
-- **Samples**: the sample files the set uses, by their paths on the computer the set was scanned on. It only
-  appears when the set uses samples.
+- **Samples**: the sample files the set uses, by their paths on the computer the set was pushed from, along with
+  whether each is held on the hub. It only appears when the set uses samples.
 - **History**: the latest six saves, each with what changed since the one before. When there are more, **All**
   followed by the count opens the full [save history](/docs/guide/session-history/).
 - **Comments**: see [Comments and activity](/docs/guide/comments-and-activity/).
@@ -49,11 +49,11 @@ the set. Each group is a line under the tracks it holds, in the group's colour, 
 room. The return tracks and the master sit apart at the right, the way Live's mixer shows them. Under a track the
 save changed, a mark says how:
 
-| Mark                           | Means                                  |
-| ------------------------------ | -------------------------------------- |
-| A small arrow pointing up      | The track is new in this save          |
-| A dashed outline and a dash    | The track was removed                  |
-| A dot                          | The track was renamed or its devices changed |
+| Mark                        | Means                                        |
+| --------------------------- | -------------------------------------------- |
+| A small arrow pointing up   | The track is new in this save                |
+| A dashed outline and a dash | The track was removed                        |
+| A dot                       | The track was renamed or its devices changed |
 
 Below the skyline, anything else the save changed is shown on its own gauge: the tempo moving along a 60 to 200
 BPM ruler, the audio and MIDI clip counts as bars with what the save added lit up, and the time signature, key,
@@ -81,13 +81,14 @@ When the save changed any tracks:
 When there is no structure to show, the section says why:
 
 - "Sessions added by hand have no structure to show."
-- "Scan this session with the desktop scanner to read its tracks and devices."
-- For a DAW the scanner cannot read tracks from, that DAW "doesn't report tracks and devices."
+- "Track this session with dit to read its tracks and devices."
+- For a DAW dit cannot read tracks from, that DAW "doesn't report tracks and devices."
 
 ## The rail
 
-The rail holds what the scanner reported about the file:
+The rail holds what dit reported about the set:
 
+- **Repository**: the dit repository holding the set, when pushed from dit.
 - **Local filepath**: where the set lives on the computer that has it. You can copy it, and edit it if the set
   has moved.
 - **File created at**, **File modified** and the **Machine** it was last seen on.
@@ -98,23 +99,23 @@ The rail holds what the scanner reported about the file:
 
 ## Open in DAW
 
-**Open in DAW**, at the foot of the rail, opens the set in your DAW on your computer. The same button starts every
-row of the sessions table.
+**Open in DAW**, at the foot of the rail, opens the set in your DAW on your computer through a `projammr://` link. The
+same button starts every row of the sessions table.
 
-It works through the scanner, so [dit needs to be installed and running](/dit/) on the computer you are using,
-and the set needs to be on that computer. Hover the button to see where it will open: "Opens the file on", then
-the machine's name and when the file was last modified.
+It works through [dit](/dit/), so dit needs to be installed and running on a computer that tracks the set's
+repository. Hover the button to see which machine will open it: "Opens the file on", then the machine's name.
 
-If nothing answers, Projammr says "Projammr desktop app required", with a link to download the scanner.
+If nothing answers, Projammr says "Projammr desktop app required", with a link to download dit.
 
 <Aside>
-  The button is greyed out for a session added by hand: "No local file — this session was created manually and
-  never scanned".
+  When no online machine tracks the session's repository (including a session
+  added by hand), the button is greyed out with "Needs dit on the computer that
+  has this set."
 </Aside>
 
 ## Sessions added by hand
 
-You can add a session without the scanner, with a **Title**, **Notes** and the **DAW** it lives in. It is a
+You can add a session without dit, with a **Title**, **Notes** and the **DAW** it lives in. It is a
 placeholder: a name to hang notes, attachments and comments on. With no file behind it, it has no structure,
 samples or history, and it cannot be opened in a DAW.
 

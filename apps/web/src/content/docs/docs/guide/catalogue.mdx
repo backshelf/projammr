@@ -43,12 +43,12 @@ A track's audio lives in its **versions**: every bounce you upload is one, and o
 
 ## Sessions
 
-A session is the DAW project file behind a track: an Ableton set, for instance. When the scanner reads a set on
+A session is the DAW project file behind a track: an Ableton set, for instance. When [dit](/dit/) reads a set on
 your computer, its session in Projammr carries what the set says about itself: tempo, key, time signature, the
 tracks and devices inside it, its samples, and a history of every save. See [Sessions](/docs/guide/sessions/).
 
-- **A session does not need a track.** The scanner can find a set before you have decided which song it
-  belongs to, and you can assign it later.
+- **A session does not need a track.** dit can record a set before you have decided which song it belongs to, and you
+  can assign it later.
 - **One session per track can be its main session**: the one that carries the track's work. A track shows the
   key and BPM its main session reports.
 
@@ -78,12 +78,12 @@ previous and next track in that collection's running order.
 
 ### What each page shows
 
-| Page       | Main sections                                                                                                                      | In the rail                                                                                                               |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Project    | Description, artwork, collections, plugins, the work heatmap, links, attachments, comments, activity                             | Collection count, links, members, created and updated dates                                                               |
-| Collection | Notes, artwork, tracks in running order, attachments, comments, activity                                                          | Status and progress, loudness, spectrum, tempo and keys across the tracks, release date, UPC, sharing, runtime            |
-| Track      | Notes, artwork, lyrics, sessions, relations, attachments, comments, activity                                                      | Key and BPM, loudness and spectrum, the "Worked on" heatmap, sharing, ISRC and ISWC, status, priority, explicit, collections, labels |
-| Session    | Notes, structure, attachments, samples, history, comments                                                                          | Local file path and dates, the main-session star, machine, and what the DAW reported: tempo, time signature, key, tracks, scenes, version |
+| Page       | Main sections                                                                                        | In the rail                                                                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project    | Description, artwork, collections, plugins, the work heatmap, links, attachments, comments, activity | Collection count, links, members, created and updated dates                                                                                           |
+| Collection | Notes, artwork, tracks in running order, attachments, comments, activity                             | Status and progress, loudness, spectrum, tempo and keys across the tracks, release date, UPC, sharing, runtime                                        |
+| Track      | Notes, artwork, lyrics, sessions, relations, attachments, comments, activity                         | Key and BPM, loudness and spectrum, the "Worked on" heatmap, sharing, ISRC and ISWC, status, priority, explicit, collections, labels                  |
+| Session    | Notes, structure, attachments, samples, history, comments                                            | Repository, local file path and dates, the main-session star, machine, and what the DAW reported: tempo, time signature, key, tracks, scenes, version |
 
 <Screenshot
   id="collection"
@@ -91,8 +91,9 @@ previous and next track in that collection's running order.
 />
 
 <Aside>
-  A section with nothing in it yet folds away. Near the foot of the page, a line such as "Add to this track"
-  collects them as links like **+ Notes** and **+ Relation**, so you can start any of them.
+  A section with nothing in it yet folds away. Near the foot of the page, a line
+  such as "Add to this track" collects them as links like **+ Notes** and **+
+  Relation**, so you can start any of them.
 </Aside>
 
 ## Who can change what

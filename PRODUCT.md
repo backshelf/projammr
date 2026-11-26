@@ -70,10 +70,12 @@ Four points together; a generic tracker (Notion, Trello) can claim none of them 
 
 - **Hierarchy:** projects, collections, tracks and sessions, with statuses (user-defined colours and a
   percentage), labels, priority, relations between tracks, attachments, images, comments and an activity feed.
-- **Audio:** multiple audio versions per track, waveforms, timecoded comments per version, loudness (LUFS),
-  a music player and a listening queue.
-- **Session intelligence:** Ableton set structure, save-to-save diffs, plugin inventory, save timelines and
-  activity heatmaps.
+- **Audio:** multiple audio versions per track, waveforms, timecoded comments per version, loudness (LUFS), true peak,
+  spectrum, spectrogram and version-to-version change strips, loudness-matched A/B comparison, a music player and
+  listening queue, and **The Lab** (speed/pitch, EQ, compression, reverb, audition modes and offline bounce).
+- **Session intelligence:** Ableton set structure, save-to-save diffs, repositories with commit logs, branches,
+  checkpoints and hub-backed restore, time-in-set tracking, plugin and sample inventories, save timelines, activity
+  heatmaps, registered machines and "Open in DAW" (`projammr://`) deep links.
 - **Writing:** an encrypted personal notebook whose notes can become track lyrics, and a lyrics editor with
   rhyme and dictionary help.
 - **Collaboration:** project members with roles (viewer by default), invites, and public share links with

@@ -17,7 +17,7 @@ by `.env`. Only one of them, the proxy, can be reached from outside the machine.
 ## The proxy is the only way in
 
 The proxy publishes ports 80 and 443, and 443 over UDP for HTTP/3. Nothing else in the stack is published, so every
-client reaches the API the same way: the browser and the scanner both send their `/api` requests to the proxy, which
+client reaches the API the same way: the browser and [dit](/dit/) both send their `/api` requests to the proxy, which
 forwards them straight to the API. `/media` is the address clients use for uploaded files, and the proxy rewrites it
 to the API's own `/static` route. Everything else goes to the web app.
 
@@ -47,6 +47,6 @@ The five named volumes in the diagram hold everything that outlives a container.
 containers leaves them alone, and so does `docker compose down`.
 
 <Aside type="danger">
-  `docker compose down -v` deletes the volumes too: the database, every upload, your backups and the CA your devices
-  trust.
+  `docker compose down -v` deletes the volumes too: the database, every upload,
+  your backups and the CA your devices trust.
 </Aside>

@@ -1,6 +1,6 @@
 # Reference: Next.js client app (`apps/client`)
 
-_Updated 2026-10-20._ Next.js 16.4, React 19.2, App Router, RSC-first. Read `node_modules/next/dist/docs/` before
+_Updated 2026-11-27._ Next.js 16.4, React 19.3, App Router, RSC-first. Read `node_modules/next/dist/docs/` before
 writing Next.js code. Design language: `DESIGN.md`. Work tracking is Jira project PROJ
 (`.claude/docs/jira.md`).
 
@@ -642,7 +642,7 @@ factories, which render `config.suggestions` as a `<datalist>` wired to the inpu
 - **Request-scoped caches** in `lib/server-data.ts` (`server-only`, React `cache()`): `cachedMyProjects`,
   `cachedMe`, `cachedInstance` (`GET /api/instance`; the signed-out settings read and the sign-in card share
   it), `cachedProject`, `cachedTrack`,
-  `cachedCollection`, `cachedSession`, `cached{Collection,Track,Session}Summaries`, `cachedMyNotes`, `cachedNote`,
+  `cachedCollection`, `cachedSession`, `cachedRepo`, `cachedCustomFields`, `cached{Collection,Track,Session}Summaries`, `cachedMyNotes`, `cachedNote`,
   `cachedIsInstanceAdmin` (derived from `cachedMe()`'s own `instanceRole`, `false` on a failed `/me` — one
   `/me` read per request, shared by the settings hub's Instance gate and the palette's settings results;
   `cachedShellData()` reads the session, `/me/projects` and the project cookie, never `/me`; the cache
@@ -656,10 +656,10 @@ factories, which render `config.suggestions` as a `<datalist>` wired to the inpu
 ## API access and auth
 
 - **Server actions** (`src/actions/*.ts`, one `"use server"` file per resource: activity, admin, assets,
-  collections, comments, cookie, devices, images, instance, labels, members, me, notes, patch-field, player-metadata,
+  collections, comments, cookie, custom-fields, images, instance, labels, machines, me, members, notes, patch-field, player-metadata,
   priorities (`getPriorityLevels(projectId)`, the scale a list page, the entity pages' tables, the track rail, the
   palette and the activity feeds read; `createPriorityLevel`/`updatePriorityLevel`/`reorderPriorityLevels`/
-  `deletePriorityLevel`, each wrapped in `written()`, back the Priorities pane), projects, save-description, saved-views, sessions, sharelinks, statuses,
+  `deletePriorityLevel`, each wrapped in `written()`, back the Priorities pane), projects, relation-types, repos, save-description, saved-views, sessions, sharelinks, statuses,
   storage, track-audios, tracks). `instance.ts` `getInstance` wraps the public `GET /api/instance` (`{registration, hasUsers, emailEnabled, version,
 updateCheck}`) the sign-in card and the Instance section's About pane both read. `admin.ts` is every `/api/admin/*`
   call (whether the caller administers the instance at all is `lib/server-data.ts`'s `cachedIsInstanceAdmin`,
@@ -812,7 +812,7 @@ reads the result and never walks the cascade itself. The only registry logic it 
   store's `refresh`, which counts it with `changed()`.
 - **The hooks** — `useSetting(key)` → `SettingsValues[K]`, typed per key and re-rendering only when that key
   changes (`useSyncExternalStore` over the store); `useSettings()` → every value; `useSettingsDerived(server,
-  derive)` → `derive(values)` once the store has changed since mount, else the `server` value the first render
+derive)` → `derive(values)` once the store has changed since mount, else the `server` value the first render
   hands down, so a component built from settings matches the server's own render until a write moves it;
   `useSettingsWrite()` → `{ write(scope, id, patch), pending }`, `id` typed per scope (`user`: the caller's own
   id, `project`: a number, `instance`: `"instance"`), `patch`
@@ -826,7 +826,7 @@ reads the result and never walks the cascade itself. The only registry logic it 
   instance's public values over the registry defaults, and `write` rejects with a 401 `SettingsWriteError`, as
   it does outside any provider; `useSettingsRefresh()` reads nothing.
 - **The landing rule** — `lib/landing.ts`'s pure `landingHref({ landing, defaultProject, cookieProjectId,
-  projects })`, read by `(app)/page.tsx` from the `navigation.landing`/`navigation.defaultProject` settings
+projects })`, read by `(app)/page.tsx` from the `navigation.landing`/`navigation.defaultProject` settings
   (`packages/settings/src/groups/navigation.ts`). `last-project` opens the `currentProject` cookie's project,
   falling back to the one-project shortcut, then the list; `project` opens `defaultProject` or the list;
   `projects` and `notebook` always go to their own route. A cookie or a chosen project that no longer names
@@ -853,7 +853,7 @@ reads the result and never walks the cascade itself. The only registry logic it 
 - **The write rule** — `write-queue.ts`'s `SettingsWriteQueue`, one per root provider and shared by the nested
   one. A write applies at once and goes out after 300 ms without another write to the same scope and id
   (`SETTINGS_WRITE_DELAY_MS`, the player's slider debounce), every key written in the window in one `PATCH
-  /api/settings/:scope/:id`, the last value per key winning; a target's requests go one at a time. It PATCHes
+/api/settings/:scope/:id`, the last value per key winning; a target's requests go one at a time. It PATCHes
   through `browserApi` and never calls `written()`, a server action or `router.refresh()`, so it is not in
   `write-actions.test.ts`'s sweep. A value is predicted only when the write lands at the key's highest scope
   (`scopes[0]`) and is not `null`; anything else waits for the server. On success a store whose context the
@@ -1018,7 +1018,7 @@ the same public, signed-out-safe read `cachedInstance` already makes — there i
   and re-renders only when the list of keys passing `test` changes; the notice and the reset use it.
 - **Controls** — `controls/index.ts`'s `SETTING_CONTROLS`, one component per control kind (colour, custom, duration,
   list, multiselect, number, select, slider, text, toggle), each typed `SettingControlProps<V, C>` (`{ definition,
-  value, onChange, disabled, id }`; the row labels the control by `id`, `labelIdOf`/`describedByOf` in
+value, onChange, disabled, id }`; the row labels the control by `id`, `labelIdOf`/`describedByOf` in
   `controls/types.ts`); `SettingControl` renders a definition's. A control hands every change up and never saves or
   debounces itself. `select` with three options or fewer is a `SegmentedPill`, more a `Select`; number and duration
   share `NumericInput` (`fields/number`'s parse; half-typed text never reaches the setting). For a key whose schema
@@ -1048,11 +1048,10 @@ the same public, signed-out-safe read `cachedInstance` already makes — there i
   the window running out captures the letter alone; anything else captures at once; a bare modifier, Caps Lock or
   dead key is ignored. Blur drops a pending letter and calls `onCancel`. It shows the pending letter as
   `ComboCaps` and announces it in an `aria-live="polite"` region; it never validates conflicts. `keybinding-map`
-  (`KeybindingMapControl`) edits both keybinding settings, choosing the commands by `definition.key`
+  (`KeybindingMapControl`) edits `keybindings.client`, choosing the commands by `definition.key`
   (`keybinding-commands.ts`'s `keyCommandsFor`): `keybindings.client` lists `COMMANDS` minus
   `LINKED_CLIENT_COMMANDS`, keyless ones included, under the command's `group` in `groupByHeading`'s order (the
-  overlay's: global-scope groups first, then first-seen); `keybindings.catalogue` lists `CATALOGUE_KEYBINDINGS`
-  under its groups, a `FIXED_CATALOGUE_COMMANDS` one showing its keys with no actions. A row is the label, the
+  overlay's: global-scope groups first, then first-seen). A row is the label, the
   effective keys as `ComboCaps`, "Default: …" muted once overridden, and Change (an inline autofocused
   `KeyCapture`), Remove (writes `[]`) and Reset (only when overridden). A capture replaces the command's keys with
   the one combo: `checkBinding` runs first and a refusal shows as `refusalText` in a `role="alert"` under the row,
@@ -1112,7 +1111,7 @@ the same public, signed-out-safe read `cachedInstance` already makes — there i
   `Machines` head with the count: the user's "Not a bounce" files, once and first, as a `RejectionList` (the files
   are the user's and shared by every machine; each entry is the file name, else its fingerprint, with a Remove named
   "Remove <file> from Not a bounce"), then one `MachineRow` per machine as a hairline `Row` (`<li
-  id="machine-<id>">`, `lib/settings/href.ts`'s `machineAnchor`): the name, a facts line in `LABEL` caps (platform,
+id="machine-<id>">`, `lib/settings/href.ts`'s `machineAnchor`): the name, a facts line in `LABEL` caps (platform,
   `dit <version>`, `online` in full ink, else "Last seen <relative>"), "Open: <set>" when a set is open on it, its
   "Never here" folders as a `RejectionList`, and the repos it has pushed ("Pushed") as links to their pages
   (`hrefFromParsedRoute` with the repo's own project). Remove is a ghost button named "Remove <machine>" behind a
@@ -1121,7 +1120,7 @@ the same public, signed-out-safe read `cachedInstance` already makes — there i
   (`removeMachine`, `forgetRejection`: `DELETE /api/machines/:id` and `/api/machines/rejections/:id`, each
   invalidating `"machines"`) and `devices/use-machine-mutation.ts`, which toasts the outcome. A user with no
   machine sees "No machines yet. Install dit on the Mac you make music on." and the download link
-  (`DESKTOP_APP_DOWNLOAD_URL`, the file the site's `/dit/` page links to).
+  (`DIT_PAGE_URL`, the site's `/dit/` page; `DeepLinkFallbackDialog` links to `DESKTOP_APP_DOWNLOAD_URL`).
 - **Instance → Machines** (`panes/MachinesPane.tsx`, order 25, `/settings/instance/machines`) — every account's
   machines for the instance admin, read-only: `getAdminMachines(page, 20)` (`GET /api/admin/machines`) into
   `components/admin/AdminMachinesTable` (Owner, Machine, Platform, Version, Last seen; `PageLinks` over `total`).
@@ -1514,7 +1513,7 @@ scoping; row cursor `j`/`k`/`Enter`/`o`/`x`/`r`/`e`/`a`/`s`/`!`/`f`/`Escape` in 
 through the context's `scrollToIndex` ref first — wrapping happens only once every row is loaded, and `k` at
 the first row only wraps then too). `j`/`k` are countable (`5j`): a count above one never wraps, it clamps at
 the ends, and past the last loaded row it loads pages up to the target and lands on it, or on the last row when
-the rows run out first. `Home`/`End` put the cursor on the first row and the last *loaded* row, never loading;
+the rows run out first. `Home`/`End` put the cursor on the first row and the last _loaded_ row, never loading;
 `mod+a` selects every row (`table.toggleAllRowsSelected(true)`) when the table allows selection, and yields to
 the grid's own `mod+a` while a cell holds focus, the grid's scope being pushed after the table's. `r`, `e` and `a` act on the cursor row through the row menu's own
 handlers: `DataTable` calls `useRowActions` for the cursor row and hands `useRowCursor` the result as
@@ -2401,7 +2400,7 @@ over the `commands` group's `COMMAND_BAR_POSITIONS` and `COMMAND_BAR_MODES`; def
 `toastDurationMs` and `toastPosition` (sonner's own 4000 ms and bottom-right), `confirmDeletes` (a record over
 `DELETE_KINDS`: `project`, `collection`, `track`, `session`, `note`, `status`, `label`, `file` (a Files-table row),
 `attachment` (from an entity page's list), `audioVersion` (from a track's audio versions), `comment`, `savedView`,
-`shareLink`, `member`, `relationType`, `priorityLevel`, `field`, `fieldOption`, `device`, `account` — all `true`) and `undoWindowMs`. `confirmPolicy(kind, feedback)` is the one question every
+`shareLink`, `member`, `relationType`, `priorityLevel`, `field`, `fieldOption`, `machine`, `account` — all `true`) and `undoWindowMs`. `confirmPolicy(kind, feedback)` is the one question every
 delete asks (a kind the record does not name asks), put by `hooks/use-delete-gate.ts`'s `useDeleteGate(kind,
 remove)` → `{ request(target), pending, dialog }`: `request` opens the caller's `ConfirmDeleteDialog` (spread
 `dialog` onto it) or runs `remove` at once when the kind's confirm is off; `pending` keeps its target while the

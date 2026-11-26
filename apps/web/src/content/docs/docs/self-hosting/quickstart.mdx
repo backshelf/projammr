@@ -80,7 +80,13 @@ This gets your instance running on one machine and signs you in as its admin. Yo
 The API reports on itself at `https://<PUBLIC_HOST>/api/health`:
 
 ```json
-{ "status": "ok", "db": true, "media": { "ffmpeg": true }, "queue": 0 }
+{
+  "status": "ok",
+  "db": true,
+  "media": { "ffmpeg": true },
+  "queue": 0,
+  "version": "0.9.0"
+}
 ```
 
 `db` is whether the API can reach the database, `media.ffmpeg` whether it can find ffmpeg, and `status` is `ok` when

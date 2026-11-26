@@ -1,6 +1,6 @@
 ---
 title: API overview
-description: Script against your own Projammr instance through the same REST API the web app and the scanner use.
+description: Script against your own Projammr instance through the same REST API the web app and dit use.
 sidebar:
   order: 1
   label: Overview
@@ -8,7 +8,7 @@ sidebar:
 
 import { LinkCard } from "@astrojs/starlight/components";
 
-Everything Projammr does goes through one REST API: the web app, the scanner and the share page all use it, and
+Everything Projammr does goes through one REST API: the web app, [dit](/dit/) and the share page all use it, and
 nothing they do is hidden from it. If you can do it in the app, a script can do it too, with the same permissions
 as the account it signs in with.
 
@@ -19,16 +19,17 @@ you sign in to your own instance and send requests to it.
 
 Every route is served under `/api` on your instance. On an instance at `music.example.com`:
 
-| What                               | Where                                           |
-| ---------------------------------- | ----------------------------------------------- |
-| The API                            | `https://music.example.com/api/…`               |
-| Sign-in and sessions (Better Auth) | `https://music.example.com/api/auth/…`          |
-| Uploaded audio and images          | `https://music.example.com/media/…`             |
-| Health check                       | `https://music.example.com/api/health`          |
+| What                               | Where                                  |
+| ---------------------------------- | -------------------------------------- |
+| The API                            | `https://music.example.com/api/…`      |
+| Sign-in and sessions (Better Auth) | `https://music.example.com/api/auth/…` |
+| Uploaded audio and images          | `https://music.example.com/media/…`    |
+| Health check                       | `https://music.example.com/api/health` |
 
-`GET /api/health` needs no sign-in. It answers `200` with `{"status":"ok","db":true,"media":{"ffmpeg":true},"queue":0}`
-when the instance can serve requests, `200` with `"status":"degraded"` when it cannot find ffmpeg to decode audio,
-and `503` when its database is unreachable.
+`GET /api/health` needs no sign-in. It answers `200` with
+`{"status":"ok","db":true,"media":{"ffmpeg":true},"queue":0,"version":"0.9.0"}` (carrying the instance's running
+version) when the instance can serve requests, `200` with `"status":"degraded"` when it cannot find ffmpeg to decode
+audio, and `503` when its database is unreachable.
 
 ## The spec and the references
 
@@ -50,8 +51,9 @@ authority for the version you run.
 ## What the API covers
 
 Operations are grouped the way the product is: projects, and the collections, tracks and sessions inside them;
-audio versions, comments, statuses, labels, notes and lyrics; members, invites and share links; uploaded files and
-images; background jobs; your own account; and, for instance admins, the instance itself.
+repositories, saves, commits, diffs and registered machines; audio versions, comments, statuses, labels, notes and
+lyrics; members, invites and share links; uploaded files and images; background jobs; your own account; and, for
+instance admins, the instance itself. The server also exposes an OAuth-authenticated MCP endpoint at `/api/mcp`.
 
 Access follows project roles. A member with the viewer role can read everything in a project, an editor can change
 it, and some operations (members, invites, audio backfill) need an admin or the owner. The same rules apply to a

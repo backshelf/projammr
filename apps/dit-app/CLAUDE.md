@@ -68,9 +68,10 @@ with a key made in the test; the real key's private half is a release secret and
 
 ## Dev identifier
 
-`tauri dev` runs under `app.projammr.dit.dev` (`src-tauri/tauri.dev.conf.json`): its own data folder, no
-start-at-login, so it can run beside an installed build. It still claims `dit.sock` and the Keychain service `dit`,
-so quit an installed app before `bun run dev`.
+`tauri dev` runs under `app.projammr.dit.dev` (`src-tauri/tauri.dev.conf.json`): its own config folder
+(`config.toml`, `repos.toml`, `app-state.json` and its own `dit.sock`) and no start-at-login, so it can run beside
+an installed build without taking its socket or repo list. It still shares the Keychain service `dit`
+(`src-tauri/src/remote.rs` calls `dit_core::remote::system_tokens()`).
 
 ## Plugins and the OS in the dev loop
 

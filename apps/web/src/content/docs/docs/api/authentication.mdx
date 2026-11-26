@@ -13,8 +13,9 @@ exactly what that account can do in the app, and nothing more.
 
 ## Two kinds of session
 
-- **Bearer tokens** are for anything that is not a browser: a script, a cron job, the scanner. The token goes in an
-  `Authorization: Bearer …` header on every request.
+- **Bearer tokens** are for anything that is not a browser: a script, a cron job, [dit](/dit/). The token goes in an
+  `Authorization: Bearer …` header on every request. (dit signs in through the OAuth device flow under
+  `/api/auth/device/*` and also identifies its computer with an `X-Machine-Id` header.)
 - **The session cookie** is what the web app uses. Signing in to the app sets `better-auth.session_token`, an
   `HttpOnly` cookie, and the browser sends it with every request to your instance.
 
@@ -39,7 +40,11 @@ routes are listed in the auth endpoint reference, beside the Projammr API's.
    {
      "redirect": false,
      "token": "d99RY2kFNvo4v2Ot7kpoGupNfKz7uazi",
-     "user": { "id": "LGIJ4XCmTnDj0u3m2BKRiOIyQn0RACFJ", "name": "Your Name", "email": "you@example.com" }
+     "user": {
+       "id": "LGIJ4XCmTnDj0u3m2BKRiOIyQn0RACFJ",
+       "name": "Your Name",
+       "email": "you@example.com"
+     }
    }
    ```
 
@@ -77,8 +82,9 @@ curl -s -X POST https://music.example.com/api/auth/sign-out \
 ```
 
 <Aside type="caution">
-  A token is as good as the account's password for as long as it lasts. Keep it out of shell history and source
-  control, and sign it out when the script no longer needs it.
+  A token is as good as the account's password for as long as it lasts. Keep it
+  out of shell history and source control, and sign it out when the script no
+  longer needs it.
 </Aside>
 
 ### Which account to use

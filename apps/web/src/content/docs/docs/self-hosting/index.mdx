@@ -12,8 +12,8 @@ clone of the repository to an instance your devices trust, then cover backing it
 it.
 
 <Aside>
-  Hosted Projammr is coming soon, for when you would rather not run a server yourself. See
-  [pricing](/pricing/).
+  Hosted Projammr is coming soon, for when you would rather not run a server
+  yourself. See [pricing](/pricing/).
 </Aside>
 
 ## What you run
@@ -32,11 +32,11 @@ A fifth service, **backup**, never starts on its own. You run it when you want a
 uploaded media. [How the stack fits together](/docs/self-hosting/stack/) draws all five, with their routes, health
 checks and volumes.
 
-## What the scanner needs from it
+## What dit needs from it
 
 [dit](/dit/), the desktop app that reads your Ableton project folders, reaches your instance the way a browser does.
 It signs in at `https://<PUBLIC_HOST>` with an account on your instance, and sends its requests through the proxy's
-`/api` and `/media` routes, so nothing else has to be opened up for it. The machine it runs on trusts your
+`/api` and `/media` routes, so nothing else has to be opened up for it. The Mac it runs on trusts your
 instance's certificate like any other device: see [HTTPS and your devices](/docs/self-hosting/https/).
 
 ## Requirements
@@ -46,8 +46,9 @@ instance's certificate like any other device: see [HTTPS and your devices](/docs
 - **A 64-bit x86 or ARM machine.** The published images cover `amd64` and `arm64`.
 - **To build from source only:** BuildKit, which Compose uses by default (the `Dockerfile`'s cache mounts need it),
   and network access for the build. The `Dockerfile` pulls the base images, installs a Rust toolchain to compile the
-  audio analysis module to WebAssembly, and installs the JavaScript dependencies. It fetches `wasm-opt`, which
-  optimises that module, from binaryen's release on `amd64` and from Debian's package on `arm64`.
+  audio analysis (`@workspace/dsp`) and DAW parser (`@workspace/dit`) modules to WebAssembly, and installs the
+  JavaScript dependencies. It fetches `wasm-opt`, which optimises those modules, from binaryen's release on `amd64`
+  and from Debian's package on `arm64`.
 - **Ports 80 and 443 free on the host.** The proxy publishes both, and 443 over UDP as well. Served through
   Tailscale, the stack publishes no ports.
 - **Disk for your catalogue.** Uploaded audio and images live in the `static-data` volume and the database in

@@ -1,6 +1,6 @@
 # Reference: Shared packages (`packages/*`)
 
-_Updated 2026-10-20._
+_Updated 2026-11-27._
 
 ## packages/ui (`@workspace/ui`)
 
@@ -8,11 +8,15 @@ _Updated 2026-10-20._
 
 ```json
 "./globals.css": "./src/styles/globals.css",
+"./styles/*": "./src/styles/*",
 "./fonts.css": "./src/styles/fonts.css",
 "./fonts/*": "./src/styles/fonts/*",
 "./postcss.config": "./postcss.config.mjs",
+"./lib/keymap": "./src/lib/keymap/index.ts",
+"./lib/modal-scope": "./src/lib/modal-scope.tsx",
 "./lib/*": "./src/lib/*.ts",
 "./components/block-editor": "./src/components/block-editor/index.tsx",
+"./components/command-bar": "./src/components/command-bar/index.ts",
 "./components/*": "./src/components/*.tsx",
 "./hooks/*": "./src/hooks/*.ts"
 ```
@@ -26,15 +30,15 @@ a directory needs the same treatment. Imports: `@workspace/ui/components/button`
 
 ### deps worth knowing
 
-`radix-ui ^1.6.7` is the **unified single package** (`import { Switch as SwitchPrimitive } from "radix-ui"`)
-— not `@radix-ui/*` splits. Every overlay now sits on Base UI; `radix-ui` remains behind `switch.tsx`,
+`radix-ui ^1.8.1` is the **unified single package** (`import { Switch as SwitchPrimitive } from "radix-ui"`)
+— not `@radix-ui/*` splits. Every overlay sits on Base UI; `radix-ui` remains behind `switch.tsx`,
 `slider.tsx`, `avatar.tsx`, `separator.tsx`, `progress.tsx` and `label.tsx`, plus `Slot` (`asChild`
 polymorphism in `button.tsx`, `badge.tsx`, `card.tsx`, `item.tsx`, `sidebar.tsx`, `breadcrumb.tsx`); `checkbox.tsx` is a from-scratch control with no primitive underneath. `dialog.tsx`,
 `alert-dialog.tsx`, `sheet.tsx`, `popover.tsx`, `tooltip.tsx`,
 `dropdown-menu.tsx`, `context-menu.tsx` and `select.tsx` are on Base UI through its per-component entries
 (`import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"`, `/alert-dialog`, `/drawer`, `/popover`,
 `/tooltip`, `/menu` for both menu files, `/select`), animated through `lib/overlay-presence.ts`;
-`combobox.tsx` was already on Base UI and only needed the same `POP` render. `collapsible.tsx` and
+`combobox.tsx` uses the same `POP` render. `collapsible.tsx` and
 `tabs.tsx` are on Base UI too (`@base-ui/react/collapsible`, `/tabs`) but are not overlays, so they skip
 `lib/overlay-presence.ts`: `Collapsible` mirrors its own resolved open value into a small local context
 (`CollapsibleContent` needs it to drive Motion's height animation and can't read Base UI's internal Root
@@ -42,25 +46,25 @@ context), keeps the Panel permanently `keepMounted` at the Base UI level and ove
 — Base UI has no CSS transition to detect once Motion owns the animation, so its own unmount timing would
 otherwise race the exit — and uses `inert` instead for keeping a closed, persisted panel out of the tab
 order. `tabs.tsx`'s active-tab indicator is one shared `m.span layoutId="indicator"`, scoped per list by
-a `LayoutGroup` in `TabsList`, replacing the old per-trigger `::after` cross-fade.
+a `LayoutGroup` in `TabsList`.
 `dropdown-menu.tsx`/`context-menu.tsx`'s `Item`/`CheckboxItem`/`RadioItem` keep an `onSelect?: (event:
-Event) => void` prop (Radix's old signature): the wrapper's `onClick` hands it the click's `nativeEvent`
-(a real DOM `Event`, so a caller's `preventDefault()` still compiles) and calls Base UI's
-`event.preventBaseUIHandler()` when that fired, which is what keeps the menu open the way
+Event) => void` prop (Radix's signature): the wrapper's `onClick` hands it the click's `nativeEvent`
+(a real DOM `Event`, so a caller's `preventDefault()` compiles) and calls Base UI's
+`event.preventBaseUIHandler()` when that fired, which keeps the menu open the way
 `PlayerControls.tsx`'s repeat item depends on. Their `DropdownMenuLabel`/`ContextMenuLabel` stay plain
 styled `<div>`s rather than Base UI's `Menu.GroupLabel`, which throws outside a `Menu.Group` — two callers
-head a menu with a label and no group (`PlayerControls.tsx`, `toolbar-menus.tsx`). `shadcn ^4.16.1` is a
+head a menu with a label and no group (`PlayerControls.tsx`, `toolbar-menus.tsx`). `shadcn ^4.23.0` is a
 **runtime dep** (globals.css does `@import "shadcn/tailwind.css"`). `@tabler/icons-react` is the icon lib
 (`Icon*` names; `components.json` `"iconLibrary": "tabler"`). `@base-ui/react`,
-`@blocknote/{core,react,shadcn} ^0.54.0` (block-editor), `prosemirror-{model,state,view}` (direct deps —
+`@blocknote/{core,react,shadcn} ^0.57.0` (block-editor), `prosemirror-{model,state,view}` (direct deps —
 BlockNote does not re-export them and they do not resolve transitively under pnpm),
 `@tanstack/react-table ^9` (table-config.ts), `@workspace/api` (forms, heatmap types), `cmdk`
 (command.tsx), `react-hook-form` + `@hookform/resolvers` + `zod` (forms/), `use-haptic` (haptics.tsx —
 the only way to reach the vibration motor from iOS Safari), `cva`, `clsx`, `tailwind-merge`,
-`motion ^13.3` (`lib/motion.ts`, `motion-provider.tsx`; both bundlers that consume this
+`motion ^14.11.1` (`lib/motion.ts`, `motion-provider.tsx`; both bundlers that consume this
 package as source — Turbopack and Vite — ship it), `next-themes` (sonner + theme-provider), `recharts`
 (chart.tsx only), `sigma ^3.0.3` + `graphology ^0.26` + `@react-sigma/core ^5.0.6` (`constellation/` only;
-`graphology-types` is a dev dependency for their types), `react 19.2.4`.
+`graphology-types` is a dev dependency for their types), `react 19.3.1`.
 
 Motion that a server-rendered primitive can carry lives in `globals.css` as `@utility` rules on the
 `--dur-*` scale and `--ease-arrive`: `motion-ink` (colour, fill, stroke, shadow; `--dur-instant`),
@@ -73,8 +77,7 @@ sweeping a loading surface; the `skeleton.tsx` and `TableSkeleton` bars — shad
 text and hides a bar). The `design-tokens` ESLint fragment flags `ease-[…]`, `duration-[…]`, numeric
 durations, Tailwind's named curves, `transition-all` and `motion-reduce:` so a class string cannot carry
 its own curve; the client, the dit app and this package all opt in.
-devDeps pin
-**typescript ^5** (rest of repo is ^7); `@types/node ^20` (rest of repo trends ^26). Test devDeps:
+Test devDeps:
 `@testing-library/{react,dom}`, `@types/bun`, `@workspace/test` — the preload itself (`dom.ts`) lives in
 `@workspace/test`, which declares `@happy-dom/global-registrator` and `motion` as dependencies.
 
@@ -82,7 +85,7 @@ devDeps pin
 
 `src/lib/utils.ts` calls `extendTailwindMerge` with a custom `font-size` class group covering the type
 scale (`text-micro…text-display`). Without that registration tailwind-merge treats any unrecognised
-`text-*` as a *colour* utility, so `text-small text-ink` looks like two colours to it and drops the size —
+`text-*` as a _colour_ utility, so `text-small text-ink` looks like two colours to it and drops the size —
 an element silently falls back to its inherited font size. Any new type-scale step must be added to this
 list or the same bug reappears.
 
@@ -91,7 +94,7 @@ list or the same bug reappears.
 shadcn set (mostly stock, `data-slot="..."`, CVA variants, `cn()`): alert-dialog, avatar,
 badge, breadcrumb, button, card, chart, checkbox (native input tinted `--art`; the table select column and
 checkbox cells use it), collapsible, combobox, command, context-menu, dialog,
-dropdown-menu, empty, field, input-group, input, item, label, popover, progress (zero importers), select,
+dropdown-menu, empty, field, input-group, input, item, label, popover, progress (used by `apps/dit-app` render cards and backfill window), select,
 separator, sheet, sidebar, skeleton, slider, sonner, spinner, switch, table, tabs
 (`tabsListVariants` default|line), textarea, tooltip.
 
@@ -151,18 +154,18 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
     `--h` and `--i`), `playedBars(fraction, count)` (the `--played` string motion.css lights bars by),
     `WaveStack({ compareBars, size, children })` (an A/B series behind at `opacity-60`), and
     `WaveMarks({ marks, duration, onMarkerClick? })` (`CommentMark = { id, positionMs, author?,
-    excerpt?, resolved?, resolvedBy? }` pins with a drop-line and a `FloatingNote` on hover/focus; each pin is
+excerpt?, resolved?, resolvedBy? }` pins with a drop-line and a `FloatingNote` on hover/focus; each pin is
     one `<button>` on the `MARK` class constant holding an `<i>` dot and a `<span>` drop-line, so a pin has no
     per-mark style. A `resolved` mark sets `data-resolved` on its button: the dot goes `--ink-faint`, the
     drop-line retracts to `scale-y-0` from its top edge on `--ease-leave` (`transform`, never `height`), the
     `aria-label` reads `Resolved comment …`, and the note ends `Resolved · <resolvedBy>` (or `Resolved`); it
     still seeks. Each child carries one transition list: the dot `motion-press` (colour survives reduced
     motion), the drop-line `motion-move` (snaps under it)). `Waveform({ peaks,
-    comparePeaks?, scale?, progress?, marks?, duration?, count? = MAX_BARS, size?, label, className? })`
+comparePeaks?, scale?, progress?, marks?, duration?, count? = MAX_BARS, size?, label, className? })`
     composes them into a `role="img"` wave for a static page; the client's `TrackWaveform` composes the
     same parts around its seek slider/play button, and `lab/Bounce` draws its print with `WaveBars`.
   - **`loudness/`** — `ruler-scale.tsx` `RulerScale({ config, marks, band?, pointer?, label, live?, tone?,
-    className? })` (the general meter: stops, dotted reference, one `--art` tick per mark, band, ink caret;
+className? })` (the general meter: stops, dotted reference, one `--art` tick per mark, band, ink caret;
     `live` is a slot drawn under the ticks for the client's `LiveLoudnessScale`), `loudness-scale.tsx`
     `LoudnessScale` (the −28…0 LUFS preset; `loudnessRuler(reference)` and `LOUDNESS_FLOOR`/`LOUDNESS_CEILING`,
     `LoudnessMark = { lufs, label }`; the required `reference` is where the dotted line sits — the client passes
@@ -172,9 +175,9 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
     `<abbr>` with a tooltip, or a popover on a coarse pointer; copy in `loudness-unit-copy.ts`).
   - **`session-structure/`** — the save diff and its parts, all server-renderable except the controls:
     `save-diff-card.tsx` `SaveDiffCard({ as?, diff, saves, daw?, when?, actions?, collapseUnchanged?, asOf?,
-    format?, timeZone?, className?, children? })` (glass; `children` heads it, the site's `ProofCaption` as a
+format?, timeZone?, className?, children? })` (glass; `children` heads it, the site's `ProofCaption` as a
     `figure`; `when` replaces the save times, the history page's pickers), `savePairLabel(saves, { asOf,
-    format })`, `stampOf(save)` and the `SaveStamp` type;
+format })`, `stampOf(save)` and the `SaveStamp` type;
     `set-skyline.tsx` `SetSkyline({ structure })` (`@container/skyline`, `data-diff-bar` per bar);
     `diff-readouts.tsx` `DiffReadouts({ readouts, format? })` (one gauge per `Readout.gauge`: `ruler`, `meters`,
     `transition`); `structure-outline.tsx` `StructureOutline({ diff, collapseUnchanged?, colors? })`
@@ -192,13 +195,13 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
     nothing tracked changed" by default): `SaveTimeline`'s entries and the log's save rows both draw it,
     passing `source`; the dit app's panel leaves `source` out (every row is its own) and words `empty` itself.
     `commit-log.tsx` `CommitLog({ entries, uncommitted?, format?, asOf?, marked?, renderCommitActions,
-    renderSaveActions })` and `SaveLog({ saves, format?, marked?, renderSaveActions })`: a dit set's commit log as
+renderSaveActions })` and `SaveLog({ saves, format?, marked?, renderSaveActions })`: a dit set's commit log as
     rows (message, author, machine, time since, time in the set, chips, a native `<details>` fold of the saves a commit covers, the
     checkpoints folded under it, the actions the caller hands over), `commitRowId`/`saveRowId` the ids a row
     carries; its model is `lib/commit-log.ts` (`buildCommits`, `knownSaves`, `foldLog`, `foldLabel`, `foldedTimeInSet` (a named row's own time plus its checkpoints', null when none is known),
     `uncommittedSaves`, `compareHref`/`clearCompareHref` (the address as shown, so `commits` and `checkpoints`
     stay), `ditCheckoutCommand`). `commit-ruler.tsx` `CommitRuler({ commits, saves, marked?, format?,
-    asOf, onReveal, onCompare, onClear })` (client, router-free) draws the session's history on a time axis, one lane
+asOf, onReveal, onCompare, onClear })` (client, router-free) draws the session's history on a time axis, one lane
     per machine (one on a phone); its model is `lib/commit-ruler.ts` (`rulerStates`, `lanesOf`, `rulerSpan`,
     `brushed`, `compareOf`, `compareOfBrush`, `step`) over `lib/ruler-scale.ts`'s `timeRuler`.
     `link` is the component each entry links through (`TimelineLink`, an alias of `LinkComponent` from
@@ -209,7 +212,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
     `@workspace/session-diff`.
 - **`block-editor/`** — see the dedicated section below.
 - **`forms/`** — `form-controller.tsx` (`FormController<T>`, `FormControllerType = "title" | "input" |
-  "select" | "blocknote"`, a `trailing` prop that switches the default case to an
+"select" | "blocknote"`, a `trailing` prop that switches the default case to an
   `InputGroup` for an inline remove/action button), `auth-card.tsx` (`AuthCard` — tabs
   composed from children: `AuthCard.Guest`, `AuthCard.SignIn` (`recovery?`, `defaultEmail?`, `lockEmail?`) and
   `AuthCard.Register` (`defaultEmail?`, `lockEmail?`) are the only legal children, recognised by component
@@ -245,12 +248,12 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   until it matches exactly — `DeleteProjectButton` passes the project's name so deleting a whole
   project needs it typed back.
 - **`command-bar/`** (`@workspace/ui/components/command-bar`) — `CommandBar({ state, commands, position:
-  "bottom" | "top", mode: "always" | "pending", prompt?, children?, className? })`: the 40px sunk key strip
+"bottom" | "top", mode: "always" | "pending", prompt?, children?, className? })`: the 40px sunk key strip
   (`DESIGN.md` › Catalogue › Key strip). At rest it shows `commands` (`CommandBarCommand` `{ id, keys, label }`,
   each command's keys side by side in one bare `Kbd`, commands with no keys left out); while `state.pending`
   or `state.count` is set it shows what has been typed (`3g`) and, with a chord pending, `state.candidates`;
   `children` trail at the bar's end in both. `prompt` (`CommandBarPrompt` `{ open, value, onChange,
-  onSubmit?, suggestions, onClose, lead?, placeholder? }`, controlled) replaces the bar's content with the
+onSubmit?, suggestions, onClose, lead?, placeholder? }`, controlled) replaces the bar's content with the
   typed line while `open`: suggestions (`CommandBarSuggestion` `{ id, label, hint?, run }`) in an overlay
   surface away from the bar's edge, ↑↓ or Ctrl-N/P move, Tab completes, Enter runs the active suggestion or
   `onSubmit(value)` (and waits when there is neither), Escape or blur calls `onClose`; the field is an ARIA
@@ -272,7 +275,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   importing `next-themes` itself. `useThemeHotkey(toggle)` is the `d` listener (a bare
   `d` outside a text field, no modifier, no repeat), which the client's `AppThemeProvider` binds signed out.
 - **`motion-provider.tsx`** — `MotionProvider`: `LazyMotion features={domMax} strict` around `MotionConfig
-  transition={SPRING.control}`, whose `reducedMotion` follows `data-motion` on `<html>` live (`system` →
+transition={SPRING.control}`, whose `reducedMotion` follows `data-motion` on `<html>` live (`system` →
   `"user"`, `reduce` → `"always"`, `full` → `"never"`), mounted once inside `ThemeProvider` in both the
   client's root layout and the dit app's `main.tsx`. `strict` means every animated element goes through the
   `m` component from `lib/motion.ts`, never a bare `motion` import. `lib/motion.ts` re-exports `m` (from
@@ -281,7 +284,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   no literal duration or spring at a call site. Its `useReducedMotion()` (same signature and SSR default as
   Motion's) is the OS preference as `data-motion` overrides it, so every reader follows the one switch.
 - **`motion/arrival.tsx`** — the page arrival system (`"use client"`). `ArrivalRoot({ kind, as?: "div" |
-  "header", ref?, className?, style? })` is an `m.*` element holding `initial="hidden" animate="shown"` for
+"header", ref?, className?, style? })` is an `m.*` element holding `initial="hidden" animate="shown"` for
   its whole subtree, so each part picks its state up through Motion's variant context instead of a prop
   threaded through the server components between them; it carries `data-arrival="load"|"nav"` until its own
   and every propagated child animation has completed, which is what scopes the status pie sweep in
@@ -387,7 +390,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   `rows` prop (a vertical pair of full-width fields, for values too long for a column at rail width —
   created/updated timestamps), `RailLabel`), `rail-more.tsx`
   (`RailMore({children, more})` — folds `more`, the rail's tail, behind a "More details" toggle below `md:`, dissolves into
-  `md:contents` above it; uses the `hidden` *class*, not the `hidden` *attribute*, because Tailwind
+  `md:contents` above it; uses the `hidden` _class_, not the `hidden` _attribute_, because Tailwind
   preflight's `[hidden]{display:none!important}` beats any utility), `rows.tsx` (`Rows`/`Row`/`RowMain`/
   `RowTitle`/`RowMeta`/`RowNum` — polymorphic `as` prop, hairline-divided list rows), `collapsible-section.tsx`
   (`CollapsibleSection`, `keepMounted` prop for content holding state a remount would lose, `prominence`; the
@@ -402,7 +405,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   `compareDocumentPosition`, so a section resolving late inside Suspense lands in page order.
   `AddLine({ label })` renders a `role="group"` labelled by an `<h2>` section title, then each entry's
   `SectionAdd` (calls `reveal`) and `addControl` node, middot-separated, each inside `AnimatePresence
-  initial={false}` so a dropped entry leaves with `OPTICAL.leaving`; nothing when the store is empty
+initial={false}` so a dropped entry leaves with `OPTICAL.leaving`; nothing when the store is empty
   (always on the server render). `reveal` renders the children in place inside `SectionRevealedContext`, in
   an `m.div data-slot="revealed-section"` animating `height: 0 → "auto"` and opacity on `SPRING.surface`/
   `FADE.move` with `overflow: hidden` released once the animation completes, and moves focus in: to the
@@ -443,7 +446,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   accepting `asChild`.
 - `lib/overlay-presence.ts` (`"use client"`) — the presence plumbing every Base UI overlay wrapper uses for
   Motion enter/exit. `useOverlayOpen<Details, Actions>({open, defaultOpen, onOpenChange,
-  onOpenChangeComplete})` returns `rootProps` (spread on the Base UI `Root`: mirrored open, wrapped
+onOpenChangeComplete})` returns `rootProps` (spread on the Base UI `Root`: mirrored open, wrapped
   callbacks, `actionsRef`) and `presence` (provide through `OverlayPresenceContext`; content reads it
   with `useOverlayPresence(name)`: `open`, `reason()` — last change's Base UI reason, `actionsRef`,
   `onExitComplete`). Content renders `AnimatePresence onExitComplete={presence.onExitComplete}` →
@@ -474,17 +477,17 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   `FieldLegend variant="legend"|"label"`. `FieldError errors?: Array<{message?}|undefined>` dedupes +
   renders a list. Form convention (`forms/form-controller.tsx`): react-hook-form `<Controller>` renders
   `<Field data-invalid={fieldState.invalid}> <FieldLabel htmlFor/> [FieldDescription] <Control/>
-  <FieldError errors={[fieldState.error]}/> </Field>`.
+<FieldError errors={[fieldState.error]}/> </Field>`.
 - **InputGroup** (`"use client"`): h-7 bordered composite; focus ring delegated to
   `[data-slot=input-group-control]` child. `InputGroupAddon align=inline-start|inline-end|block-start|
-  block-end` (click focuses input). `InputGroupButton` ghost `Button` sizes xs|sm|icon-xs|icon-sm.
+block-end` (click focuses input). `InputGroupButton` ghost `Button` sizes xs|sm|icon-xs|icon-sm.
   `InputGroupInput`/`InputGroupTextarea`. Composer convention: `InputGroup > InputGroupTextarea +
-  InputGroupAddon align="block-end" > InputGroupButton`; `FormController`'s `trailing` prop uses
+InputGroupAddon align="block-end" > InputGroupButton`; `FormController`'s `trailing` prop uses
   `InputGroup > InputGroupInput + trailing`.
 - **Sidebar** (`"use client"`, shadcn v2): cookie `sidebar_state` (7d, written but nothing reads it),
   widths 16rem/18rem mobile/3rem icon, shortcut **Ctrl/Cmd+B**. `useSidebar()` context.
   `Sidebar side=left|right, variant=sidebar|floating|inset, collapsible=offcanvas|icon|none,
-  mobile="sheet"|"hidden"` (default `"sheet"` swaps to a `Sheet` below the mobile breakpoint; `"hidden"`
+mobile="sheet"|"hidden"` (default `"sheet"` swaps to a `Sheet` below the mobile breakpoint; `"hidden"`
   drops the phone sidebar entirely — the client's `ResponsiveSidebar` passes `"hidden"`).
   `SidebarMenuButton asChild isActive tooltip=...` (auto-tooltip when collapsed), sizes default h-8/sm
   h-7/lg h-12 (lg is the only ≥44px control in the sidebar). `SidebarInset`/`SidebarRail` are unused.
@@ -499,7 +502,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   Two properties move the panel, one owner each: `transform` is the swipe's (Base UI writes it inline while
   dragging and sets `--drawer-swipe-movement-x/y` on the Popup; those variables are registered
   `inherits: false`, so only the Popup can read them), `translate` is Motion's (`sheetVariants(side,
-  entrance, reducedMotion)`: slide on `SPRING.drawer`, leave on `LEAVE.settle`, a swipe-dismissed sheet only
+entrance, reducedMotion)`: slide on `SPRING.drawer`, leave on `LEAVE.settle`, a swipe-dismissed sheet only
   fades). `SheetContent` props beyond Base UI's Popup: `side`, `showCloseButton`, `overlayClassName`,
   `onClosed` (once, after the exit, the popup's removal and focus return — a sentinel inside the popup
   schedules it a frame after the commit that removes it; works for event-driven and controlled closes),
@@ -525,7 +528,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   `LoginSubmit`, `RegisterSubmit` — the seam that lets a caller route credential exchange
   through something other than a Better Auth client in the page.
 - `lib/sign-in-state.ts` — `signInState({hasUsers, registration})` → `{kind: "first-account" | "closed" | "open",
-  hideRegister, defaultTab}`, the one rule the client's sign-in card and a connect screen share
+hideRegister, defaultTab}`, the one rule the client's sign-in card and a connect screen share
   (`hasUsers: false` wins over `registration`); each app words the kinds itself.
 - `lib/keymap/` (`@workspace/ui/lib/keymap`) — the keys grammar and the keymap engine the dit app's
   panel runs on.
@@ -549,7 +552,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
     `KeymapOverrides` (id → combos; `[]` unbinds), `KeymapEvent`, `KeymapOptions`, `ScopeOptions`, `Keymap`.
   - `keymap.ts` — `createKeymap({ bindings, overrides?, onRun, chordWindowMs?, repeat? })` →
     `{ dispatch, subscribe, state, pushScope(name, { modal? }) → release, popScope, setOverrides,
-    setBindings, bindings(), reset }`; `CHORD_WINDOW_MS` (1200, the default window for a chord's second
+setBindings, bindings(), reset }`; `CHORD_WINDOW_MS` (1200, the default window for a chord's second
     key and for each digit of a count), `GLOBAL_SCOPE`. Listener-free: the caller owns the `keydown`
     listener. Resolution keeps the old registry's rules (innermost active scope wins, last declared among
     equals, `when` false = unbound, typing targets only reach `allowInInput`, space/Enter left to a focused
@@ -573,7 +576,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
 - `lib/modal-scope.tsx` (`@workspace/ui/lib/modal-scope`, its own export since it is `.tsx`) — the seam a
   dialog primitive pushes the client's modal command scope through, since this package cannot import the
   client's registry. `ModalScopeProvider({push, children})` holds a pusher `(surface: {confirm?: () => void})
-  => release`; the client's `CommandProvider` renders it with a pusher onto its own `DIALOG_SCOPE`.
+=> release`; the client's `CommandProvider` renders it with a pusher onto its own `DIALOG_SCOPE`.
   `useModalScope(open, surface?)` pushes while `open` and releases on close or unmount, reading `surface`
   through a `useLatestRef` so a new `confirm` closure every render does not re-push; with no provider above
   it (signed-out pages, the dit app, `apps/web`) it does nothing. The push is a layout effect, so it lands
@@ -591,7 +594,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   tempo is written, and the only production file in the client and this package that constructs an `Intl`
   formatter. `FormatPrefs` (`locale`, `clock` `12h|24h`, `relativeWording` `short|long`, `weekStart` `0|1|6`,
   `timeZone` IANA or `"auto"`, `tempo` (`TempoPrefs` from `@workspace/session-diff/format`: `{rounding
-  raw|integer|one-decimal, suffix}`), `keyNotation`,
+raw|integer|one-decimal, suffix}`), `keyNotation`,
   `playerTime`) and `DEFAULT_FORMAT_PREFS` (today's output: the package's `DIFF_FORMAT_DEFAULTS` of `en-GB`, raw
   tempo with no suffix and sharps, then 24-hour, long wording, Sunday, auto, elapsed and remaining).
   `formattersFor(prefs, resolvedZone)` → `Formatters`,
@@ -664,7 +667,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   `[source, target, weight, thickness]` by node index: weight 0–1 by the item's rarity, thickness 1–3 px, a
   tuple since a library's web carries thousands), `ConstellationData` `{ nodes, edges, key }`; `adjacencyOf`,
   `matchesOf(nodes, query)` (label or meta, case-insensitive, blank matches none), `litOf(adjacency, held,
-  matches)` → `Lit` `{ held, nodes, edges }` or `null` (a held node lights its neighbourhood, else the matches
+matches)` → `Lit` `{ held, nodes, edges }` or `null` (a held node lights its neighbourhood, else the matches
   light alone, else nothing), and `fitOf(points, minRatio)` (the camera state framing points in sigma's framed
   coordinates, the box at three quarters of the view, never past the whole drawing).
 - `lib/day-label.ts` — `lastSaveLabel(since)`. A save's `Today`/`Yesterday` is the formatter set's `dayLabel`.
@@ -673,7 +676,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   `useSyncExternalStore`, server snapshot `false`. `useReducedMotion` (motion a stylesheet can't reach, e.g.
   a canvas loop) is in `lib/motion.ts`.
 - `hooks/use-file-drop.ts` — `useFileDrop({onFiles, disabled})` → `{dragging, open, rootProps,
-  inputProps}`; drives `DropZone`.
+inputProps}`; drives `DropZone`.
 - `hooks/use-latest-ref.ts` — `useLatestRef<T>(value)`: a ref that always holds the most recently
   committed value, for callbacks (debounced saves, unmount cleanup) that outlive the render that made
   them.
@@ -760,7 +763,7 @@ numbers.
 - `apps/client`: same style; css path points to the ui package's globals.css; aliases
   `ui→@workspace/ui/components`, `components→@/components`; **external registries `@canvas-ui`
   (canvasui.dev), `@blocks-so` (blocks.so)**. Add components: `bunx shadcn@latest add <name> -c
-  apps/client` → files land in `packages/ui/src/components`.
+apps/client` → files land in `packages/ui/src/components`.
 - radix-mira = small dense components (buttons h-5→h-8, text-xs/relaxed everywhere).
 
 ### `block-editor/` (BlockNote wrapper)
@@ -781,7 +784,7 @@ reconciliation.
   paragraph; `isBlankDocument(blocks)`; `isBlankStoredDocument(raw)`. `lib/reveal-focus.ts` — `REVEAL_FOCUS`,
   `revealFocusTarget(root)`, `hasRevealFocusRegion(root)`.
 - `use-document.ts` — `useBlockDocument
-  (value, onChange, normalise?)`: parses once in a `useState` initialiser (a mounted editor never re-reads
+(value, onChange, normalise?)`: parses once in a `useState` initialiser (a mounted editor never re-reads
   `initialContent`), reads `onChange` through `useLatestRef` so `useEditorChange` subscribes once, and
   runs an optional `normalise(blocks)` pass in the same one-off parse.
 - `text-blocks.ts` — `textBlockSpecs(paragraph?)`: the seven-block text-only set (paragraph, heading,
@@ -796,7 +799,7 @@ reconciliation.
 - `plain.tsx` — `PlainEditor` (default) + `plainSchema` (named export, for tests): `textBlockSpecs()`
   with the stock paragraph, no input rule, no suggestion menus, no analysis plugin.
 - `lyrics/schema.ts` — `lyricsSchema = BlockNoteSchema.create({ blockSpecs: textBlockSpecs
-  (createLyricParagraphSpec()) })`; `LyricsEditor` type alias.
+(createLyricParagraphSpec()) })`; `LyricsEditor` type alias.
 - `lyrics/paragraph-block.ts` — `createLyricParagraphSpec`: BlockNote's paragraph redeclared with
   `meta.hardBreakShortcut: "none"` (`createParagraphBlockSpec` takes no options, so redeclaring is the
   only way to free Shift+Enter into a plain block split — one visual line, one block, which is the unit
@@ -832,7 +835,7 @@ reconciliation.
 - Tests co-located as `*.test.ts(x)`: `analysis.test.ts`, `normalise.test.ts`, `schema.test.ts`,
   `suggestions.test.ts` (block-editor level: `schema.test.ts`); `lib/block-document.test.ts`.
 - BlockNote facts worth knowing: `createExtension({key, keyboardShortcuts, inputRules,
-  prosemirrorPlugins, tiptapExtensions})` — the docs page names the plugin field `plugins`; the source
+prosemirrorPlugins, tiptapExtensions})` — the docs page names the plugin field `plugins`; the source
   says `prosemirrorPlugins`, and a `plugins` key is silently ignored. `editor.schema` is `readonly`, fixed
   at `BlockNoteEditor.create`. Placeholder keys: `default` shows on whichever empty line has the caret,
   `emptyDocument` on a lone empty block — both need setting for a lone empty line to show one string.
@@ -863,7 +866,8 @@ exports map:
   live server needed. `enums.ts` mirrors the server's pgEnum source arrays and other schema-owned value lists
   (`MEMBER_ROLES`/`INSTANCE_ROLES`/`REGISTRATION_MODES`/`ENTITY_KINDS`/
   `COMMENT_TARGETS`/`LABEL_TARGETS`/`SAVED_VIEW_KINDS`/`ACTIVITY_ACTIONS`/`JOB_KINDS`/`JOB_STATUSES`/
-  `AUDIO_EXTENSIONS`/`MEASURE_NAMES`/`DAW_CAPABILITIES`, each with a derived union type; the client's `lib/daw.ts`
+  `AUDIO_EXTENSIONS`/`MEASURE_NAMES`/`DAW_CAPABILITIES`/`SAMPLE_KINDS`/`SAMPLE_STATUSES`, plus the generated
+  `COLLECTION_FILTER_PARAMS`/`TRACK_FILTER_PARAMS`/`SESSION_FILTER_PARAMS`, each with a derived union type; the client's `lib/daw.ts`
   and `@workspace/ui`'s facets take `DawCapability` from here). `enums.test.ts` is the regression guard: it re-imports the server's raw
   arrays and asserts equality, so a changed pgEnum with a forgotten regen fails CI instead of shipping
   stale client options.
@@ -880,12 +884,12 @@ exports map:
   — around 95 type aliases path-coupled to operation ids). Re-exports `ActionError` from `action-result.ts`
   and `EntityKind`/`TableEntityKind` from `entity.ts`.
 - **`action-result.ts`** — `ActionError = {error: string, status?: number, code?: string, details?:
-  Record<string, unknown>}` (`status` is present exactly when an HTTP response produced the error;
+Record<string, unknown>}` (`status` is present exactly when an HTTP response produced the error;
   `code`/`details` come from the API's error envelope when it carried them), `isActionError`, `isNotFound
-  (error)` (true for `status` 404 or 403 — a missing row and a forbidden one read the same to the caller),
+(error)` (true for `status` 404 or 403 — a missing row and a forbidden one read the same to the caller),
   `toActionResult<T>(result, fallback, options?)` (openapi-fetch result → payload or `ActionError`;
   `allowEmpty` treats a `204`/empty body as success), `toActionOutcome<T>(result, fallback, success,
-  options?)` (for calls whose payload the caller ignores — reports a caller-given value on success instead
+options?)` (for calls whose payload the caller ignores — reports a caller-given value on success instead
   of the body). Both are **async**: message precedence is per-call `messages[status]` → the server's
   `{error}` envelope → shared `DEFAULT_MESSAGES` (401/403/404) → `response.statusText` → the caller's
   fallback; `status`/`code`/`details` are reported regardless of which message won. openapi-fetch already
@@ -898,7 +902,7 @@ exports map:
   `UND_ERR_*`, `EPIPE`/`ECONNRESET`/`ETIMEDOUT`/etc., and on `502/503/504/408` — with a fast first retry
   for a stale keep-alive socket), `defaultFetch` (a pre-built instance), `ApiClient` type,
   **`createApiClient`** — one factory with two call shapes: `createApiClient({baseUrl, auth?, headers?,
-  credentials?, retry?})` and a positional overload `createApiClient(baseUrl, headers?)`.
+credentials?, retry?})` and a positional overload `createApiClient(baseUrl, headers?)`.
   `auth: {header: "cookie"|"authorization", value: () => Promise<string|null>}` is applied as an
   openapi-fetch middleware, resolved per request (not once at construction) since a cookie belongs to the
   request being served and a browser token may need a lazy fetch on first use.
@@ -907,7 +911,7 @@ exports map:
   possible cross-site form post. The optional third getter supplies the incoming `X-Forwarded-For`, sent on
   unchanged so the API's rate limits key on the caller rather than on the web container; no value, no header), `createBrowserApiClient()` (relative `baseUrl: ""` + `credentials: "include"` — same-origin so
   the HttpOnly session cookie rides it; the web app's `proxy.ts` forwards `/api/*` through), `uploadMultipart<T>
-  (path, file, fields, onProgress?): Promise<T | ActionError>` (raw `XMLHttpRequest`, not `fetch`, because
+(path, file, fields, onProgress?): Promise<T | ActionError>` (raw `XMLHttpRequest`, not `fetch`, because
   only XHR reports upload progress; goes straight to the API rather than through a server action, which
   caps bodies at Next's 1MB limit; a non-2xx response carries `status`, plus `code`/`details` when
   `responseText` parses as an envelope with a string `error`).
@@ -919,7 +923,7 @@ exports map:
   flow), `createAuthClientFor(baseURL, options?)`. Base URL
   resolution: `window` present → `undefined` (same-origin, `/api/auth/*` rewritten, so the session cookie
   is first-party and `SameSite=Lax` works) → else `process.env.API_URL` → Vite's `import.meta.env
-  .VITE_API_URL` → `FALLBACK_API_URL`. No `dotenv` import (it broke browser bundles with
+.VITE_API_URL` → `FALLBACK_API_URL`. No `dotenv` import (it broke browser bundles with
   "process is not defined"). `packages/api/tsconfig.json` overrides the library preset's
   `declaration`/`declarationMap` to `false`: `@better-auth/oauth-provider`'s client plugin infers a return
   type that reaches into that package's private build chunks, which `tsc` can only print as a portable
@@ -938,7 +942,7 @@ exports map:
 - API client: `import { createApiClient } from "@workspace/api/lib/api-client"`, or the server/browser
   wrappers from `@workspace/api/lib/authed-client"`
 - Auth: `import { authClient } from "@workspace/api/lib/auth-client"`
-- Enums: `import { DAW_OPTIONS, AUDIO_EXTENSIONS } from "@workspace/api/lib/enums"`
+- Enums: `import { DAW_CAPABILITIES, AUDIO_EXTENSIONS } from "@workspace/api/lib/enums"`
 
 ## packages/dsp (`@workspace/dsp`)
 
@@ -1148,13 +1152,13 @@ is a bitset — bit 0 peaks, bit 1 loudness, bit 2 spectrum, bit 3 live readouts
   `SPECTRUM_LAYOUT` stays the single source, carried in through
   `analysis_spectrum_layout(h, bands, low_hz, high_hz, fft_size, tilt_db_per_octave, floor_db)`, which must run
   before the session's first `push` (and only once — the layout cannot change mid-stream). The same struct
-  serves both the live per-hop `take_latest()` and the finalised whole-signal `average()` (via `finish()`), one
-  band table shared by both.
-- **`live.rs`** — flag bit 3's `LiveReadouts` owns its *own* `ebur128::EbuR128` in `Mode::S` (independent of the
+  serves both the live per-hop `take_latest()` and the whole-signal `average()` (recomputed fresh on every
+  `spectrum_ptr`/`spectrum_len` read, needing no `finish()`), one band table shared by both.
+- **`live.rs`** — flag bit 3's `LiveReadouts` owns its _own_ `ebur128::EbuR128` in `Mode::S` (independent of the
   loudness flag, so bit 3 alone still works), closing a 10 ms hop at a time. `ebur128`'s momentary/short-term
   windows are fixed-size ring buffers zero-filled at construction, so a query before the window has actually
   filled reads quieter than it should; the fix (`loudness::primed_lufs`, shared with the offline loudness curve) is additive in the log domain — `raw_lufs + 10·log10(window /
-  filled)` — because LUFS is `10·log10(energy) − 0.691`, so scaling the energy is exactly adding a constant dB
+filled)` — because LUFS is `10·log10(energy) − 0.691`, so scaling the energy is exactly adding a constant dB
   offset, and `-∞ + finite` stays `-∞` under IEEE 754 with no special case. Sample peak per hop is tracked by
   `LiveReadouts` itself (`ebur128`'s own `sample_peak` is a whole-history figure), reset each hop.
 - **`session.rs` and the meter it shares** — the session opens its one `Loudness` for bit 1 or for the offline
@@ -1209,7 +1213,7 @@ the session mixes to mono once for the front end and the pitch track.
   some lag always stands above the rest by chance, so noise and a steady pulse read alike whatever statistic is
   taken over them. PROJ-840 carries the measurements and the two approaches that would separate them.
 - **`key.rs`** — the plan's Krumhansl–Kessler correlation over the whole-track chroma. Confidence is the
-  winner's margin over the best *non-relative* runner-up (PROJ-834): a major tonic and its relative minor share
+  winner's margin over the best _non-relative_ runner-up (PROJ-834): a major tonic and its relative minor share
   every note, so comparing against it kept the margin near zero for clearly tonal music; excluding it from the
   runner-up search raises the margin without changing which key wins. `None` for a chroma with no variation.
   `analyseTrackAudio` then settles major/minor against the track's main session (`settleKeyMode`) when the
@@ -1238,9 +1242,9 @@ the session mixes to mono once for the front end and the pitch track.
 - **`diff.rs`** — `Features` (dequantised onset, mel, chroma and an optional per-second loudness with gated
   seconds at −70 LUFS), `Series` ids 0 onset, 1 mel, 2 chroma. `align` is the plan's z-scored cross-correlation over
   ±30 s at 100 Hz with 5 s minimum overlap and a 0.3 floor. `diff` linearly interpolates `b`'s rows at `t +
-  offset` (a 2.5 s offset lands between seconds), `1.0` where that rounds outside `b`; the summary is
+offset` (a 2.5 s offset lands between seconds), `1.0` where that rounds outside `b`; the summary is
   `[changedSeconds, changedShare, loudestStartMs, loudestEndMs (−1 none), fingerprintSimilarity (NaN without
-  chroma)]`, the similarity being the mean cosine of the aligned chroma. Rows are compared by cosine unless one is
+chroma)]`, the similarity being the mean cosine of the aligned chroma. Rows are compared by cosine unless one is
   silent (every value within one quantisation step of zero, or for log-mel at or below the −60 dBFS level
   `1e-3`): two silent rows are identical, one silent row against a sounding one is wholly different.
 - **`mod.rs`'s `dot`** — the one inner product (YIN, alignment, sections). `opt-level = "s"` turns off LLVM's loop
@@ -1364,7 +1368,7 @@ descriptors. `env` — `stubEnv(name, value | undefined)` / `unstubAllEnvs()`. `
 `advanceTimersByTimeAsync(ms)` steps fake time a millisecond at a time with a real `setImmediate` between ticks
 (not faked by `jest.useFakeTimers`), stopping early once no timer is pending. `wait-for` — `waitFor(fn, { timeout,
 interval })` retries until `fn` stops throwing. `fixture` — `partial<T>(value)` stands a `Partial<T>` in for a
-full API row, so a focused test fills only the fields the code reads while every field it *does* give stays
+full API row, so a focused test fills only the fields the code reads while every field it _does_ give stays
 checked; prefer it to `as T` (which lets a wrong field name through) and to `as unknown as T` (which checks
 nothing). Shallow, so nest a second call for a nested object. `dom` — `dom.ts`, preloaded by `packages/ui/bunfig.toml`
 (`../test/src/dom.ts`): registers a happy-dom window on the globals via `@happy-dom/global-registrator`,
@@ -1436,7 +1440,7 @@ and the api image copies its source to `/app/packages/session-diff`. Every calle
 - `src/index.ts` — the save-to-save diff model, built from a registry of facets (`FACETS`), one
   module each beside it: `tempo`, `time-signature`, `key`, `structure`, `clips`, `scenes`,
   `samples`, `daw-version`. A `Facet` (`facet.ts`) names the DAW capability it needs and `compare(before,
-  after, format)`s two saves into a `FacetChange` (worded `DiffChip`s and, for a scalar, a `Readout` gauge,
+after, format)`s two saves into a `FacetChange` (worded `DiffChip`s and, for a scalar, a `Readout` gauge,
   keys and tempos written in the viewer's `format`); `transitionFacet` builds the text-valued ones, comparing
   what `read` returns and writing what `write` does where a value has more than one spelling (a key).
   `diffSaves(before, after, capabilities?, format?)` → the chips in facet order (a save's feed row);
@@ -1452,7 +1456,7 @@ and the api image copies its source to `/app/packages/session-diff`. Every calle
   static page can diff two real saves.
 - `src/format.ts` — `DiffFormat` (`number`, `tempo(bpm, {unit?, whole?})`, `key(tonic, scale)`): the three
   ways a diff writes a figure. `@workspace/ui`'s `Formatters` satisfy it; `diffFormat({locale?, keyNotation?,
-  tempo?})` builds one (and `formattersFor` builds its own `number`/`tempo`/`key` from it, so the two cannot
+tempo?})` builds one (and `formattersFor` builds its own `number`/`tempo`/`key` from it, so the two cannot
   drift), `defaultDiffFormat()` is what a caller with no viewer (the server) writes in. The preferences it is
   built from are `DiffFormatPrefs` with `TempoPrefs` (`{ rounding: TempoRounding, suffix }`), and their defaults are
   `DIFF_FORMAT_DEFAULTS`, which `@workspace/ui`'s `DEFAULT_FORMAT_PREFS` spreads and whose `FormatPrefs.tempo` is
@@ -1467,11 +1471,11 @@ and the api image copies its source to `/app/packages/session-diff`. Every calle
   `CIRCLE_OF_FIFTHS_MAJORS`, `circleOfFifthsPosition`, `KeyNotation`, `spellKey(tonic, scale, notation)`
   (sharps is the key as written; flats renames a sharp tonic; Camelot `8B`/`8A` and Open Key `1d`/`1m` number
   a major or minor key's circle position and write any other key as sharps does) and `spokeLabel(index,
-  notation)` for the circle's major ring.
+notation)` for the circle's major ring.
 
 ## packages/settings (`@workspace/settings`)
 
-**The settings registry: every setting declared once**, a runtime dependency of `apps/server` and `apps/client`. Zod schemas and metadata, no React. Consumed as source through `".": "./src/index.ts"` (the whole
+**The settings registry: every setting declared once**, a runtime dependency of `apps/server`, `apps/client` and `@workspace/ui`. Zod schemas and metadata, no React. Consumed as source through `".": "./src/index.ts"` (the whole
 surface) and `"./*": "./src/*.ts"` (a group file's own exports, such as `REGISTRATION_MODES` from
 `@workspace/settings/groups/instance-access`); scripts `typecheck`, `lint`, `format`, `test`. It is wired the way
 `@workspace/dsp` is: relative imports end in `.js` for the server's NodeNext typecheck, the client's
@@ -1561,7 +1565,7 @@ registered setting), which `SettingsStore`'s paint passes the settings with a `d
 the rest.
 
 **Groups.** `groups/index.ts` exports one line per file, `groups/<id>.ts`: the Personal groups `appearance`,
-`commands`, `editor`, `feedback`, `formats`, `keybindings`, `lab`, `layout`, `pages`, `palette`, `playback`, `visuals`, plus the
+`commands`, `editor`, `feedback`, `formats`, `keybindings`, `lab`, `layout`, `pages`, `palette`, `playback`, `tables`, `visuals`, plus the
 Project groups (below), the Instance groups (below). `groups/palette.ts` owns the
 palette's vocabularies as `as const` id lists: `PALETTE_EMPTY_GROUPS` and `PALETTE_PREFIX_COMMANDS` (the prefix
 command ids `palette.aliases` values are drawn from; the client's `PREFIX_COMMANDS` must equal it). `groups/keybindings.ts` declares `keybindings.client` (`user`/`instance`, a `custom` `keybinding-map` control): a record of free-string command ids
@@ -1613,14 +1617,14 @@ takes its variable's value as the `env` layer. Audience `public` for registratio
 `passwordMin`/`passwordMax`, the brand's name, images and colours and `updateCheck`; `admin` for the rest.
 `restartRequired` on `sessionLifetimeDays` and `mcpEnabled` only.
 
-| Group (order) | Keys |
-|---|---|
-| `instance-access` Access (10) | `registration` (`REGISTRATION_MODES`, select), `closeAfterFirst`, `invitesBypass`, `requireVerifiedEmail`, `guestAccess`, `selfDeletion` (toggles), `sessionLifetimeDays` (1–365 d), `linkLifetimeMinutes` (5 min–7 d), `passwordMin`/`passwordMax` (`PASSWORD_LENGTH_FLOOR`–`CEILING`), `lockoutFreeFailures` (1–100), `lockoutBaseMinutes` (1 min–1 d), `lockoutMaxMinutes` (1 min–7 d) |
-| `instance-branding` Branding (20) | `name` and `mailSenderName` (1–60 characters, default `Projammr`), `logoImageId`/`iconImageId` (an instance image id or null; custom control `image`), `themeColour`/`backgroundColour` (six-digit hex, default `#080808`, the dark paper `PAPER_DARK` pins in `packages/ui`'s `brand-colours.test.ts`), `updateCheck` |
-| `instance-limits` Limits (30) | `maxUploadMb` (≤ `MAX_UPLOAD_CEILING_MB`, seed `MAX_UPLOAD_MB`), `projectCapGb`/`userCapGb` (≥ 0 or null, placeholder "No cap", seeds `MAX_PROJECT_GB`/`MAX_USER_GB`), `pushSamplesEverywhere` (toggle, default off), `audioTypes`/`imageTypes` (lists ⊆ `AUDIO_EXTENSIONS`/`IMAGE_TYPES`, exported here with `ORPHAN_MODES`), `auditIntervalHours`, `orphanMode`, `guestRetentionDays`, `longestAudioHours` |
-| `instance-jobs` Background work (40) | `analysisWorkers` (1–64, seed `MEDIA_CONCURRENCY`), `jobRetentionDays`, `activityRetentionDays` (or null, placeholder "Forever"), `saveContentRetentionDays` (1–36500, default 90, seed `SAVE_CONTENT_RETENTION_DAYS`) |
-| `instance-integrations` Integrations (50) | `mcpEnabled`, `mcpToolGroups` (multiselect of `MCP_SCOPES`), `logLevel` (`LOG_LEVELS`, seed `LOG_LEVEL`) |
-| `instance-rate-limits` Rate limits (900, `advanced`) | `<bucket>.burst` and `<bucket>.perMinute` for each of `RATE_BUCKETS` (name → label, what it meters, default and floor), a whole number no lower than the floor, whose message names it |
+| Group (order)                                        | Keys                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `instance-access` Access (10)                        | `registration` (`REGISTRATION_MODES`, select), `closeAfterFirst`, `invitesBypass`, `requireVerifiedEmail`, `guestAccess`, `selfDeletion` (toggles), `sessionLifetimeDays` (1–365 d), `linkLifetimeMinutes` (5 min–7 d), `passwordMin`/`passwordMax` (`PASSWORD_LENGTH_FLOOR`–`CEILING`), `lockoutFreeFailures` (1–100), `lockoutBaseMinutes` (1 min–1 d), `lockoutMaxMinutes` (1 min–7 d)                    |
+| `instance-branding` Branding (20)                    | `name` and `mailSenderName` (1–60 characters, default `Projammr`), `logoImageId`/`iconImageId` (an instance image id or null; custom control `image`), `themeColour`/`backgroundColour` (six-digit hex, default `#080808`, the dark paper `PAPER_DARK` pins in `packages/ui`'s `brand-colours.test.ts`), `updateCheck`                                                                                       |
+| `instance-limits` Limits (30)                        | `maxUploadMb` (≤ `MAX_UPLOAD_CEILING_MB`, seed `MAX_UPLOAD_MB`), `projectCapGb`/`userCapGb` (≥ 0 or null, placeholder "No cap", seeds `MAX_PROJECT_GB`/`MAX_USER_GB`), `pushSamplesEverywhere` (toggle, default off), `audioTypes`/`imageTypes` (lists ⊆ `AUDIO_EXTENSIONS`/`IMAGE_TYPES`, exported here with `ORPHAN_MODES`), `auditIntervalHours`, `orphanMode`, `guestRetentionDays`, `longestAudioHours` |
+| `instance-jobs` Background work (40)                 | `analysisWorkers` (1–64, seed `MEDIA_CONCURRENCY`), `jobRetentionDays`, `activityRetentionDays` (or null, placeholder "Forever"), `saveContentRetentionDays` (1–36500, default 90, seed `SAVE_CONTENT_RETENTION_DAYS`)                                                                                                                                                                                       |
+| `instance-integrations` Integrations (50)            | `mcpEnabled`, `mcpToolGroups` (multiselect of `MCP_SCOPES`), `logLevel` (`LOG_LEVELS`, seed `LOG_LEVEL`)                                                                                                                                                                                                                                                                                                     |
+| `instance-rate-limits` Rate limits (900, `advanced`) | `<bucket>.burst` and `<bucket>.perMinute` for each of `RATE_BUCKETS` (name → label, what it meters, default and floor), a whole number no lower than the floor, whose message names it                                                                                                                                                                                                                       |
 
 `registration` keeps its own reads (`cachedRegistrationMode`, `admitSignUp`) outside the policy.
 `groups/instance.test.ts` pins the audiences, the restart-required keys, the floors and the nullable keys.
@@ -1634,12 +1638,12 @@ policy derives from this registry rather than the other way round. `project-defa
 registers under `settings-hub/controls/custom/`; a status or a label id the project no longer has is
 skipped by the reader, not by the schema here.
 
-| Group (order) | Keys | Notes |
-|---|---|---|
-| `project-defaults` Defaults (70) | `trackStatusId`/`collectionStatusId` (custom `project-status`), `labelIds` (custom `project-labels`), `artists` (list of text), `explicit`, `newSessionMain` (toggles) | What a new track, collection or session starts with when its creation leaves the field out |
-| `project-sharing` Sharing (80) | `shareKind` (`SHARE_KINDS`, select), `shareExpiresDays` (duration, d, nullable, placeholder "Never"), `shareCommentPrivacy` (`SHARE_COMMENT_PRIVACIES`, select), `shareDownloads`/`guestComments` (toggles), `inviteRole` (`INVITE_ROLES`, select), `inviteDays` (duration, d), `whoMayInvite` (`WHO_MAY_INVITE_ROLES`, select) | `project-sharing.ts` owns and exports the enums the server's `Sharelink["shareType"]`, `ShareCommentPrivacy` and `WhoMayInvite` mirror |
-| `project-conventions` Conventions (90) | `quietAfterDays` (duration d, 0 allowed and counts nothing quiet), `todayNewHours` (duration h) | the only two conventions fields |
-| `project-audio` Audio (100) | `auditTooShortSeconds`/`auditNearSilentLufs`/`auditHotPeakDbtp`/`auditLeadSilenceSeconds`/`auditTailSilenceSeconds`/`auditNameMismatch` (number with a unit), `tempoKeyCorrection` (toggle), `tempoKeyCorrectionPercent` (number, %), `sameBounceWindowMinutes` (duration min), `duplicateKeep` (select, `DUPLICATE_KEEPS`), `mp3Kbps` (select, string enum of the bitrates `DownloadAssetDialog.tsx`'s `MP3_BITRATES` offers), `autoAnalyse` (toggle), `storageCapGb` (number GB, nullable, placeholder "No cap") | `mp3Kbps` is a string, since `SelectControl` edits strings only — the server side `Number()`s it; `storageCapGb` is `minRole: "owner"`; `DUPLICATE_KEEPS` is declared here |
+| Group (order)                          | Keys                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Notes                                                                                                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project-defaults` Defaults (70)       | `trackStatusId`/`collectionStatusId` (custom `project-status`), `labelIds` (custom `project-labels`), `artists` (list of text), `explicit`, `newSessionMain` (toggles)                                                                                                                                                                                                                                                                                                                                             | What a new track, collection or session starts with when its creation leaves the field out                                                                                 |
+| `project-sharing` Sharing (80)         | `shareKind` (`SHARE_KINDS`, select), `shareExpiresDays` (duration, d, nullable, placeholder "Never"), `shareCommentPrivacy` (`SHARE_COMMENT_PRIVACIES`, select), `shareDownloads`/`guestComments` (toggles), `inviteRole` (`INVITE_ROLES`, select), `inviteDays` (duration, d), `whoMayInvite` (`WHO_MAY_INVITE_ROLES`, select)                                                                                                                                                                                    | `project-sharing.ts` owns and exports the enums the server's `Sharelink["shareType"]`, `ShareCommentPrivacy` and `WhoMayInvite` mirror                                     |
+| `project-conventions` Conventions (90) | `quietAfterDays` (duration d, 0 allowed and counts nothing quiet), `todayNewHours` (duration h)                                                                                                                                                                                                                                                                                                                                                                                                                    | the only two conventions fields                                                                                                                                            |
+| `project-audio` Audio (100)            | `auditTooShortSeconds`/`auditNearSilentLufs`/`auditHotPeakDbtp`/`auditLeadSilenceSeconds`/`auditTailSilenceSeconds`/`auditNameMismatch` (number with a unit), `tempoKeyCorrection` (toggle), `tempoKeyCorrectionPercent` (number, %), `sameBounceWindowMinutes` (duration min), `duplicateKeep` (select, `DUPLICATE_KEEPS`), `mp3Kbps` (select, string enum of the bitrates `DownloadAssetDialog.tsx`'s `MP3_BITRATES` offers), `autoAnalyse` (toggle), `storageCapGb` (number GB, nullable, placeholder "No cap") | `mp3Kbps` is a string, since `SelectControl` edits strings only — the server side `Number()`s it; `storageCapGb` is `minRole: "owner"`; `DUPLICATE_KEEPS` is declared here |
 
 `groups/project-defaults-sharing.test.ts` and `groups/project-conventions-audio.test.ts` pin the scopes, `minRole`,
 audience and each default against the policy literal, and the custom components' names.
@@ -1688,7 +1692,7 @@ config that needs typescript-eslint imports it from here, never from a package t
 No exports field; consumed by path (`extends: "@workspace/typescript-config/<name>.json"`).
 
 - **`base.json`** — strict, `noUncheckedIndexedAccess`, ES2022 target, `lib: [es2022, DOM,
-  DOM.Iterable]`, `module`/`moduleResolution: NodeNext`, `declaration`+`declarationMap`, `skipLibCheck`,
+DOM.Iterable]`, `module`/`moduleResolution: NodeNext`, `declaration`+`declarationMap`, `skipLibCheck`,
   `incremental: false`, `isolatedModules`, `moduleDetection: force`, `resolveJsonModule`.
 - **`nextjs.json`** — base + `plugins: [{name: "next"}]`, `module: ESNext`, `moduleResolution: Bundler`,
   `allowJs`, `jsx: preserve`, `noEmit`.
@@ -1710,7 +1714,7 @@ No exports field; consumed by path (`extends: "@workspace/typescript-config/<nam
   The same preload (`@workspace/test/dom.ts`) sets `MotionGlobalConfig.skipAnimations` and
   `BASE_UI_ANIMATIONS_DISABLED` after registering the DOM, so a Motion animation and a Base UI overlay's
   `getAnimations()` wait both resolve instantly instead of hanging on happy-dom's `Element.animate` stub.
-  `skipAnimations` only *finishes* an animation when the tree is under `LazyMotion` — render with
+  `skipAnimations` only _finishes_ an animation when the tree is under `LazyMotion` — render with
   `{ wrapper: MotionProvider }` or an `AnimatePresence` exit never completes and a bare
   `onAnimationComplete` (the `EmptySection` reveal) never fires.
 - **An animated value never reaches the DOM under happy-dom**, whichever route it takes: its
@@ -1730,7 +1734,7 @@ No exports field; consumed by path (`extends: "@workspace/typescript-config/<nam
   property no utility lists gets an explicit `transition-[…] duration-(--dur-*) ease-arrive`.
 - **`hidden` cannot be beaten by a utility.** Tailwind v4 preflight ships
   `[hidden]:where(:not([hidden="until-found"])){display:none!important}`. Responsive folding (`RailMore`)
-  must toggle the `hidden` *class*, not the attribute, so a later `md:` utility can win at equal
+  must toggle the `hidden` _class_, not the attribute, so a later `md:` utility can win at equal
   specificity.
 - **Arbitrary-property utilities beat but don't merge with named padding utilities** — `tailwind-merge`
   treats `[padding-bottom:...]` and `pb-4` as different groups, so the shorthand and the arbitrary

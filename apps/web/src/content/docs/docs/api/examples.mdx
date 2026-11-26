@@ -116,13 +116,14 @@ that measures it.
 </Steps>
 
 <Aside>
-  A script that uploads many files can follow all their jobs at once through the project's event stream instead of
-  polling each one. See [Jobs and event streams](/docs/api/jobs/#follow-a-projects-event-stream).
+  A script that uploads many files can follow all their jobs at once through the
+  project's event stream instead of polling each one. See [Jobs and event
+  streams](/docs/api/jobs/#follow-a-projects-event-stream).
 </Aside>
 
 ## Read what changed in a session
 
-Every time the scanner sees a set saved, it records the save with a snapshot of the set: tempo, time signature, key,
+Every time [dit](/dit/) sees a set saved, it records the save with a snapshot of the set: tempo, time signature, key,
 counts of tracks and scenes, and its structure. Reading a session's changes is reading those snapshots in order.
 
 <Steps>

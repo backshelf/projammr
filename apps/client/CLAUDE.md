@@ -25,8 +25,10 @@ table skill before changing table code. It is Table v9; v8 examples do not apply
 - `src/app/` — route tree. Below `/project/[projectId]` a single `[...route]` page hands the URL to
   `src/lib/route-parser.ts`, which returns a discriminated union that `src/modules/` renders. New URL
   shapes extend `parseRoute` and `modules/`; never add file-based routes there.
-- `src/modules/<entity>/` — server components per entity (project, collection, track, session). A project's
-  settings are the settings hub's (`src/app/(app)/settings/`, `src/components/settings-hub/`), not a module.
+- `src/modules/<entity>/` — server components per entity (project, collection, track, session), plus shared
+  list machinery (`entity-list/`) and sub-pages (`project/repo.tsx`, `project/plugins.tsx`,
+  `project/samples.tsx`, `session/history.tsx`). A project's settings are the settings hub's
+  (`src/app/(app)/settings/`, `src/components/settings-hub/`), not a module.
 - `src/components/<feature>/` — client components grouped by feature (tables, forms, masthead, sidebar,
   music-player, command-palette, notebook, session-structure, work-heatmap, …).
 - `src/actions/` — `"use server"` files, one per resource, calling `lib/server-api.ts`.
@@ -99,6 +101,7 @@ table skill before changing table code. It is Table v9; v8 examples do not apply
 ## Skills
 
 When touching the client code:
+
 - Always use the vercel- skills
 - Always use ui-skills-root
 - Always use tailwind-design-system

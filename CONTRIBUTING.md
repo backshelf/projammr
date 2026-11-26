@@ -120,8 +120,6 @@ A good pull request:
   packages, dit, the docs site and the monorepo. They are useful to any contributor, whatever tools you use.
 - [`DESIGN.md`](DESIGN.md) is the design language. Read it before any UI change. [`PRODUCT.md`](PRODUCT.md) is the
   product definition.
-- The `.claude/` directory is the maintainer's Claude Code setup. None of it is required to contribute; see
-  [`.claude/README.md`](.claude/README.md).
 
 ## Adding a DAW
 

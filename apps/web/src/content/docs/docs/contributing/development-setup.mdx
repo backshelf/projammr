@@ -1,14 +1,14 @@
 ---
 title: Development setup
-description: Install the prerequisites, configure the env files, and run the web app, the API, the scanner and this site on your machine.
+description: Install the prerequisites, configure the env files, and run the web app, the API, dit and this site on your machine.
 sidebar:
   order: 3
 ---
 
 import { Aside, Steps } from "@astrojs/starlight/components";
 
-A working development setup runs four things from one checkout: the API on port 8080, the web app on 3000, the
-scanner's window, and this site on 4321. Setting it up takes a database, two env files and one install.
+A working development setup runs the API on port 8080, the web app on 3000, this site on 4321 and (on macOS) dit's
+menu bar app. Setting it up takes a database, two env files and one install.
 
 ## Prerequisites
 
@@ -18,13 +18,14 @@ scanner's window, and this site on 4321. Setting it up takes a database, two env
   quickest way to get one.
 - **ffmpeg**, which the API runs to decode and transcode audio.
 - **Rust 1.97.1 through [rustup](https://rustup.rs)**, with the `wasm32-unknown-unknown` target, for
-  `packages/dsp`. The toolchain is pinned in `packages/dsp/rust/rust-toolchain.toml`, so rustup installs the right
-  version, the target, clippy and rustfmt on the first build.
+  `packages/dsp` and `packages/dit`. The toolchain is pinned in `packages/dsp/rust/rust-toolchain.toml` and
+  `packages/dit/rust-toolchain.toml`, so rustup installs the right version, the target, clippy and rustfmt on the
+  first build.
 - **`wasm-opt` 116 or later** on your `PATH`, from `cargo install wasm-opt` or your distribution's `binaryen`
   package.
 
-The WebAssembly that `packages/dsp` builds is not committed, and both the API and the web app need it, so Rust and
-`wasm-opt` are needed even if you never touch the audio code. `bun run dev` builds it before anything starts.
+The WebAssembly that `packages/dsp` and `packages/dit` build is not committed, and the API and web app need it, so
+Rust and `wasm-opt` are needed even if you never touch the Rust code. `bun run dev` builds them before anything starts.
 
 ## Set up
 
@@ -88,28 +89,28 @@ requests from `http://localhost:3000`.
 bun run dev
 ```
 
-Turborepo builds `packages/dsp` first, then starts every app's development server:
+Turborepo builds `packages/dsp` and `packages/dit` first, then starts every app's development server:
 
-| What          | Where                   | Started by                              |
-| ------------- | ----------------------- | --------------------------------------- |
-| The API       | `http://localhost:8080` | `bun --watch src/server.ts`             |
-| The web app   | `http://localhost:3000` | `next dev`                              |
-| The scanner   | its own window          | `electron-vite dev`                     |
-| This site     | `http://localhost:4321` | `astro dev`                             |
+| What        | Where                   | Started by                               |
+| ----------- | ----------------------- | ---------------------------------------- |
+| The API     | `http://localhost:8080` | `bun --watch src/server.ts`              |
+| The web app | `http://localhost:3000` | `next dev`                               |
+| dit         | macOS menu bar          | `tauri dev` (macOS only; `apps/dit-app`) |
+| This site   | `http://localhost:4321` | `astro dev`                              |
 
-Each one also runs on its own: `bun run dev` inside `apps/server`, `apps/client`, `apps/scanner` or `apps/web`. The
-API takes another port from `PORT`, the web app from `next dev -p`, and this site from `WEB_PORT`.
+Each one also runs on its own: `bun run dev` inside `apps/server`, `apps/client`, `apps/dit-app` (macOS) or
+`apps/web`. The API takes another port from `PORT`, the web app from `next dev -p`, and this site from `WEB_PORT`.
 
 Open `http://localhost:3000` and create an account. The first account on an instance becomes its admin and closes
 registration behind it; after that, others join by invite, or once [the admin opens registration](/docs/admin/registration/) again. Create a
 project, and the app is ready to use.
 
-To sync real sessions, open the scanner, enter `http://localhost:8080` as the server on its sign-in screen, sign in
-with the same account, pick the project, and add a folder of Ableton projects.
+To push real sessions, open dit (or run `dit login` from `packages/dit`), enter `http://localhost:8080` as the
+server, approve the sign-in in your browser, and either track a folder or run **Bring in projects…**.
 
 <Aside>
-  In development the web app forwards `/api/*` to the API itself, so the browser only ever talks to port 3000. The
-  scanner talks to the API directly.
+  In development the web app forwards `/api/*` to the API itself, so the browser
+  only ever talks to port 3000. dit talks to the API directly.
 </Aside>
 
 ## Changing the database

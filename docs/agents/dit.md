@@ -259,7 +259,8 @@ hash equal to the latest save's, `record_save` still tracks the samples (cache h
 them with the latest save's by path and object id: a tracked file whose object is not the one the latest save has for
 that path is changed, and the call records a save with the same tree and the new sample objects (`viewOnly` false). A
 file that cannot be read now (gone, drive unmounted) is no change, so a missing sample never records a save; one that
-appears after the save does. A touched file with the same bytes re-hashes to the same object: nothing is recorded, and
+appears after the save does (in `record_save`; `Repo::stale` checks only samples whose latest save already has an
+object). A touched file with the same bytes re-hashes to the same object: nothing is recorded, and
 the cache is written so it is not read again. The save's `fileUpdatedAt` is the latest of the set file's time and
 the changed samples' times, or the latest save's time plus one millisecond when that is not later: the log stays in
 time order, the hub's unique `(session, fileUpdatedAt)` is never hit, and this is the one case where a save's time
@@ -699,7 +700,7 @@ it must split into and asserts every part's kind, tag and id and every leaf's by
 - **`decode`.** An empty file is `DawError::Corrupt`, since no set is zero bytes. Other input not starting `1f 8b`
   is plain XML and passes through unchanged. Otherwise zlib's own gzip
   mode (`inflateInit2_`, window bits 31) parses the header and checks the CRC32 and length; anything short of
-  `Z_STREAM_END` with all input consumed is `DawError::Corrupt`, so a truncated, zero-filled or concatenated file
+  `Z_STREAM_END` with all input consumed is `DawError::Corrupt`, so a truncated or concatenated gzip file
   fails rather than decoding short.
 - **`encode`** rebuilds Live's own file: the header `1f 8b 08 00 00 00 00 00 00 <os>` (no flags, no mtime, extra
   flags 0; the OS byte 19 on macOS, 11 on Windows, 3 elsewhere), raw deflate through
@@ -869,7 +870,9 @@ function per command returning a serialisable result, `src/output.rs` the text a
 `--json` is global. With it a command prints its result as one line of JSON; errors still go to stderr as text.
 
 **The `Context` seam.** A command never reads the process's environment, writes to its stderr or opens the
-renders: Option<&dyn RenderControl>, backfill: Option<&dyn BackfillControl> }`.
+Keychain directly — all of those come through `Context { env: Env, err: &mut dyn Write, remote: &dyn RemoteSource,
+renders: Option<&dyn RenderControl>, backfill: Option<&dyn BackfillControl> }` (the exception is `dit-core`'s
+sample reader in `repo/samples.rs`, which writes large-file and unreadable-sample notices directly with `eprintln!`).
 `Env` (from `dit-ipc`) is `DIT_AUTHOR`, `USER` and `DIT_MACHINE` as the requester had them; `err` is where
 warnings and the sign-in code go, so stdout stays the result alone; `RemoteSource` (`Send + Sync`) gives the user
 config's path, the token store (`TokenStore` is `Send + Sync` too) and `open()`, the signed-in `Remote`. `SystemRemote`
@@ -961,7 +964,7 @@ file…` go to stderr. It is the cli face of the app panel's restore and needs a
 - `dit backfill [--in <root>...]`: with no folder, lists the project folders found under the roots (`--in`, repeatable,
   else each DAW's `project_roots` and `~/Music`; roots that do not exist are skipped, a folder reached twice is listed
   once), newest save first: `<path>  <n> sets  <size>  last saved <d Mon yyyy>`, with the home folder as `~` and ` ·
-  already in dit` or ` · synced by <service>` after it, or `No Live projects found.`. `--json` is the array of
+already in dit` or ` · synced by <service>` after it, or `No Live projects found.`. `--json` is the array of
   `{path, sets, bytes, newest, already, syncedBy}`. Sizes are 1024-based with one decimal (`2.3 GB`, the unit of the
   hub's caps), dates are UTC.
 - `dit backfill <folder>... [--project <id>]`: brings those project folders in (see "The backfill"). Each argument must
@@ -979,14 +982,14 @@ file…` go to stderr. It is the cli face of the app panel's restore and needs a
   `Control` of its own over `Driver::new(Config::new(recorder, backfill.json, repos.toml))` in the terminal; both read
   one state file, so the same command resumes a stopped run whichever of them stopped it. Progress is on stderr, one
   line when a folder starts reading, at its first and last commit, at each tenth of its upload (`<folder>: uploading
-  3.1 of 8.4 GB`), once per wait for the hub and on a failure. A stderr that cannot be written to is the client having
+3.1 of 8.4 GB`), once per wait for the hub and on a failure. A stderr that cannot be written to is the client having
   hung up (the socket's frames fail once it has gone): the command calls `BackfillControl::pause` once and the run
   stops after the step it is in, so Ctrl-C through the app is a pause. The result is on stdout: `brought in <folder>:
-  8 sets, 37 saves, 2.3 GB` per folder done, `failed <folder>: <reason>` per folder that failed, `paused; run the same
-  command to carry on` for a paused run, and `history goes back to March 2019: 3,412 saves across 266 sets in 41
-  projects` once anything is done. A paused run (or a refused sign-in) and any failed folder exit 1 after the result
+8 sets, 37 saves, 2.3 GB` per folder done, `failed <folder>: <reason>` per folder that failed, `paused; run the same
+command to carry on` for a paused run, and `history goes back to March 2019: 3,412 saves across 266 sets in 41
+projects` once anything is done. A paused run (or a refused sign-in) and any failed folder exit 1 after the result
   (`<n> folders could not be brought in.`); another run on the machine is `A backfill is running on this machine
-  already…`.
+already…`.
 
 **Id prefixes.** `diff`'s and `checkout`'s ids are prefixes of the lowercase hex of an id, at least 4 characters
 (shorter is ``Id prefix `<p>` is too short.``). They resolve across every set and branch: `diff` over each
@@ -1418,7 +1421,8 @@ is written. `Restored { repo, setId, branch, file, commit, fetched, requests }`.
 `repos` (the caller's list: `repos.toml`, the repo `cwd` is in) whose `[remote]` binding is that `repoId` on the instance
 signed in to, and that has the set `ditSetId`, is the target; none is `RestoreError::NotTracked` (`Not tracked by dit
 on this computer.`). A commit with no `saveHash` is `NoSave`. The branch is `name`, else `restore-<7 hex of the
-hash>` made unique by `Repo::free_branch_name` (`x`, `x-2`, `x-3`, ...; a `-N` suffix counts on from N).
+hash>` made unique by `Repo::free_branch_name` (`x`, `x-2`, `x-3`, ...; a trailing `-N` digit suffix is stripped
+and numbering tries from `2`, so a taken `fix-2` becomes `fix-3` rather than `fix-2-2`).
 
 **A commit this repo holds** (`Store::contains`) needs no fetch: the branch is checked out at once.
 
@@ -1635,15 +1639,17 @@ then, per set, `Repo::record_history`: the set as it is, then its `Backup/` copi
 commit and nothing sent. `Recorder { registry, author, machine }` is who records: the DAW modules, the author of each
 set's one commit, and the machine name every save carries. `progress(read, sets)` is called before each set and once
 at the end; `cancel` is read between sets (a cancelled Check leaves what it recorded, and
-`CheckError::Cancelled`). `Checked { path (canonical), created_dit, sets, objects }`: `created_dit` says Check made
+`CheckError::Cancelled`). `Checked { path (canonical), created_dit, sets, objects, samples, pushes_samples }`: `created_dit` says Check made
 the `.dit/` (so `discard` may remove it); each `CheckedSet { file, set_id, saves, copies, fingerprints, doubt }`
-carries the saves on `main` now, the count of `Backup/` copies, the match fingerprints (`file_fingerprint` of the set
+carries the saves on `main`, the count of `Backup/` copies, the match fingerprints (`file_fingerprint` of the set
 and of each copy, for `propose`) and a `Doubt`: `Unreadable` (some save is stored whole, `unreadable` true) or
-`Unrecorded(message)` (the set could not be recorded now, `set_id` is `None`, and it is left out of the plan). A
-repo lock held by another process stops the whole Check (`CheckError::Failed`). `objects` is every object a push of
+`Unrecorded(message)` (the set could not be recorded, `set_id` is `None`, and it is left out of the plan). A
+repo lock held by another process stops the whole Check (`CheckError::Failed`). `objects` is every save object a push of
 the recorded sets uploads, once each, with its frame size in the store (`remote::object_sizes`, which reads each
 leaf once, plus each set's head Save object, which the lineage phase links; a commit's own object does not exist until
-the commit is made and takes a few hundred bytes). Sample objects are not counted: a new hub repo does not take them.
+the commit is made and takes a few hundred bytes). `samples` holds each set's head save's sample objects
+(`remote::sample_object_sizes`), and `Checked::objects_to_send(instance_forces)` includes them in `storage-check` when
+`pushes_samples` is true or `run::instance_pushes_samples(remote)` reports `push_samples_everywhere`.
 `run::discard(folder)` removes the folder's `.dit/` and nothing else. `run::storage(remote, project_id, &objects) ->
 Storage { bytes, held, remaining }` asks `POST /projects/:id/repos/storage-check`, deduplicating and sending at most
 10,000 objects a request; `remaining` is `None` with no cap. `run::trouble(error, host) -> Trouble` sorts a failed
@@ -1818,7 +1824,7 @@ wrapped, never cut, its folder in faint ink, then one line of facts: its length,
 (`bouncedAfterMs`, "before" when negative, left out while the daemon has not said), its size; the matched set and the
 reasons in the spec's words from `reasonKinds` ("named like the set", "in its folder", "4 min after your last save",
 only those that held; the `reasons` sentences are not shown), and the four decisions), `over-limit` (the same, "Over your size limit", "Add anyway" in
-place of "Add as version"), `uploading` (a `Progress` line from `progress.sent` over `total` in place of the
+place of "Add as version" — note that `dit-daemon`'s `renders/driver.rs` refuses `OverLimit` in `request_accept` and `begin` until the size limit is raised), `uploading` (a `Progress` line from `progress.sent` over `total` in place of the
 decisions), `queued-offline` ("Queued", uploads when the hub is back) and `added` ("Added as version"). A pair of
 formats is one card: `namesOf` writes "science123 v4.wav and .mp3", `uploadsLine` says "uploads the .wav (48 MB)" from
 `uploadedFile`, and a proposed pair adds "Only the largest file under your size limit is uploaded." "Not this set"
@@ -1905,12 +1911,14 @@ switched on", "Live's script was installed", "Screen Recording was asked") is `A
 - _Sign in and out_ (`auth.rs`, `Core::sign_out`). A sign-in that fails with the instance's certificate untrusted
   (`RemoteError::Certificate`, matched by variant) reads "<host> uses a certificate this computer doesn't trust.
   Install the instance's certificate and try again."; every other failure keeps dit-core's line, which is the cli's.
-  The app's sign-out is not the cli's `dit logout`: it does not end the session on the instance (no `POST
-/api/auth/sign-out`). In order, `auth::forget_sign_in` detaches the hub from the daemon (`Core::stop_pushing`, which
-  waits for it, so no beat can register the machine again), removes this computer from the account's machines
-  (`DELETE /machines/:id`, `dit_core::remote::remove_machine`; a failure becomes a notice and never blocks the
-  sign-out) and deletes the token. The instance stays in the config, saves keep being recorded and the cli's `login`
-  and `logout` are as they were.
+  The app's sign-out forgets the sign-in on this computer and ends its session on the instance by removing the
+  machine (no separate `POST /api/auth/sign-out`): `DELETE /machines/:id` revokes the machine's session on the hub,
+  so the cli on this computer is signed out too and the next sign-in registers a new machine. In order,
+  `auth::forget_sign_in` detaches the hub from the daemon (`Core::stop_pushing`, which waits for it so no beat can
+  register the machine again), removes this computer from the account's machines (`DELETE /machines/:id`,
+  `dit_core::remote::remove_machine`; a failure becomes a notice and never blocks the sign-out), forgets the machine
+  id (`forget_machine_id`) and deletes the token. The instance stays in the config, saves keep being recorded and the
+  cli's `login` and `logout` continue to work independently.
 - _The bar's arc_ (`arc.rs`, `tray.rs`). The title has no glyph for a push in flight (`Snapshot::title` leaves the
   formatter's `pushing` off; `Snapshot::label` keeps it, so the accessibility label says "pushing"). Instead the icon
   is a progress arc while `Snapshot.push.progress` is set: `PushProgress` is the repos of the current burst that have
@@ -1948,10 +1956,8 @@ switched on", "Live's script was installed", "Screen Recording was asked") is `A
   detached (`reconcile`) seeds or clears `Snapshot.renders`; `DaemonEvent::Render` folds into it by id (a rejected card
   leaves, `added` ones from before this run never show, the newest three of this run stay) and `derive_renders` adds
   what only the app knows: the file's length (`probe`, read once per file), the matched set and the other sets of its
-  repo that are hub sessions (`otherSets`, the "Not this set" picker) and, through `renders::render_facts`, the two
-  things the card words its reasons from: `bouncedAfterMs` and `reasonKinds` (named, in folder, near a save). The
-  daemon's `RenderEvent` carries only `reasons`, sentences that are never parsed, so until it reports the time to the
-  nearest save and the kinds, `render_facts` is the one place that gives `null` and all false. The bar's `♪` is `bar::waiting_renders` over the
+  repo that are hub sessions (`otherSets`, the "Not this set" picker); `bouncedAfterMs` and `reasonKinds` arrive
+  directly on `dit_daemon::RenderEvent`. The bar's `♪` is `bar::waiting_renders` over the
   cards: proposed and over-limit. Changing `watchRoots`, `excluded` or `maxUploadMb` in settings reaches the running
   engine through `set_render_scope` and `set_render_max_upload_mb` (a root that is not a folder is refused before it is
   saved). `notify_render` is called once per render id, when it first becomes `proposed` (`renders::Announced`; the
@@ -2025,7 +2031,8 @@ switched on", "Live's script was installed", "Screen Recording was asked") is `A
   as the walk finds them (`find.rs`), what Check read of each ticked folder (`check.rs`: `run::check` into each
   `.dit/`, then the account's projects, `propose::read` and `propose::propose` per project, and `run::storage`, with
   the person's corrections kept for the next Check) and the run, and `build.rs` makes the whole `View`
-  (`view.rs`, held to `src/backfill-ipc.ts` by `fixtures/backfill.json` on both sides) that goes out as `dit://backfill`
+  (`view.rs`, mirrored in `src/backfill-ipc.ts`; `fixtures/backfill.json` is round-trip tested on the Rust side in
+  `view.rs`, while `src/backfill/test-support.ts` loads it as `BackfillView`) that goes out as `dit://backfill`
   at most ten times a second. The step is `find`, `check`, `bring-in` or `done`; a folder stays chosen whenever any is
   listed. The run is an `Engine` (`engine.rs`: the daemon's `Driver` with `Owner` calling the app's daemon, `Running::hold`
   before a folder is touched and `Input::AddRepo` once it is done), so the tests run it with a scripted one. `Backfill`
@@ -2059,16 +2066,16 @@ switched on", "Live's script was installed", "Screen Recording was asked") is `A
   commit with the hub's word on it (`HeadCommit.push`), `firstCommit` (no commit of the user's: a checkpoint is the
   app's own), `headMeta` and `latestMeta`, and `clauses` and `tracksChanged` from `Repo::diff` and `summary_clauses`,
   kept for the last pair of saves they were worked out for. `liveTracks` is the script's latest `tracks` message
-  (kept per document, shown only while the script names the open set, without colours: the palette is private to
-  the Ableton module). The draft is held per set path in the reducer; `set_draft` updates it without sending a
+  (kept per document, shown only while the script names the open set, with `#rrggbb` track colours resolved through
+  `Daw::track_colour` in `readout.rs`). The draft is held per set path in the reducer; `set_draft` updates it without sending a
   snapshot, `commit` empties it.
 - _The set's session_ (`core/set_hub.rs`). The set is a hub session once a push has recorded it
   (`PushedSet.session_id`, the readout's `session_id`). On an open, a commit or a push the core reads `GET
 /sessions/<id>` on a thread of its own (a request while one runs is queued, never dropped) for the cover
   (`Snapshot.artwork`, `OpenSet.webPath` = `/project/<p>/session/<id>`) and the session's track. A session with no
   track whose set has no commit of the user's gets `Snapshot.trackProposal`: the project's unarchived tracks
-  (`GET /projects/<p>/tracks/summary`) whose titles read like the set's name or its folder's (`tracks.rs`, best
-  first, five at most) and the title of a new track, the folder's name without ` Project`. `propose_track {set,
+  (`GET /projects/<p>/tracks/summary`) whose titles read like the set's name or its folder's
+  (`dit_daemon::backfill::propose::track_ranking`, best first, five at most) and the title of a new track, the folder's name without ` Project`. `propose_track {set,
 track}` takes a choice's id or `new`; it makes the track (`POST /tracks {projectId, title}`) and links it
   (`PATCH /sessions/<id> {trackId}`), unless the session has a track by then.
 - _Track a folder_ (`core/hub.rs`, `plan_folder`). `track_folder {folder}` turns a folder the menu's picker chose into
@@ -2077,8 +2084,9 @@ track}` takes a choice's id or `new`; it makes the track (`POST /tracks {project
   know is added and tracked with `Input::AddRepo`.
 
 **The dev identifier.** `tauri.dev.conf.json` sets the identifier `app.projammr.dit.dev`, so a `tauri dev` run keeps
-its own app data folder and Keychain item and never starts at login; it can run beside an installed build without
-sharing its settings. The installed app's identifier is `app.projammr.dit`.
+its own config folder (`config.toml`, `repos.toml`, `app-state.json` and its own `dit.sock`) and never starts at login;
+it can run beside an installed build without sharing its settings or socket, while still sharing the `dit` Keychain
+service (`remote.rs` calls `dit_core::remote::system_tokens()`). The installed app's identifier is `app.projammr.dit`.
 
 **Signing.** A pull request's CI build is signed ad hoc (`signingIdentity "-"`), so every build has a new code identity
 and the Keychain and the Screen Recording grant ask again after each rebuild. A release build is signed with one
