@@ -33,6 +33,7 @@ struct Assessed {
     hubs: HashMap<i64, Hub>,
     assigned: Vec<Assigned>,
     storage: view::Storage,
+    project_storage: Vec<ProjectStorage>,
 }
 
 /// Where one folder goes, with where each of its sets goes in the order of the sets.
@@ -82,6 +83,7 @@ impl Backfill {
             inner.epoch += 1;
             inner.asking = false;
             inner.storage = None;
+            inner.project_storage.clear();
             inner.hub_error = None;
             inner.step = view::Step::Check;
             let mut old = std::mem::take(&mut inner.entries);
@@ -180,6 +182,7 @@ impl Backfill {
             inner.asking = true;
             inner.hub_error = None;
             inner.storage = None;
+            inner.project_storage.clear();
         });
         let result = self.read_hub(epoch, None);
         self.update_if(epoch, |inner| {
@@ -249,65 +252,25 @@ impl Backfill {
                 .filter(|id| mine.iter().any(|project| project.id == *id))
                 .unwrap_or(default)
         };
+        let projects: Vec<i64> = asked.iter().map(&project_of).collect();
         let mut hubs: HashMap<i64, Hub> = HashMap::new();
-        for item in &asked {
-            let project = project_of(item);
+        for &project in &projects {
             if let std::collections::hash_map::Entry::Vacant(slot) = hubs.entry(project) {
                 slot.insert(propose::read(&remote, project).map_err(line)?);
             }
         }
-        let mut taken = HashSet::new();
-        let assigned: Vec<Assigned> = asked
-            .iter()
-            .map(|item| {
-                let project = project_of(item);
-                let hub = &hubs[&project];
-                let targets = propose::propose(hub, &item.checked, &mut taken)
-                    .into_iter()
-                    .filter_map(|proposal| {
-                        let file = item
-                            .checked
-                            .sets
-                            .iter()
-                            .find(|set| set.set_id.as_deref() == Some(proposal.set_id.as_str()))?
-                            .file
-                            .clone();
-                        let target = item
-                            .corrections
-                            .get(&file)
-                            .filter(|target| is_offered(target, hub))
-                            .cloned()
-                            .unwrap_or(proposal.target);
-                        Some((file, target))
-                    })
-                    .collect();
-                Assigned {
-                    folder: item.folder.clone(),
-                    project,
-                    targets,
-                }
-            })
-            .collect();
+        let assigned = assign_targets(&asked, &projects, &hubs);
         let forces_samples = instance_pushes_samples(&remote).map_err(line)?;
-        let mut objects: HashMap<i64, Vec<(ObjectId, u64)>> = HashMap::new();
-        for (item, assigned) in asked.iter().zip(&assigned) {
-            objects
-                .entry(assigned.project)
-                .or_default()
-                .extend(item.checked.objects_to_send(forces_samples));
-        }
-        let mut total = view::Storage {
-            bytes: 0,
-            remaining: None,
-        };
-        for (project, objects) in &objects {
+        let by_project = objects_by_project(&asked, &assigned, forces_samples);
+        let mut project_storage = Vec::with_capacity(by_project.len());
+        for (project, objects) in &by_project {
             let room = storage(&remote, *project, objects).map_err(line)?;
-            total.bytes += room.bytes;
-            total.remaining = match (total.remaining, room.remaining) {
-                (Some(a), Some(b)) => Some(a.min(b)),
-                (a, b) => a.or(b),
-            };
+            project_storage.push(ProjectStorage {
+                bytes: room.bytes,
+                remaining: room.remaining,
+            });
         }
+        let total = summarise_storage(&project_storage);
         Ok(Some(Assessed {
             projects: mine
                 .into_iter()
@@ -319,6 +282,7 @@ impl Backfill {
             hubs,
             assigned,
             storage: total,
+            project_storage,
         }))
     }
 
@@ -333,12 +297,16 @@ impl Backfill {
     }
 
     /// Moves a folder into another project: that project's sessions and tracks are read and the folder's sets
-    /// proposed again.
+    /// proposed again. Serialised through `project_lock` so two rapid project changes never overwrite each other.
     pub fn set_project(&self, folder: &str, project: i64) -> Result<(), String> {
+        let _serial = lock(&self.project_lock);
         let path = PathBuf::from(folder);
         let epoch = self.update(|inner| {
             if inner.step != view::Step::Check {
                 return Err("Projects are chosen when the folders are checked.".to_string());
+            }
+            if inner.asking {
+                return Err("The hub is still being asked. Try again in a moment.".to_string());
             }
             if !inner.projects.iter().any(|mine| mine.id == project) {
                 return Err("That project isn't one of yours.".to_string());
@@ -444,6 +412,7 @@ impl Assessed {
         inner.projects = self.projects.clone();
         inner.hubs.extend(self.hubs.clone());
         inner.storage = Some(self.storage);
+        inner.project_storage = self.project_storage.clone();
         for assigned in &self.assigned {
             if let Some(entry) = entry_mut(inner, &assigned.folder) {
                 entry.project = Some(assigned.project);
@@ -451,6 +420,127 @@ impl Assessed {
             }
         }
     }
+}
+
+/// Proposes targets for every folder in `asked`, applying valid saved corrections while guaranteeing no hub session is
+/// claimed by more than one set across all folders.
+fn assign_targets(asked: &[Asked], projects: &[i64], hubs: &HashMap<i64, Hub>) -> Vec<Assigned> {
+    let mut taken = HashSet::new();
+    let accepted: Vec<HashMap<PathBuf, SetTarget>> = asked
+        .iter()
+        .zip(projects)
+        .map(|(item, &project)| {
+            let hub = &hubs[&project];
+            let mut kept = HashMap::new();
+            for set in &item.checked.sets {
+                if set.set_id.is_none() {
+                    continue;
+                }
+                let Some(target) = item.corrections.get(&set.file) else {
+                    continue;
+                };
+                if !is_offered(target, hub) {
+                    continue;
+                }
+                if let SetTarget::Session(id) = target
+                    && !taken.insert(*id)
+                {
+                    continue;
+                }
+                kept.insert(set.file.clone(), target.clone());
+            }
+            kept
+        })
+        .collect();
+
+    asked
+        .iter()
+        .zip(projects)
+        .zip(accepted)
+        .map(|((item, &project), kept)| {
+            let hub = &hubs[&project];
+            let targets = propose::propose(hub, &item.checked, &mut taken)
+                .into_iter()
+                .filter_map(|proposal| {
+                    let file = item
+                        .checked
+                        .sets
+                        .iter()
+                        .find(|set| set.set_id.as_deref() == Some(proposal.set_id.as_str()))?
+                        .file
+                        .clone();
+                    let target = kept.get(&file).cloned().unwrap_or(proposal.target);
+                    Some((file, target))
+                })
+                .collect();
+            Assigned {
+                folder: item.folder.clone(),
+                project,
+                targets,
+            }
+        })
+        .collect()
+}
+
+/// Groups the objects to upload by target project in run order, deduplicating shared object hashes across projects so
+/// each unique object is counted once for the first project that uploads it.
+fn objects_by_project(
+    asked: &[Asked],
+    assigned: &[Assigned],
+    forces_samples: bool,
+) -> Vec<(i64, Vec<(ObjectId, u64)>)> {
+    let mut order: Vec<i64> = Vec::new();
+    let mut by_project: HashMap<i64, Vec<(ObjectId, u64)>> = HashMap::new();
+    let mut seen: HashSet<ObjectId> = HashSet::new();
+    for (item, assigned) in asked.iter().zip(assigned) {
+        if !by_project.contains_key(&assigned.project) {
+            order.push(assigned.project);
+        }
+        let bucket = by_project.entry(assigned.project).or_default();
+        for (id, size) in item.checked.objects_to_send(forces_samples) {
+            if seen.insert(id) {
+                bucket.push((id, size));
+            }
+        }
+    }
+    order
+        .into_iter()
+        .map(|project| (project, by_project.remove(&project).unwrap_or_default()))
+        .collect()
+}
+
+/// Summarises per-project storage checks for the window. Each project's own new bytes are compared against its own
+/// remaining quota; an overflowing project surfaces its own bytes and room left so the footer matches `canStart`.
+fn summarise_storage(per_project: &[ProjectStorage]) -> view::Storage {
+    let overflow = per_project
+        .iter()
+        .filter_map(|room| {
+            let left = room.remaining?;
+            (room.bytes > left).then_some((room.bytes - left, room))
+        })
+        .max_by_key(|(deficit, _)| *deficit)
+        .map(|(_, room)| room);
+    if let Some(room) = overflow {
+        return view::Storage {
+            bytes: room.bytes,
+            remaining: room.remaining,
+        };
+    }
+    let bytes = per_project
+        .iter()
+        .fold(0u64, |sum, room| sum.saturating_add(room.bytes));
+    let remaining =
+        if per_project.is_empty() || per_project.iter().any(|room| room.remaining.is_none()) {
+            None
+        } else {
+            Some(
+                per_project
+                    .iter()
+                    .filter_map(|room| room.remaining)
+                    .fold(0u64, u64::saturating_add),
+            )
+        };
+    view::Storage { bytes, remaining }
 }
 
 fn entry_mut<'a>(inner: &'a mut Inner, folder: &Path) -> Option<&'a mut Entry> {
@@ -521,8 +611,29 @@ pub(super) fn ready(inner: &Inner) -> Result<(), String> {
     let Some(storage) = inner.storage else {
         return Err("dit hasn't checked the storage yet.".to_string());
     };
-    if storage.remaining.is_some_and(|left| storage.bytes > left) {
+    let over_quota = if inner.project_storage.is_empty() {
+        storage.remaining.is_some_and(|left| storage.bytes > left)
+    } else {
+        inner
+            .project_storage
+            .iter()
+            .any(|room| room.remaining.is_some_and(|left| room.bytes > left))
+    };
+    if over_quota {
         return Err("The folders need more storage than is left. Untick some.".to_string());
+    }
+    let mut sessions = HashSet::new();
+    for entry in &inner.entries {
+        if entry.checked().is_none() {
+            continue;
+        }
+        for target in entry.targets.values() {
+            if let SetTarget::Session(id) = target
+                && !sessions.insert(*id)
+            {
+                return Err("Two sets are matched to the same session.".to_string());
+            }
+        }
     }
     let any_set = inner.entries.iter().any(|entry| {
         entry.project.is_some()
@@ -580,4 +691,185 @@ pub(super) fn plan_of(inner: &Inner) -> Result<(Plan, Vec<PathBuf>), String> {
         }
     }
     Ok((Plan { folders }, left_out))
+}
+
+#[cfg(test)]
+mod tests {
+    use dit_core::{ObjectId, ObjectKind};
+    use dit_daemon::backfill::propose::Candidate;
+    use dit_daemon::backfill::run::CheckedSet;
+
+    use super::*;
+
+    fn obj(seed: &[u8]) -> ObjectId {
+        ObjectId::of(ObjectKind::Blob, seed)
+    }
+
+    fn checked_set(id: &str, file: &str) -> CheckedSet {
+        CheckedSet {
+            file: PathBuf::from(file),
+            set_id: Some(id.to_string()),
+            saves: 1,
+            copies: 0,
+            fingerprints: Vec::new(),
+            doubt: None,
+        }
+    }
+
+    fn asked_folder(
+        folder: &str,
+        sets: Vec<CheckedSet>,
+        objects: Vec<(ObjectId, u64)>,
+        corrections: HashMap<PathBuf, SetTarget>,
+    ) -> Asked {
+        Asked {
+            folder: PathBuf::from(folder),
+            checked: Checked {
+                path: PathBuf::from(folder),
+                created_dit: true,
+                sets,
+                objects,
+                samples: Vec::new(),
+                pushes_samples: false,
+            },
+            project: Some(4),
+            corrections,
+        }
+    }
+
+    #[test]
+    fn reapplying_saved_corrections_never_lets_two_sets_claim_the_same_session() {
+        let mut hubs = HashMap::new();
+        hubs.insert(
+            4,
+            Hub {
+                sessions: vec![Candidate {
+                    id: 812,
+                    name: "science123".to_string(),
+                    track_id: None,
+                    track_title: None,
+                    local_filepath: Some("/m/b Project/b.als".to_string()),
+                    fingerprints: Vec::new(),
+                    last_save_at: None,
+                }],
+                tracks: Vec::new(),
+            },
+        );
+        // Folder A's saved correction claims session 812, which Folder B would also auto-match (or claim).
+        let mut corr_a = HashMap::new();
+        corr_a.insert(PathBuf::from("/m/a Project/a.als"), SetTarget::Session(812));
+        let mut corr_b = HashMap::new();
+        corr_b.insert(PathBuf::from("/m/b Project/b.als"), SetTarget::Session(812));
+
+        let asked = vec![
+            asked_folder(
+                "/m/a Project",
+                vec![checked_set("s1", "/m/a Project/a.als")],
+                Vec::new(),
+                corr_a,
+            ),
+            asked_folder(
+                "/m/b Project",
+                vec![checked_set("s2", "/m/b Project/b.als")],
+                Vec::new(),
+                corr_b,
+            ),
+        ];
+
+        let assigned = assign_targets(&asked, &[4, 4], &hubs);
+        let session_claims: Vec<i64> = assigned
+            .iter()
+            .flat_map(|item| item.targets.iter())
+            .filter_map(|(_, target)| match target {
+                SetTarget::Session(id) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(session_claims, [812]);
+        assert_eq!(assigned[0].targets[0].1, SetTarget::Session(812));
+        assert_ne!(assigned[1].targets[0].1, SetTarget::Session(812));
+    }
+
+    #[test]
+    fn multi_project_objects_deduplicate_shared_hashes_across_projects() {
+        let shared = obj(b"shared");
+        let only_a = obj(b"only-a");
+        let only_b = obj(b"only-b");
+        let asked = vec![
+            asked_folder(
+                "/m/a Project",
+                Vec::new(),
+                vec![(only_a, 100), (shared, 200)],
+                HashMap::new(),
+            ),
+            asked_folder(
+                "/m/b Project",
+                Vec::new(),
+                vec![(shared, 200), (only_b, 300)],
+                HashMap::new(),
+            ),
+        ];
+        let assigned = vec![
+            Assigned {
+                folder: PathBuf::from("/m/a Project"),
+                project: 4,
+                targets: Vec::new(),
+            },
+            Assigned {
+                folder: PathBuf::from("/m/b Project"),
+                project: 9,
+                targets: Vec::new(),
+            },
+        ];
+
+        let grouped = objects_by_project(&asked, &assigned, false);
+        assert_eq!(
+            grouped,
+            vec![
+                (4, vec![(only_a, 100), (shared, 200)]),
+                (9, vec![(only_b, 300)]),
+            ]
+        );
+    }
+
+    #[test]
+    fn multi_project_storage_compares_each_project_against_its_own_remaining_quota() {
+        // Two projects each fitting their own 600-byte cap must not fail just because 400 + 400 > min(600, 600).
+        let both_fit = vec![
+            ProjectStorage {
+                bytes: 400,
+                remaining: Some(600),
+            },
+            ProjectStorage {
+                bytes: 400,
+                remaining: Some(600),
+            },
+        ];
+        assert_eq!(
+            summarise_storage(&both_fit),
+            view::Storage {
+                bytes: 800,
+                remaining: Some(1200),
+            }
+        );
+
+        // One project exceeding its own cap surfaces that deficit even when the other has plenty of room.
+        let one_over = vec![
+            ProjectStorage {
+                bytes: 100,
+                remaining: Some(1000),
+            },
+            ProjectStorage {
+                bytes: 600,
+                remaining: Some(500),
+            },
+        ];
+        assert_eq!(
+            summarise_storage(&one_over),
+            view::Storage {
+                bytes: 600,
+                remaining: Some(500),
+            }
+        );
+    }
 }

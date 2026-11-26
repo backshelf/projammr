@@ -263,6 +263,22 @@ describe("Settings", () => {
         ])
       );
     });
+
+    test("surfaces why the folder picker failed", async () => {
+      mockApp(base, (command) => {
+        if (command === "plugin:dialog|open") {
+          throw "The folder picker couldn't open.";
+        }
+      });
+      show(settingsOf());
+      const [add] = screen.getAllByRole("button", { name: "Add folder…" });
+
+      fireEvent.click(add!);
+
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "The folder picker couldn't open."
+      );
+    });
   });
 
   describe("what the render watcher skips and remembers", () => {

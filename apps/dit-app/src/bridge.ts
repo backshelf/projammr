@@ -63,14 +63,26 @@ export function onFocus(handler: () => void): Promise<UnlistenFn> {
   return listen(TauriEvent.WINDOW_FOCUS, () => handler());
 }
 
+/** Holds the panel open while the native folder picker steals key focus, then restores focus when it closes. */
+async function withPanelHeld<T>(work: () => Promise<T>): Promise<T> {
+  await call("set_picking_folder", { picking: true });
+  try {
+    return await work();
+  } finally {
+    await call("set_picking_folder", { picking: false }).catch(() => {});
+  }
+}
+
 /** Asks the person for folders in the system's picker; none when they cancel. */
 export async function pickFolders(): Promise<string[]> {
-  const picked = await open({ directory: true, multiple: true });
+  const picked = await withPanelHeld(() =>
+    open({ directory: true, multiple: true })
+  );
   return picked ?? [];
 }
 
 /** Asks the person for one folder in the system's picker; null when they cancel. */
 export async function pickFolder(): Promise<string | null> {
-  const picked = await open({ directory: true });
+  const picked = await withPanelHeld(() => open({ directory: true }));
   return picked ?? null;
 }

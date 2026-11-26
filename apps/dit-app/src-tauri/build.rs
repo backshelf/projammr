@@ -17,7 +17,25 @@ fn main() {
     fs::create_dir_all(&binaries).unwrap();
     install(&built, &binaries.join(format!("dit-{target}")));
 
-    for watched in ["crates", "Cargo.toml", "Cargo.lock"] {
+    // Watch only the crates `dit-cli` depends on so edits to unrelated workspace crates (`dit-wasm`) or test fixtures
+    // never retrigger the nested cli build.
+    for watched in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "crates/dit-cli/Cargo.toml",
+        "crates/dit-cli/src",
+        "crates/dit-core/Cargo.toml",
+        "crates/dit-core/src",
+        "crates/dit-daemon/Cargo.toml",
+        "crates/dit-daemon/src",
+        "crates/dit-daw-ableton/Cargo.toml",
+        "crates/dit-daw-ableton/src",
+        "crates/dit-daw-ableton/script",
+        "crates/dit-daws/Cargo.toml",
+        "crates/dit-daws/src",
+        "crates/dit-ipc/Cargo.toml",
+        "crates/dit-ipc/src",
+    ] {
         println!("cargo:rerun-if-changed={}", dit.join(watched).display());
     }
     tauri_build::build();

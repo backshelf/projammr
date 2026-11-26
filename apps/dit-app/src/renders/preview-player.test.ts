@@ -167,21 +167,34 @@ describe("RenderPreviewPlayer", () => {
     expect(player.getSnapshot().playing).toBe(false);
   });
 
-  it("gives up playing a file the app would not allow", async () => {
+  it("gives up playing a file the app would not allow and retries cleanly on the next play", async () => {
     const audio = new FakeAudio();
+    let attempts = 0;
     const player = new RenderPreviewPlayer(
-      async () => {
-        throw "That file is outside the folders dit reads.";
+      async (path) => {
+        attempts += 1;
+        if (attempts === 1) throw "That file is outside the folders dit reads.";
+        return urlOf(path);
       },
       () => audio
     );
 
-    await player.play("/etc/passwd");
+    await player.play("/music/retry.wav");
 
     expect(audio.src).toBe("");
     expect(player.getSnapshot()).toMatchObject({
-      filePath: "/etc/passwd",
+      filePath: null,
       playing: false,
+    });
+
+    await player.play("/music/retry.wav");
+
+    expect(attempts).toBe(2);
+    expect(audio.src).toBe(urlOf("/music/retry.wav"));
+    expect(audio.paused).toBe(false);
+    expect(player.getSnapshot()).toMatchObject({
+      filePath: "/music/retry.wav",
+      playing: true,
     });
   });
 

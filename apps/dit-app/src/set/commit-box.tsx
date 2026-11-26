@@ -10,7 +10,6 @@ import { ErrorLine } from "../error-line";
 import { useFocusTarget } from "../focus-target";
 import type { Clause } from "../ipc";
 import { useCommand } from "../use-command";
-import { clearDraft, loadDraft, saveDraft } from "./draft";
 import {
   following,
   isOn,
@@ -21,22 +20,18 @@ import {
   type Composer,
 } from "./suggestion";
 
-/** Where the box starts: the draft kept for this set, else what the app kept, else the suggestion whole. */
-function startingBox(
-  set: string,
-  clauses: readonly Clause[],
-  appDraft: string
-): Composer {
-  return (
-    loadDraft(set) ?? (appDraft === "" ? untouched(clauses) : written(appDraft))
-  );
+/** Where the box starts: the draft the app holds for this set, else the suggestion whole. */
+function startingBox(clauses: readonly Clause[], appDraft: string): Composer {
+  return appDraft === "" ? untouched(clauses) : written(appDraft);
 }
 
 /**
  * The commit box: the message in a textarea, the suggestion's clauses as chips that drop their words from it and put
  * them back, the line that says what a commit is for, the refusal when the commit is turned down, and the button
- * (`⌘↩` does the same). Key it by the set: its state is one set's draft. Until the person types, the text is the
- * suggestion and follows it as saves arrive; once they have, the text is theirs.
+ * (`⌘↩` does the same). Key it by the set and its head commit: its draft belongs to the app (`set_draft` /
+ * `Snapshot.draft`), so screen changes keep what was written and any commit (from the panel or the cli) clears it.
+ * Until the person types, the text is the suggestion and follows it as saves arrive; once they have, the text is
+ * theirs.
  */
 export function CommitBox({
   set,
@@ -47,7 +42,7 @@ export function CommitBox({
   /** The set file's path, which names the draft and the commit. */
   set: string;
   clauses: readonly Clause[];
-  /** The text the app holds for the set: where the box opens when this panel kept no draft of its own. */
+  /** The text the app holds for the set; empty when there is no draft. */
   appDraft: string;
   firstCommit: boolean;
 }): JSX.Element {
@@ -55,20 +50,18 @@ export function CommitBox({
   const errorId = useId();
   const focusTarget = useFocusTarget();
   const { run, pending, error } = useCommand();
-  const [kept, setKept] = useState(() => startingBox(set, clauses, appDraft));
+  const [kept, setKept] = useState(() => startingBox(clauses, appDraft));
   const box = following(kept, clauses);
 
   function change(next: Composer): void {
     setKept(next);
-    saveDraft(set, next);
-    void call("set_draft", { set, message: next.text });
+    const persisted = next.edited || next.dropped.length > 0 ? next.text : "";
+    void call("set_draft", { set, message: persisted });
   }
 
   async function commit(): Promise<void> {
     if (pending) return;
-    if (await run(() => call("commit", { set, message: box.text }))) {
-      clearDraft(set);
-    }
+    await run(() => call("commit", { set, message: box.text }));
   }
 
   useCommitShortcut(() => void commit());

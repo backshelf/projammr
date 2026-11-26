@@ -127,18 +127,22 @@ describe("SkylineReadout", () => {
 
     fireEvent.pointerOver(bars()[2]!);
     expect(spoken()).toBe("Pad \u00b7 added");
+    expect(group.hasAttribute("data-hot")).toBe(true);
 
     fireEvent.pointerLeave(group);
     expect(spoken()).toBe("2 tracks changed since the last commit");
+    expect(group.hasAttribute("data-hot")).toBe(false);
     expect(bars().some((bar) => bar.hasAttribute("data-hot"))).toBe(false);
   });
 
   test("lets go of the track when focus leaves", () => {
     const group = showReadout();
     act(() => group.focus());
+    expect(group.hasAttribute("data-hot")).toBe(true);
     act(() => group.blur());
 
     expect(spoken()).toBe("2 tracks changed since the last commit");
+    expect(group.hasAttribute("data-hot")).toBe(false);
   });
 
   test("under reduced motion the fade goes and the lit tracks stay lit", () => {

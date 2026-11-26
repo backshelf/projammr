@@ -4,7 +4,12 @@ import { SectionHead } from "@workspace/ui/components/layout/section-head";
 import { Switch } from "@workspace/ui/components/switch";
 
 import { call } from "../bridge";
-import type { Settings as SettingsValues, Snapshot } from "../ipc";
+import type {
+  SettingChange,
+  Settings as SettingsValues,
+  Snapshot,
+  WritableSettingKey,
+} from "../ipc";
 import { PanelHead } from "../panel-head";
 import { PanelInput } from "../panel-input";
 import { ForgetList } from "../settings/forget-list";
@@ -17,7 +22,7 @@ import { useCommand } from "../use-command";
  * Sends one setting to the app and keeps the line for why it was refused. The control shows what the app says the
  * setting is, so a refused change leaves the control where it was.
  */
-function useSetting<K extends keyof SettingsValues>(
+function useSetting<K extends WritableSettingKey>(
   key: K
 ): {
   set: (value: SettingsValues[K]) => Promise<boolean>;
@@ -26,7 +31,7 @@ function useSetting<K extends keyof SettingsValues>(
   const { run, error } = useCommand();
   const set = useCallback(
     (value: SettingsValues[K]) =>
-      run(() => call("set_setting", { key, value })),
+      run(() => call("set_setting", { key, value } as SettingChange)),
     [run, key]
   );
   return { set, error };
@@ -265,14 +270,24 @@ function FoldersSetting({
 }): JSX.Element {
   const id = useId();
   const { set, error } = useSetting(settingKey);
+  const [pickError, setPickError] = useState<string | null>(null);
 
   return (
-    <SettingRow id={id} label={label} description={description} error={error}>
+    <SettingRow
+      id={id}
+      label={label}
+      description={description}
+      error={pickError ?? error}
+    >
       <PathList
         id={`${id}-add`}
         labelledBy={`${id}-label`}
         paths={paths}
-        onChange={(next) => void set(next)}
+        onChange={(next) => {
+          setPickError(null);
+          void set(next);
+        }}
+        onError={setPickError}
       />
     </SettingRow>
   );

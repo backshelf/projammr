@@ -80,12 +80,12 @@ export function Adopt({ offer }: { offer: AdoptOffer }): JSX.Element {
       <div className="flex items-center gap-2">
         <Button
           size="lg"
-          disabled={pending || project === ""}
+          disabled={pending || (items.length > 0 && project === "")}
           onClick={() =>
             void run(() =>
               call("adopt", {
                 folder: offer.folder,
-                projectId: Number(project),
+                projectId: project === "" ? null : Number(project),
               })
             )
           }

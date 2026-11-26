@@ -149,9 +149,11 @@ released one share their Keychain and Screen Recording grants. Steps for you to 
   is always below it.
 - The panel's content is at least `min-h-56` tall so a menu or the project picker opens inside the window, which is
   sized to the content and cannot draw a popup outside itself.
-- The set screen's `SetMasthead` pulls itself to the panel's edges with `-mx-4 -mt-4`, which assumes the panel's `p-4`.
+- The set screen's `SetMasthead` pulls itself to the panel's edges with `-mx-4` (and `-mt-4` only when no notices or
+  reported errors sit above it), which assumes the panel's `p-4`.
 - `⌘↩` is claimed, not listened for: the panel's one keymap treats a matched key as handled, so the commit box claims
   it through `commit-shortcut.ts` and the panel runs the claim. `Chrome` in tests installs the same keymap.
-- The draft lives in `localStorage` (`dit-app:commit-drafts:v1`); a test that mounts the commit box clears it first.
+- The commit draft lives in Rust (`Reducer.drafts` / `Snapshot.draft`, updated via `set_draft`), not in `localStorage`,
+  so external CLI commits clear any stale draft.
 - `eslint`'s design-token rule bans `motion-reduce:` in components; the skyline readout's reduced-motion rule is in
   `app.css` on `data-reduced-motion`, which the component sets from `useReducedMotion`.

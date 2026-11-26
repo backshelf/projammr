@@ -4,8 +4,10 @@ import fixture from "../fixtures/snapshot.json";
 import {
   artUrl,
   type Clause,
+  type Commands,
   type RenderState,
   type RestoreState,
+  type SettingChange,
   type Snapshot,
   type StructureTrack,
   type UpdateState,
@@ -45,6 +47,24 @@ type Known<F, S> = F extends readonly unknown[]
 // string union are held to `string`: their values are asserted below.
 const wide = fixture satisfies Widen<Snapshot>;
 wide satisfies Known<typeof fixture, Widen<Snapshot>>;
+
+// set_setting accepts only writable keys paired with their exact value type.
+const _validSettings: Commands["set_setting"]["args"][] = [
+  { key: "shortcut", value: "Alt+Shift+D" },
+  { key: "shortcut", value: null },
+  { key: "maxUploadMb", value: 25 },
+  { key: "watchRoots", value: ["/Users/me/Music"] },
+  { key: "excluded", value: [] },
+  { key: "autostart", value: true },
+  { key: "machineName", value: "Studio" },
+];
+void _validSettings;
+// @ts-expect-error cliInstalled is read-only
+const _readOnlySetting: SettingChange = { key: "cliInstalled", value: null };
+// @ts-expect-error maxUploadMb expects a number, not a string
+const _wrongValueSetting: SettingChange = { key: "maxUploadMb", value: "25" };
+void _readOnlySetting;
+void _wrongValueSetting;
 
 const AUTH: Snapshot["auth"]["state"][] = [
   "signed-out",

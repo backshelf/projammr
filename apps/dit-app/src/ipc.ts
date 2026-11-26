@@ -433,6 +433,20 @@ export type Snapshot = {
   backfill: BackfillStanding | null;
 };
 
+/** The settings the panel may write through `set_setting`; the rest of {@link Settings} are read-only host facts. */
+export type WritableSettingKey =
+  | "shortcut"
+  | "maxUploadMb"
+  | "watchRoots"
+  | "excluded"
+  | "autostart"
+  | "machineName";
+
+/** A typed `{ key, value }` pair for `set_setting`, tying each writable key to its own value type. */
+export type SettingChange = {
+  [K in WritableSettingKey]: { key: K; value: Settings[K] };
+}[WritableSettingKey];
+
 /** The commands the panel invokes, with their argument objects. Each answers `void` or rejects with a message. */
 export type Commands = {
   get_snapshot: { args: undefined; result: Snapshot };
@@ -464,7 +478,7 @@ export type Commands = {
   validate_branch_name: { args: { name: string }; result: void };
   forget_rejection: { args: { fingerprint: string }; result: void };
   forget_never_here: { args: { folder: string }; result: void };
-  set_setting: { args: { key: keyof Settings; value: unknown }; result: void };
+  set_setting: { args: SettingChange; result: void };
   install_script: { args: undefined; result: void };
   install_cli: { args: undefined; result: void };
   request_screen_recording: { args: undefined; result: void };
@@ -475,6 +489,8 @@ export type Commands = {
    * relaunches; `update` in the snapshot follows. Rejects in a build that has no update feed. */
   install_update: { args: undefined; result: void };
   hide_panel: { args: undefined; result: void };
+  /** Suppresses panel auto-hide while the native folder picker is open, and restores focus when it closes. */
+  set_picking_folder: { args: { picking: boolean }; result: void };
   quit: { args: undefined; result: void };
   resize_panel: { args: { height: number }; result: void };
   /** Lets the webview play this audio file (under a tracked repo or the home folder) through `convertFileSrc`. */

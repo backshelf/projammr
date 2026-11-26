@@ -28,11 +28,17 @@ enum Reaction {
     Add,
     /// Clicked the notification itself.
     Open,
+    /// Dismissed the notification: do nothing.
+    Ignore,
 }
 
 fn reaction(action_id: &str) -> Reaction {
     if action_id == ADD_ID || action_id == ADD_TITLE {
         Reaction::Add
+    } else if action_id.eq_ignore_ascii_case("dismiss")
+        || action_id == "com.apple.UNNotificationDismissActionIdentifier"
+    {
+        Reaction::Ignore
     } else {
         Reaction::Open
     }
@@ -68,6 +74,7 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
                 }
             }
             Reaction::Open => panel::show(&handle, None),
+            Reaction::Ignore => {}
         })
         .map_err(|error| error.to_string())
 }
@@ -100,10 +107,15 @@ mod tests {
     }
 
     #[test]
-    fn a_click_on_the_notification_or_anything_else_opens_the_panel() {
+    fn a_body_click_opens_the_panel_and_dismiss_does_nothing() {
         assert_eq!(reaction("tap"), Reaction::Open);
-        assert_eq!(reaction("dismiss"), Reaction::Open);
         assert_eq!(reaction(""), Reaction::Open);
+        assert_eq!(reaction("dismiss"), Reaction::Ignore);
+        assert_eq!(reaction("DISMISS"), Reaction::Ignore);
+        assert_eq!(
+            reaction("com.apple.UNNotificationDismissActionIdentifier"),
+            Reaction::Ignore
+        );
     }
 
     #[test]

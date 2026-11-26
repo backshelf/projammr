@@ -112,6 +112,13 @@ struct SetFacts {
     copies: usize,
 }
 
+/// One project's storage check answer: the new bytes its folders would add and its own room left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ProjectStorage {
+    bytes: u64,
+    remaining: Option<u64>,
+}
+
 struct Inner {
     step: view::Step,
     roots: Vec<PathBuf>,
@@ -132,6 +139,7 @@ struct Inner {
     projects: Vec<view::Project>,
     hubs: HashMap<i64, Hub>,
     storage: Option<view::Storage>,
+    project_storage: Vec<ProjectStorage>,
     hub_error: Option<String>,
     corrections: HashMap<PathBuf, Correction>,
     /// The run as the state file and the events say.
@@ -170,6 +178,7 @@ impl Inner {
             projects: Vec::new(),
             hubs: HashMap::new(),
             storage: None,
+            project_storage: Vec::new(),
             hub_error: None,
             corrections: HashMap::new(),
             run: None,
@@ -212,6 +221,8 @@ pub struct Backfill {
     checker: Mutex<Option<JoinHandle<()>>>,
     /// Held by the commands that take a step away (Next, Back, close, Start), one at a time.
     transition: Mutex<()>,
+    /// Serialises `set_project` hub reads so two concurrent folder project changes never overwrite each other.
+    project_lock: Mutex<()>,
 }
 
 impl Backfill {
@@ -235,6 +246,7 @@ impl Backfill {
             signals: Mutex::new(Some(signals)),
             checker: Mutex::new(None),
             transition: Mutex::new(()),
+            project_lock: Mutex::new(()),
         })
     }
 
@@ -317,10 +329,43 @@ impl Backfill {
         });
     }
 
-    /// The whole of what the window shows now.
+    /// The whole of what the window shows now. Any folder facts or set lists not yet cached are read from disk
+    /// outside the state lock so `view()` never holds `inner` across synchronous filesystem I/O.
     pub fn view(&self) -> View {
-        let mut inner = lock(&self.inner);
-        build::build(self, &mut inner)
+        loop {
+            let (missing_facts, missing_sets, find_epoch) = {
+                let inner = lock(&self.inner);
+                let missing_facts = build::missing_facts(&inner);
+                let missing_sets = build::missing_sets(&inner);
+                if missing_facts.is_empty() && missing_sets.is_none() {
+                    return build::build(&inner);
+                }
+                (missing_facts, missing_sets, inner.find_epoch)
+            };
+            let read_facts: Vec<(PathBuf, ProjectFacts)> = missing_facts
+                .into_iter()
+                .map(|path| {
+                    let facts = self.read_project_facts(&path);
+                    (path, facts)
+                })
+                .collect();
+            let read_sets = missing_sets.map(|path| {
+                let sets = self.read_set_lists(&path);
+                (path, sets)
+            });
+            let mut inner = lock(&self.inner);
+            for (path, facts) in read_facts {
+                inner.facts.entry(path).or_insert(facts);
+            }
+            if let Some((path, sets)) = read_sets
+                && inner.find_epoch == find_epoch
+            {
+                inner.set_lists.entry(path).or_insert(sets);
+            }
+            if build::missing_facts(&inner).is_empty() && build::missing_sets(&inner).is_none() {
+                return build::build(&inner);
+            }
+        }
     }
 
     /// The window was closed, by the red button or `backfill_close`. On Find and Check that leaves nothing behind;
@@ -406,6 +451,7 @@ impl Backfill {
         inner.hubs.clear();
         inner.projects.clear();
         inner.storage = None;
+        inner.project_storage.clear();
         inner.hub_error = None;
         std::mem::take(&mut inner.entries)
             .into_iter()

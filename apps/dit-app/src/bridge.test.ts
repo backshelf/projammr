@@ -3,7 +3,7 @@ import { emit } from "@tauri-apps/api/event";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 
 import fixture from "../fixtures/snapshot.json";
-import { call, onState } from "./bridge";
+import { call, onState, pickFolder, pickFolders } from "./bridge";
 import type { Snapshot } from "./ipc";
 import { STATE_EVENT } from "./ipc";
 
@@ -57,5 +57,37 @@ describe("onState", () => {
     await emit(STATE_EVENT, { ...snapshot, barTitle: "later" });
 
     expect(got).toEqual([snapshot]);
+  });
+});
+
+describe("folder pickers", () => {
+  test("hold the panel open around the dialog and release even when it fails", async () => {
+    const seen: [string, unknown][] = [];
+    mockIPC((command, payload) => {
+      seen.push([command, payload]);
+      if (command === "plugin:dialog|open") return "/Users/me/Music";
+      return undefined;
+    });
+
+    expect(await pickFolder()).toBe("/Users/me/Music");
+    expect(seen).toEqual([
+      ["set_picking_folder", { picking: true }],
+      ["plugin:dialog|open", { options: { directory: true } }],
+      ["set_picking_folder", { picking: false }],
+    ]);
+
+    seen.length = 0;
+    mockIPC((command, payload) => {
+      seen.push([command, payload]);
+      if (command === "plugin:dialog|open") throw "dialog failed";
+      return undefined;
+    });
+
+    await expect(pickFolders()).rejects.toBe("dialog failed");
+    expect(seen).toEqual([
+      ["set_picking_folder", { picking: true }],
+      ["plugin:dialog|open", { options: { directory: true, multiple: true } }],
+      ["set_picking_folder", { picking: false }],
+    ]);
   });
 });

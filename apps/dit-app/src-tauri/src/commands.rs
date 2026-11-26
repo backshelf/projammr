@@ -124,6 +124,13 @@ pub fn hide_panel(app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn set_picking_folder(app: AppHandle, window: tauri::WebviewWindow, picking: bool) {
+    if window.label() == panel::LABEL {
+        panel::set_picking_folder(&app, picking);
+    }
+}
+
+#[tauri::command]
 pub fn resize_panel(app: AppHandle, height: f64) {
     panel::resize(&app, height);
 }
@@ -246,12 +253,6 @@ pub fn get_backfill(core: Shared) -> View {
 #[tauri::command(async)]
 pub fn backfill_roots(core: Shared, roots: Vec<String>) -> Answer {
     core.backfill.set_roots(roots)
-}
-
-/// Searches the roots again.
-#[tauri::command(async)]
-pub fn backfill_find(core: Shared) -> Answer {
-    core.backfill.find()
 }
 
 /// Shows the sets of `folder` on the window's right.

@@ -20,11 +20,14 @@ export function SetMasthead({
   open,
   hasArtwork,
   timeSinceCommit,
+  flushTop = true,
 }: {
   open: OpenSet;
   hasArtwork: boolean;
   /** Seconds in the set since its last commit; null when none is counted. */
   timeSinceCommit: number | null;
+  /** Pull into the panel's top padding when nothing (notices or reported errors) sits above the masthead. */
+  flushTop?: boolean;
 }): JSX.Element {
   const format = useFormat();
   const { run, error } = useCommand();
@@ -37,7 +40,10 @@ export function SetMasthead({
   return (
     <section
       aria-label="The open set"
-      className="relative isolate -mx-4 -mt-4 px-4 pt-4"
+      className={cn(
+        "relative isolate -mx-4 px-4",
+        flushTop ? "-mt-4 pt-4" : hasArtwork && "pt-4"
+      )}
     >
       {hasArtwork && (
         <div

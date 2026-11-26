@@ -68,6 +68,7 @@ export function SkylineReadout({
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
+    root.removeAttribute("data-hot");
     for (const element of root.querySelectorAll("[data-hot]")) {
       element.removeAttribute("data-hot");
     }

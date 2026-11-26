@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
   act,
   cleanup,
@@ -11,7 +11,6 @@ import {
 import { emit, TauriEvent } from "@tauri-apps/api/event";
 
 import type { OpenSet, Snapshot } from "../ipc";
-import { DRAFTS_KEY } from "../set/draft";
 import {
   argsOf,
   base,
@@ -23,11 +22,7 @@ import {
 import { Chrome } from "../test-chrome";
 import { SetScreen } from "./set";
 
-beforeEach(() => localStorage.clear());
-afterEach(async () => {
-  await teardown();
-  localStorage.clear();
-});
+afterEach(teardown);
 
 /** The fixture's set with its quiet defaults: no draft kept in the app, no live tracks, no proposal. */
 function quiet(changes: Partial<Snapshot> = {}): Snapshot {
@@ -190,14 +185,19 @@ describe("the commit box", () => {
     expect(message().value).toBe("mine");
   });
 
-  test("the draft survives a remount, the chips as the person left them", () => {
+  test("the draft survives a remount through the app's snapshot, the chips reflecting its text", async () => {
     const snapshot = quiet();
-    mockApp(snapshot);
+    const calls = mockApp(snapshot);
     const { unmount } = showSet(snapshot);
     fireEvent.click(chip("tempo 120 \u2192 124"));
+    await waitFor(() =>
+      expect(argsOf(calls, "set_draft")).toEqual([
+        { set: snapshot.open?.path, message: "+1 track, +EQ Eight on Bass" },
+      ])
+    );
     unmount();
 
-    showSet(snapshot);
+    showSet(quiet({ draft: "+1 track, +EQ Eight on Bass" }));
     expect(message().value).toBe("+1 track, +EQ Eight on Bass");
     expect(chip("tempo 120 \u2192 124").getAttribute("aria-pressed")).toBe(
       "false"
@@ -205,8 +205,42 @@ describe("the commit box", () => {
 
     fireEvent.change(message(), { target: { value: "half a thought" } });
     cleanup();
-    showSet(snapshot);
+    showSet(quiet({ draft: "half a thought" }));
     expect(message().value).toBe("half a thought");
+  });
+
+  test("an external commit clears the draft and never resurrects a stale one on later saves", () => {
+    const first = quiet();
+    mockApp(first);
+    const { rerender } = showSet(first);
+
+    fireEvent.change(message(), { target: { value: "stale draft" } });
+    expect(message().value).toBe("stale draft");
+
+    const committed = quiet({
+      saves: [],
+      draft: "",
+      lastCommit: { message: "cli commit", at: 1760000000000, push: "pending" },
+    });
+    rerender(
+      <Chrome nav="home">
+        <SetScreen snapshot={committed} open={committed.open as OpenSet} />
+      </Chrome>
+    );
+    expect(screen.getByText("Nothing to commit")).toBeTruthy();
+
+    const afterSave = quiet({
+      draft: "",
+      lastCommit: { message: "cli commit", at: 1760000000000, push: "pushed" },
+    });
+    rerender(
+      <Chrome nav="home">
+        <SetScreen snapshot={afterSave} open={afterSave.open as OpenSet} />
+      </Chrome>
+    );
+    expect(message().value).toBe(
+      "+1 track, +EQ Eight on Bass, tempo 120 \u2192 124"
+    );
   });
 
   test("the draft is kept per set", () => {
@@ -254,7 +288,7 @@ describe("the commit box", () => {
     );
   });
 
-  test("Commit sends the message, and the draft is let go", async () => {
+  test("Commit sends the message", async () => {
     const snapshot = quiet();
     const calls = mockApp(snapshot);
     showSet(snapshot);
@@ -266,9 +300,6 @@ describe("the commit box", () => {
       expect(argsOf(calls, "commit")).toEqual([
         { set: snapshot.open?.path, message: "added strings" },
       ])
-    );
-    await waitFor(() =>
-      expect(JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? "{}")).toEqual({})
     );
   });
 
@@ -313,7 +344,7 @@ describe("the commit box", () => {
     expect(refusal.textContent).toBe("Nothing to commit since added strings.");
     expect(refusal.className).toContain("text-danger");
     expect(message().getAttribute("aria-invalid")).toBe("true");
-    expect(localStorage.getItem(DRAFTS_KEY)).toContain("again");
+    expect(message().value).toBe("again");
   });
 
   test("takes focus when the panel is shown", async () => {

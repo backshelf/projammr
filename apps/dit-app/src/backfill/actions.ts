@@ -47,14 +47,13 @@ export function useBackfillActions(
     }
 
     return {
-      async chooseRoots(roots) {
-        const picked = await pickFolders();
-        const added = picked.filter((path) => !roots.includes(path));
-        if (added.length === 0) return;
-        await send(() =>
-          callBackfill("backfill_roots", { roots: [...roots, ...added] })
-        );
-      },
+      chooseRoots: (roots) =>
+        send(async () => {
+          const picked = await pickFolders();
+          const added = picked.filter((path) => !roots.includes(path));
+          if (added.length === 0) return;
+          await callBackfill("backfill_roots", { roots: [...roots, ...added] });
+        }),
       removeRoot: (roots, root) =>
         send(() =>
           callBackfill("backfill_roots", {

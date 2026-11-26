@@ -8,10 +8,13 @@
 // `panel_event!` writes the `-> ()` of each handler into code of its own.
 #![allow(clippy::unused_unit)]
 
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, Position, Rect, Size, WebviewUrl};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Position, Rect, Size, WebviewUrl,
+};
 use tauri_nspanel::{
     CollectionBehavior, ManagerExt, PanelBuilder, PanelLevel, StyleMask, tauri_panel,
 };
@@ -48,6 +51,33 @@ pub struct PanelState {
     /// Where the bar item was when last seen, which is where the panel opens from the shortcut or the socket.
     anchor: Mutex<Option<Rect>>,
     hidden_at: Mutex<Option<Instant>>,
+    /// Active native folder pickers opened from the panel; auto-hide is suppressed while above zero.
+    picking_folder: AtomicUsize,
+    /// Whether the panel should regain key focus once the outermost folder picker closes.
+    restore_after_pick: AtomicBool,
+}
+
+impl PanelState {
+    fn is_picking(&self) -> bool {
+        self.picking_folder.load(Ordering::SeqCst) > 0
+    }
+
+    fn begin_picking(&self, restore: bool) {
+        if self.picking_folder.fetch_add(1, Ordering::SeqCst) == 0 {
+            self.restore_after_pick.store(restore, Ordering::SeqCst);
+        }
+    }
+
+    /// Ends one folder-picker hold; returns `true` when the last hold ends and the panel should take key focus again.
+    fn end_picking(&self) -> bool {
+        let previous = self
+            .picking_folder
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                Some(count.saturating_sub(1))
+            })
+            .unwrap_or(0);
+        previous == 1 && self.restore_after_pick.swap(false, Ordering::SeqCst)
+    }
 }
 
 fn state(app: &AppHandle) -> tauri::State<'_, PanelState> {
@@ -81,9 +111,34 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 
     let handler = DitPanelEvents::new();
     let handle = app.clone();
-    handler.window_did_resign_key(move |_| hide_here(&handle));
+    handler.window_did_resign_key(move |_| {
+        if !state(&handle).is_picking() {
+            hide_here(&handle);
+        }
+    });
     panel.set_event_handler(Some(handler.as_ref()));
     Ok(())
+}
+
+/// Emits `tauri://focus` to the panel webview so `useFocusOnShow` focuses the claimed field even though the custom
+/// `NSPanel` delegate overrides Tao's default focus forwarding.
+fn emit_focus(app: &AppHandle) {
+    let _ = app.emit_to(LABEL, "tauri://focus", ());
+}
+
+/// Holds the panel open while a native folder picker steals key focus, then restores key focus once the picker closes.
+pub fn set_picking_folder(app: &AppHandle, picking: bool) {
+    let held = state(app);
+    if picking {
+        held.begin_picking(true);
+    } else if held.end_picking() {
+        on_main(app, |app| {
+            if let Ok(panel) = app.get_webview_panel(LABEL) {
+                panel.show_and_make_key();
+                emit_focus(app);
+            }
+        });
+    }
 }
 
 /// Runs `f` on the main thread, the only one AppKit lets touch a panel.
@@ -116,6 +171,7 @@ fn show_here(app: &AppHandle, anchor: Option<Rect>) {
     }
     place_under(app, anchor);
     panel.show_and_make_key();
+    emit_focus(app);
 }
 
 pub fn hide(app: &AppHandle) {
@@ -159,7 +215,8 @@ fn toggle_here(app: &AppHandle, anchor: Option<Rect>) {
     }
 }
 
-/// Sets the panel's height, keeping its top edge where it is.
+/// Sets the panel's height, keeping its top edge where it is and clamping to the monitor's working area so a tall
+/// panel never clips behind the Dock.
 pub fn resize(app: &AppHandle, height: f64) {
     let Some(window) = app.get_webview_window(LABEL) else {
         return;
@@ -172,12 +229,32 @@ pub fn resize(app: &AppHandle, height: f64) {
         .current_monitor()
         .ok()
         .flatten()
-        .map_or(f64::MAX, |monitor| monitor.size().height as f64 / scale);
+        .map_or(f64::MAX, |monitor| {
+            let work = monitor.work_area();
+            let area = Area {
+                x: f64::from(work.position.x),
+                y: f64::from(work.position.y),
+                w: f64::from(work.size.width),
+                h: f64::from(work.size.height),
+            };
+            max_height(area, top.map(|position| f64::from(position.y)), scale)
+        });
     let height = height.clamp(MIN_HEIGHT, max.max(MIN_HEIGHT));
     let _ = window.set_size(LogicalSize::new(WIDTH, height));
     if let Some(top) = top {
         let _ = window.set_position(top);
     }
+}
+
+/// The tallest logical height the panel may take inside `work_area`, given its top edge `top_y` in physical pixels:
+/// never taller than the working area and never extending past its bottom edge (the Dock).
+fn max_height(work_area: Area, top_y: Option<f64>, scale: f64) -> f64 {
+    let bottom = work_area.y + work_area.h;
+    let available = match top_y {
+        Some(y) if y >= work_area.y && y < bottom => bottom - y,
+        _ => work_area.h,
+    };
+    (available / scale).max(MIN_HEIGHT)
 }
 
 fn physical(position: &Position, scale: f64) -> (f64, f64) {
@@ -344,5 +421,42 @@ mod tests {
         assert_eq!(y, 1964.0 - 1900.0 - 16.0);
         let (_, y) = place(Some(item(1400.0)), (800.0, 3000.0), SCREEN, 2.0);
         assert_eq!(y, 0.0);
+    }
+
+    #[test]
+    fn resize_clamps_to_the_monitors_working_area_above_the_dock() {
+        // 3024x1964 Retina display with a 48px menu bar and a 160px Dock at the bottom.
+        let work = Area {
+            x: 0.0,
+            y: 48.0,
+            w: 3024.0,
+            h: 1756.0,
+        };
+        assert_eq!(max_height(work, None, 2.0), 878.0);
+        // Panel opened 8px below the menu bar stops at the Dock edge rather than clipping behind it.
+        assert_eq!(max_height(work, Some(56.0), 2.0), 874.0);
+        // Tiny working area still respects MIN_HEIGHT.
+        let tiny = Area { h: 100.0, ..work };
+        assert_eq!(max_height(tiny, Some(56.0), 2.0), MIN_HEIGHT);
+    }
+
+    #[test]
+    fn picking_folder_suppresses_auto_hide_and_restores_once_on_close() {
+        let held = PanelState::default();
+        assert!(!held.is_picking());
+        assert!(
+            !held.end_picking(),
+            "ending without a start never underflows"
+        );
+
+        held.begin_picking(true);
+        assert!(held.is_picking());
+        held.begin_picking(false);
+        assert!(held.is_picking());
+        assert!(!held.end_picking(), "inner pick closing keeps the hold");
+        assert!(held.is_picking());
+        assert!(held.end_picking(), "outer pick closing restores focus");
+        assert!(!held.is_picking());
+        assert!(!held.end_picking());
     }
 }

@@ -59,12 +59,17 @@ function keyOf(code: string): string | null {
 /**
  * The shortcut a keydown stands for, null while it is only a modifier (or a key with no name here) and the person
  * is still reaching for the rest, and a refusal for a press that would fire while typing: a global shortcut needs
- * Ctrl, Alt or Super, and Shift alone is a capital letter.
+ * Ctrl, Alt or Super (F1 to F24 excepted), and Shift alone is a capital letter.
  */
 export function captureShortcut(press: PressLike): Capture | null {
   const key = keyOf(press.code);
   if (key === null) return null;
-  if (!press.ctrlKey && !press.altKey && !press.metaKey) {
+  if (
+    !press.ctrlKey &&
+    !press.altKey &&
+    !press.metaKey &&
+    !FUNCTION_KEY.test(key)
+  ) {
     return { refusal: NEEDS_A_MODIFIER };
   }
   const parts = [

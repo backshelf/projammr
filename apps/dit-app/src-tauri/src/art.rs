@@ -1,9 +1,10 @@
 //! The `dit-art` scheme: the panel's artwork, which lives on the hub behind the sign-in. The webview asks
 //! `dit-art://localhost/static/<asset path>?w=<width>`; Rust fetches `<instance>/static/<asset path>` with the bearer
-//! token, which never reaches the webview, and answers with the image. Nothing is cached here, and every failure is
-//! a bare 404.
+//! token, which never reaches the webview, and answers with the image. Fetched images are held in a bounded in-memory
+//! LRU cache (cleared on sign-out) so panel reopens do not re-fetch over TLS, and every failure is a bare 404.
 
-use std::sync::{Arc, LazyLock};
+use std::collections::VecDeque;
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use tauri::http::{Request, Response};
@@ -14,7 +15,63 @@ pub const SCHEME: &str = "dit-art";
 /// The largest artwork answer taken, in bytes.
 const MAX_BYTES: u64 = 8 * 1024 * 1024;
 
+/// How many fetched covers stay warm in memory; evicted least-recently-used and cleared on sign-out.
+const CACHE_CAPACITY: usize = 20;
+
 const TIMEOUT: Duration = Duration::from_secs(20);
+
+#[derive(Clone)]
+struct CachedImage {
+    body: Vec<u8>,
+    kind: String,
+}
+
+/// Bounded in-memory LRU cache keyed by `(origin, target)`.
+struct ArtCache {
+    capacity: usize,
+    entries: VecDeque<((String, String), CachedImage)>,
+}
+
+impl ArtCache {
+    fn new(capacity: usize) -> Self {
+        ArtCache {
+            capacity,
+            entries: VecDeque::with_capacity(capacity),
+        }
+    }
+
+    fn get(&mut self, key: &(String, String)) -> Option<CachedImage> {
+        let at = self.entries.iter().position(|(k, _)| k == key)?;
+        let (k, image) = self.entries.remove(at)?;
+        let hit = image.clone();
+        self.entries.push_back((k, image));
+        Some(hit)
+    }
+
+    fn insert(&mut self, key: (String, String), image: CachedImage) {
+        if self.capacity == 0 {
+            return;
+        }
+        if let Some(at) = self.entries.iter().position(|(k, _)| *k == key) {
+            self.entries.remove(at);
+        } else if self.entries.len() >= self.capacity {
+            self.entries.pop_front();
+        }
+        self.entries.push_back((key, image));
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+    }
+}
+
+static CACHE: LazyLock<Mutex<ArtCache>> =
+    LazyLock::new(|| Mutex::new(ArtCache::new(CACHE_CAPACITY)));
+
+/// Empties the in-memory artwork cache so a signed-out session never serves a previous account's covers.
+pub fn clear_cache() {
+    CACHE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
 
 /// The widths and encodings the hub serves are small numbers and short names, so the query may carry only these.
 const MAX_WIDTH_DIGITS: usize = 5;
@@ -139,6 +196,15 @@ pub fn respond(
     request: &Request<Vec<u8>>,
     credentials: impl FnOnce() -> Option<(String, String)>,
 ) -> Response<Vec<u8>> {
+    respond_with(request, credentials, &CACHE, fetch)
+}
+
+fn respond_with(
+    request: &Request<Vec<u8>>,
+    credentials: impl FnOnce() -> Option<(String, String)>,
+    cache: &Mutex<ArtCache>,
+    fetcher: impl FnOnce(&str, &str, &str) -> Option<(Vec<u8>, String)>,
+) -> Response<Vec<u8>> {
     let uri = request.uri();
     let Some(target) = hub_target(uri.path(), uri.query()) else {
         return not_found();
@@ -146,7 +212,25 @@ pub fn respond(
     let Some((origin, token)) = credentials() else {
         return not_found();
     };
-    match fetch(&origin, &token, &target) {
+    let key = (origin.clone(), target.clone());
+    let cached = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key);
+    let image = match cached {
+        Some(hit) => Some((hit.body, hit.kind)),
+        None => {
+            let fetched = fetcher(&origin, &token, &target);
+            if let Some((body, kind)) = &fetched {
+                cache.lock().unwrap_or_else(|e| e.into_inner()).insert(
+                    key,
+                    CachedImage {
+                        body: body.clone(),
+                        kind: kind.clone(),
+                    },
+                );
+            }
+            fetched
+        }
+    };
+    match image {
         Some((body, kind)) => Response::builder()
             .status(200)
             .header("Content-Type", kind)
@@ -290,5 +374,64 @@ mod tests {
         });
         assert_eq!(response.status(), 404);
         assert!(response.body().is_empty());
+    }
+
+    #[test]
+    fn fetched_artwork_is_served_from_the_lru_cache_until_evicted_or_cleared() {
+        let cache = Mutex::new(ArtCache::new(2));
+        let mut fetches = 0usize;
+        let creds = || Some(("https://hub.example".to_string(), "tok".to_string()));
+        let req = |path: &str| {
+            Request::builder()
+                .uri(format!("dit-art://localhost{path}"))
+                .body(Vec::new())
+                .unwrap()
+        };
+
+        let first = respond_with(&req("/static/a.png"), creds, &cache, |_, _, _| {
+            fetches += 1;
+            Some((b"img-a".to_vec(), "image/png".to_string()))
+        });
+        assert_eq!(first.status(), 200);
+        assert_eq!(first.body(), b"img-a");
+        assert_eq!(fetches, 1);
+
+        // Cache hit skips the fetcher.
+        let hit = respond_with(&req("/static/a.png"), creds, &cache, |_, _, _| {
+            fetches += 1;
+            Some((b"fresh".to_vec(), "image/png".to_string()))
+        });
+        assert_eq!(hit.body(), b"img-a");
+        assert_eq!(fetches, 1);
+
+        // Filling capacity and touching `a` promotes `a` so inserting `c` evicts `b`.
+        let _ = respond_with(&req("/static/b.png"), creds, &cache, |_, _, _| {
+            fetches += 1;
+            Some((b"img-b".to_vec(), "image/png".to_string()))
+        });
+        let _ = respond_with(&req("/static/a.png"), creds, &cache, |_, _, _| {
+            panic!("a should still be cached")
+        });
+        let _ = respond_with(&req("/static/c.png"), creds, &cache, |_, _, _| {
+            fetches += 1;
+            Some((b"img-c".to_vec(), "image/png".to_string()))
+        });
+        assert_eq!(fetches, 3);
+        let _ = respond_with(&req("/static/a.png"), creds, &cache, |_, _, _| {
+            panic!("a was promoted and must remain cached")
+        });
+        let _ = respond_with(&req("/static/b.png"), creds, &cache, |_, _, _| {
+            fetches += 1;
+            Some((b"img-b-2".to_vec(), "image/png".to_string()))
+        });
+        assert_eq!(fetches, 4, "b was least recently used and evicted");
+
+        // Clearing the cache forces the next request to re-fetch.
+        cache.lock().unwrap().clear();
+        let _ = respond_with(&req("/static/c.png"), creds, &cache, |_, _, _| {
+            fetches += 1;
+            Some((b"img-c-2".to_vec(), "image/png".to_string()))
+        });
+        assert_eq!(fetches, 5);
     }
 }

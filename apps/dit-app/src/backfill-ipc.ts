@@ -222,8 +222,6 @@ export type BackfillCommands = {
   /** Replaces the roots (the picker added one, a chip was removed) and searches again. Rejects for a path that is
    * not a folder. */
   backfill_roots: { args: { roots: string[] }; result: void };
-  /** Searches the current roots again, stopping a search in flight. */
-  backfill_find: { args: undefined; result: void };
   /** Shows the folder's sets on the right (a folder of `folders`). */
   backfill_choose: { args: { folder: string }; result: void };
   /** Next: reads the sets of the ticked folders into their `.dit/` and asks the hub for proposals and storage. Also
@@ -253,3 +251,391 @@ export type BackfillCommands = {
    * the red button. */
   backfill_close: { args: undefined; result: void };
 };
+
+const STEPS: readonly BackfillStep[] = ["find", "check", "bring-in", "done"];
+
+function fail(path: string, message: string): never {
+  throw new TypeError(`Invalid BackfillView at ${path}: ${message}`);
+}
+
+function asRecord(
+  value: unknown,
+  path: string,
+  expectedKeys: readonly string[]
+): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    fail(path, "expected object");
+  }
+  const record = value as Record<string, unknown>;
+  const actual = Object.keys(record).sort();
+  const expected = [...expectedKeys].sort();
+  if (
+    actual.length !== expected.length ||
+    actual.some((key, index) => key !== expected[index])
+  ) {
+    fail(
+      path,
+      `expected keys [${expected.join(", ")}], got [${actual.join(", ")}]`
+    );
+  }
+  return record;
+}
+
+function asString(value: unknown, path: string): string {
+  if (typeof value !== "string") fail(path, "expected string");
+  return value;
+}
+
+function asNullableString(value: unknown, path: string): string | null {
+  return value === null ? null : asString(value, path);
+}
+
+function asNumber(value: unknown, path: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    fail(path, "expected finite number");
+  }
+  return value;
+}
+
+function asNullableNumber(value: unknown, path: string): number | null {
+  return value === null ? null : asNumber(value, path);
+}
+
+function asBoolean(value: unknown, path: string): boolean {
+  if (typeof value !== "boolean") fail(path, "expected boolean");
+  return value;
+}
+
+function asArray<T>(
+  value: unknown,
+  path: string,
+  parseItem: (item: unknown, itemPath: string) => T
+): T[] {
+  if (!Array.isArray(value)) fail(path, "expected array");
+  return value.map((item, index) => parseItem(item, `${path}[${index}]`));
+}
+
+function parseFolderState(value: unknown, path: string): BackfillFolderState {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    fail(path, "expected object");
+  }
+  const raw = value as Record<string, unknown>;
+  const state = asString(raw.state, `${path}.state`);
+  switch (state) {
+    case "idle":
+    case "checked":
+    case "waiting":
+    case "waiting-for-hub":
+    case "done":
+    case "paused":
+      asRecord(value, path, ["state"]);
+      return { state };
+    case "reading": {
+      const record = asRecord(value, path, ["state", "read", "of"]);
+      return {
+        state,
+        read: asNumber(record.read, `${path}.read`),
+        of: asNumber(record.of, `${path}.of`),
+      };
+    }
+    case "committing": {
+      const record = asRecord(value, path, ["state", "done", "of"]);
+      return {
+        state,
+        done: asNumber(record.done, `${path}.done`),
+        of: asNumber(record.of, `${path}.of`),
+      };
+    }
+    case "uploading": {
+      const record = asRecord(value, path, ["state", "sent", "of"]);
+      return {
+        state,
+        sent: asNumber(record.sent, `${path}.sent`),
+        of: asNumber(record.of, `${path}.of`),
+      };
+    }
+    case "failed": {
+      const record = asRecord(value, path, ["state", "reason"]);
+      return { state, reason: asString(record.reason, `${path}.reason`) };
+    }
+    default:
+      fail(`${path}.state`, `unknown folder state ${JSON.stringify(state)}`);
+  }
+}
+
+function parseFolderDoubt(value: unknown, path: string): BackfillFolderDoubt {
+  const record = asRecord(value, path, [
+    "unreadable",
+    "unrecorded",
+    "syncedBy",
+  ]);
+  return {
+    unreadable: asNumber(record.unreadable, `${path}.unreadable`),
+    unrecorded: asNumber(record.unrecorded, `${path}.unrecorded`),
+    syncedBy: asNullableString(record.syncedBy, `${path}.syncedBy`),
+  };
+}
+
+function parseFolder(value: unknown, path: string): BackfillFolder {
+  const record = asRecord(value, path, [
+    "path",
+    "name",
+    "title",
+    "sets",
+    "bytes",
+    "newest",
+    "already",
+    "state",
+    "doubt",
+  ]);
+  return {
+    path: asString(record.path, `${path}.path`),
+    name: asString(record.name, `${path}.name`),
+    title: asString(record.title, `${path}.title`),
+    sets: asNumber(record.sets, `${path}.sets`),
+    bytes: asNumber(record.bytes, `${path}.bytes`),
+    newest: asNullableNumber(record.newest, `${path}.newest`),
+    already: asBoolean(record.already, `${path}.already`),
+    state: parseFolderState(record.state, `${path}.state`),
+    doubt:
+      record.doubt === null
+        ? null
+        : parseFolderDoubt(record.doubt, `${path}.doubt`),
+  };
+}
+
+function parseTarget(value: unknown, path: string): BackfillTarget {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    fail(path, "expected object");
+  }
+  const raw = value as Record<string, unknown>;
+  const kind = asString(raw.kind, `${path}.kind`);
+  switch (kind) {
+    case "session":
+    case "track": {
+      const record = asRecord(value, path, ["kind", "id"]);
+      return { kind, id: asNumber(record.id, `${path}.id`) };
+    }
+    case "new-track": {
+      const record = asRecord(value, path, ["kind", "name"]);
+      return { kind, name: asString(record.name, `${path}.name`) };
+    }
+    default:
+      fail(`${path}.kind`, `unknown target kind ${JSON.stringify(kind)}`);
+  }
+}
+
+function parseMatch(value: unknown, path: string): BackfillMatch {
+  const record = asRecord(value, path, [
+    "sessionId",
+    "name",
+    "trackId",
+    "trackTitle",
+  ]);
+  return {
+    sessionId: asNumber(record.sessionId, `${path}.sessionId`),
+    name: asString(record.name, `${path}.name`),
+    trackId: asNullableNumber(record.trackId, `${path}.trackId`),
+    trackTitle: asNullableString(record.trackTitle, `${path}.trackTitle`),
+  };
+}
+
+function parseSetDoubt(value: unknown, path: string): BackfillSetDoubt {
+  const record = asRecord(value, path, ["kind", "message"]);
+  const kind = asString(record.kind, `${path}.kind`);
+  if (kind !== "unreadable" && kind !== "unrecorded") {
+    fail(`${path}.kind`, `unknown set doubt kind ${JSON.stringify(kind)}`);
+  }
+  return {
+    kind,
+    message: asNullableString(record.message, `${path}.message`),
+  };
+}
+
+function parseSet(value: unknown, path: string): BackfillSet {
+  const record = asRecord(value, path, [
+    "file",
+    "name",
+    "setId",
+    "copies",
+    "saves",
+    "doubt",
+    "target",
+    "matched",
+  ]);
+  return {
+    file: asString(record.file, `${path}.file`),
+    name: asString(record.name, `${path}.name`),
+    setId: asNullableString(record.setId, `${path}.setId`),
+    copies: asNumber(record.copies, `${path}.copies`),
+    saves: asNullableNumber(record.saves, `${path}.saves`),
+    doubt:
+      record.doubt === null
+        ? null
+        : parseSetDoubt(record.doubt, `${path}.doubt`),
+    target:
+      record.target === null
+        ? null
+        : parseTarget(record.target, `${path}.target`),
+    matched:
+      record.matched === null
+        ? null
+        : parseMatch(record.matched, `${path}.matched`),
+  };
+}
+
+function parseTrack(value: unknown, path: string): BackfillTrack {
+  const record = asRecord(value, path, ["id", "title"]);
+  return {
+    id: asNumber(record.id, `${path}.id`),
+    title: asString(record.title, `${path}.title`),
+  };
+}
+
+function parseSession(value: unknown, path: string): BackfillSession {
+  const record = asRecord(value, path, [
+    "id",
+    "name",
+    "trackId",
+    "trackTitle",
+    "takenBy",
+  ]);
+  return {
+    id: asNumber(record.id, `${path}.id`),
+    name: asString(record.name, `${path}.name`),
+    trackId: asNullableNumber(record.trackId, `${path}.trackId`),
+    trackTitle: asNullableString(record.trackTitle, `${path}.trackTitle`),
+    takenBy: asNullableString(record.takenBy, `${path}.takenBy`),
+  };
+}
+
+function parseProject(value: unknown, path: string): BackfillProject {
+  const record = asRecord(value, path, ["id", "name"]);
+  return {
+    id: asNumber(record.id, `${path}.id`),
+    name: asString(record.name, `${path}.name`),
+  };
+}
+
+function parseChosen(value: unknown, path: string): BackfillChosen {
+  const record = asRecord(value, path, [
+    "folder",
+    "name",
+    "project",
+    "tracks",
+    "sessions",
+    "newTrack",
+    "sets",
+  ]);
+  return {
+    folder: asString(record.folder, `${path}.folder`),
+    name: asString(record.name, `${path}.name`),
+    project: asNullableNumber(record.project, `${path}.project`),
+    tracks: asArray(record.tracks, `${path}.tracks`, parseTrack),
+    sessions: asArray(record.sessions, `${path}.sessions`, parseSession),
+    newTrack: asString(record.newTrack, `${path}.newTrack`),
+    sets: asArray(record.sets, `${path}.sets`, parseSet),
+  };
+}
+
+function parseStorage(value: unknown, path: string): BackfillStorage {
+  const record = asRecord(value, path, ["bytes", "remaining"]);
+  return {
+    bytes: asNumber(record.bytes, `${path}.bytes`),
+    remaining: asNullableNumber(record.remaining, `${path}.remaining`),
+  };
+}
+
+function parseTotals(value: unknown, path: string): BackfillTotals {
+  const record = asRecord(value, path, ["firstSave", "saves", "sets", "bytes"]);
+  return {
+    firstSave: asNullableNumber(record.firstSave, `${path}.firstSave`),
+    saves: asNumber(record.saves, `${path}.saves`),
+    sets: asNumber(record.sets, `${path}.sets`),
+    bytes: asNumber(record.bytes, `${path}.bytes`),
+  };
+}
+
+function parseRun(value: unknown, path: string): BackfillRun {
+  const record = asRecord(value, path, ["running", "paused", "folders"]);
+  return {
+    running: asBoolean(record.running, `${path}.running`),
+    paused: asBoolean(record.paused, `${path}.paused`),
+    folders: asArray(record.folders, `${path}.folders`, (item, itemPath) => {
+      const folder = asRecord(item, itemPath, ["path", "state", "totals"]);
+      return {
+        path: asString(folder.path, `${itemPath}.path`),
+        state: parseFolderState(folder.state, `${itemPath}.state`),
+        totals:
+          folder.totals === null
+            ? null
+            : parseTotals(folder.totals, `${itemPath}.totals`),
+      };
+    }),
+  };
+}
+
+function parseSummary(value: unknown, path: string): BackfillSummary {
+  const record = asRecord(value, path, [
+    "firstSave",
+    "saves",
+    "sets",
+    "projects",
+  ]);
+  return {
+    firstSave: asNullableNumber(record.firstSave, `${path}.firstSave`),
+    saves: asNumber(record.saves, `${path}.saves`),
+    sets: asNumber(record.sets, `${path}.sets`),
+    projects: asNumber(record.projects, `${path}.projects`),
+  };
+}
+
+/**
+ * Validates `value` structurally at runtime against the {@link BackfillView} contract and returns it typed, throwing
+ * a `TypeError` naming the offending path on any missing key, extra key or wrong value shape.
+ */
+export function parseBackfillView(value: unknown): BackfillView {
+  const record = asRecord(value, "$", [
+    "step",
+    "host",
+    "roots",
+    "searching",
+    "folders",
+    "chosen",
+    "projects",
+    "storage",
+    "hubError",
+    "canStart",
+    "run",
+    "summary",
+    "sessionsPath",
+    "error",
+  ]);
+  const step = asString(record.step, "$.step");
+  if (!STEPS.includes(step as BackfillStep)) {
+    fail("$.step", `unknown step ${JSON.stringify(step)}`);
+  }
+  return {
+    step: step as BackfillStep,
+    host: asNullableString(record.host, "$.host"),
+    roots: asArray(record.roots, "$.roots", asString),
+    searching: asBoolean(record.searching, "$.searching"),
+    folders: asArray(record.folders, "$.folders", parseFolder),
+    chosen:
+      record.chosen === null ? null : parseChosen(record.chosen, "$.chosen"),
+    projects: asArray(record.projects, "$.projects", parseProject),
+    storage:
+      record.storage === null
+        ? null
+        : parseStorage(record.storage, "$.storage"),
+    hubError: asNullableString(record.hubError, "$.hubError"),
+    canStart: asBoolean(record.canStart, "$.canStart"),
+    run: record.run === null ? null : parseRun(record.run, "$.run"),
+    summary:
+      record.summary === null
+        ? null
+        : parseSummary(record.summary, "$.summary"),
+    sessionsPath: asNullableString(record.sessionsPath, "$.sessionsPath"),
+    error: asNullableString(record.error, "$.error"),
+  };
+}

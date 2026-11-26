@@ -57,6 +57,15 @@ describe("captureShortcut", () => {
     });
   });
 
+  test("accepts function keys F1 through F24 without Ctrl, Alt or Super", () => {
+    expect(captureShortcut(press("F1"))).toEqual({ accelerator: "F1" });
+    expect(captureShortcut(press("F5"))).toEqual({ accelerator: "F5" });
+    expect(captureShortcut(press("F24"))).toEqual({ accelerator: "F24" });
+    expect(captureShortcut(press("F6", { shiftKey: true }))).toEqual({
+      accelerator: "Shift+F6",
+    });
+  });
+
   test("waits while only a modifier, or a key with no name, is down", () => {
     expect(captureShortcut(press("AltLeft", { altKey: true }))).toBeNull();
     expect(captureShortcut(press("Numpad5", { altKey: true }))).toBeNull();

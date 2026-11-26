@@ -3,17 +3,18 @@ import { render, type RenderResult } from "@testing-library/react";
 import { mockIPC } from "@tauri-apps/api/mocks";
 
 import fixture from "../../fixtures/backfill.json";
-import type {
-  BackfillFolder,
-  BackfillFolderState,
-  BackfillView,
+import {
+  parseBackfillView,
+  type BackfillFolder,
+  type BackfillFolderState,
+  type BackfillView,
 } from "../backfill-ipc";
 import { WindowOf } from "./test-window";
 
 export { argsOf, teardown } from "../test-support";
 
 /** The contract fixture: a run on Bring in with one folder in each state and the chosen folder's proposals. */
-export const mother = fixture as BackfillView;
+export const mother: BackfillView = parseBackfillView(fixture);
 
 const ABLETON = "/Users/me/Music/Ableton";
 

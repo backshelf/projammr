@@ -36,7 +36,7 @@ use crate::renders::Announced;
 use crate::restore::Home;
 use crate::snapshot::{Auth, AuthState, Pending, PendingRestore, Settings, Snapshot};
 use crate::state::AppState;
-use crate::{cli_install, commit, login_item, media, panel, permissions, shortcut, tray};
+use crate::{art, cli_install, commit, login_item, media, panel, permissions, shortcut, tray};
 
 mod backfill;
 mod hub;
@@ -478,6 +478,7 @@ impl Core {
                         DaemonEvent::Render(card) => self.render_changed(card),
                         DaemonEvent::Push(_) if needs_projects => self.learn_repo_projects(),
                         DaemonEvent::RejectionsSynced => self.publish_remembered(),
+                        DaemonEvent::SignedOut { .. } => art::clear_cache(),
                         _ => {}
                     }
                     // What the hub says of the open set changes with the set, a commit and a push.
@@ -509,6 +510,9 @@ impl Core {
     /// running is started with the sign-in.
     pub fn reconcile(self: &Arc<Self>) {
         let hub = self.connect();
+        if hub.is_none() {
+            art::clear_cache();
+        }
         let instance = hub
             .as_ref()
             .map(|hub| hub.remote.client().instance().url().to_string());
@@ -570,10 +574,10 @@ impl Core {
         Ok(())
     }
 
-    /// Keeps the commit box's text for the set file at `set` until it is committed. The next snapshot to go out
-    /// carries it; typing does not send one of its own.
+    /// Keeps the commit box's text for the set file at `set` until it is committed. Emitted through the throttled
+    /// snapshot stream so screen transitions read the latest draft from the single Rust store.
     pub fn set_draft(&self, set: String, message: String) {
-        lock(&self.reducer).set_draft(set, message);
+        self.with_reducer(|reducer| reducer.set_draft(set, message));
     }
 
     /// Commits the latest save of the set file at `set`, as the cli's `dit commit` does with its message and its
@@ -608,6 +612,9 @@ impl Core {
             Some("login" | "logout") => self.reconcile(),
             Some("init") if done.code == 0 => {
                 let _ = self.tell(move |running| running.send(Input::AddRepo(cwd)));
+            }
+            Some("commit") if done.code == 0 => {
+                self.with_reducer(|reducer| reducer.clear_drafts_in(&cwd));
             }
             Some("script") => self.refresh_script(),
             _ => {}
@@ -726,6 +733,7 @@ impl Core {
             self.stop_pushing();
         })
         .map_err(|e| e.to_string())?;
+        art::clear_cache();
         if let Some(error) = removal {
             self.with_reducer(|reducer| {
                 reducer.notice(format!(

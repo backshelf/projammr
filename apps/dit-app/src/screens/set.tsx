@@ -24,9 +24,11 @@ const ART_WIDTH = 800;
 export function SetScreen({
   snapshot,
   open,
+  flushTop = true,
 }: {
   snapshot: Snapshot;
   open: OpenSet;
+  flushTop?: boolean;
 }): JSX.Element {
   const { artwork, headMeta, latestMeta, liveTracks, tracksChanged } = snapshot;
   const artVars = useMemo(
@@ -55,6 +57,7 @@ export function SetScreen({
         open={open}
         hasArtwork={artwork !== null}
         timeSinceCommit={snapshot.timeSinceCommit}
+        flushTop={flushTop}
       />
       {structure && (
         <SkylineReadout
@@ -68,7 +71,7 @@ export function SetScreen({
       )}
       {snapshot.saves.length > 0 ? (
         <CommitBox
-          key={open.path}
+          key={`${open.path}:${snapshot.lastCommit?.at ?? ""}`}
           set={open.path}
           clauses={snapshot.clauses}
           appDraft={snapshot.draft}

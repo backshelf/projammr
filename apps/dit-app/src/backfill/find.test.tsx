@@ -307,4 +307,20 @@ describe("Find", () => {
       "Not signed in to projammr.example."
     );
   });
+
+  test("surfaces why the folder picker failed on Choose folders…", async () => {
+    mockBackfillApp(findView(), (command) => {
+      if (command === "plugin:dialog|open") {
+        throw "The folder picker couldn't open.";
+      }
+      return undefined;
+    });
+    renderWindow(findView());
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose folders…" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "The folder picker couldn't open."
+    );
+  });
 });

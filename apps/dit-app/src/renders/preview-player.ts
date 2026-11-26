@@ -103,7 +103,7 @@ export class RenderPreviewPlayer {
       } catch {
         if (load === this.loads) {
           this.loading = null;
-          this.set({ ...this.state, playing: false });
+          this.set(IDLE);
         }
         return;
       }

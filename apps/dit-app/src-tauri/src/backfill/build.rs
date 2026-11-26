@@ -1,7 +1,9 @@
 //! The window's view of the state: what each step lists on the left and what the chosen folder shows on the right.
+//!
+//! Pure over [`Inner`]: any folder facts or set lists not yet cached are discovered by [`missing_facts`] and
+//! [`missing_sets`] so [`Backfill::view`] reads them from disk outside the state lock.
 
-use dit_core::RepoList;
-use dit_daemon::backfill::{Doubt, ProjectFacts, project_facts};
+use dit_daemon::backfill::{Doubt, ProjectFacts};
 
 use super::check::ready;
 use super::view::{
@@ -10,16 +12,71 @@ use super::view::{
 };
 use super::*;
 
+/// Run folders whose [`ProjectFacts`] are not yet in `inner`, to be read from disk outside the state lock.
+pub(super) fn missing_facts(inner: &Inner) -> Vec<PathBuf> {
+    if !matches!(inner.step, Step::BringIn | Step::Done) {
+        return Vec::new();
+    }
+    let mut missing = Vec::new();
+    for folder in inner.run.iter().flat_map(|run| &run.folders) {
+        if find_facts(inner, &folder.path).is_none() && !missing.contains(&folder.path) {
+            missing.push(folder.path.clone());
+        }
+    }
+    missing
+}
+
+/// The chosen folder when its set list has neither been read by Check nor cached in `inner.set_lists`.
+pub(super) fn missing_sets(inner: &Inner) -> Option<PathBuf> {
+    let path = chosen_path(inner)?;
+    let read_by_check = inner
+        .entries
+        .iter()
+        .any(|entry| entry.facts.path == path && entry.checked().is_some());
+    if read_by_check || inner.set_lists.contains_key(&path) {
+        None
+    } else {
+        Some(path)
+    }
+}
+
+/// The path of the folder shown on the right for the current step, in the list's order.
+fn chosen_path(inner: &Inner) -> Option<PathBuf> {
+    let listed: Vec<PathBuf> = match inner.step {
+        Step::Find => {
+            let mut found: Vec<&ProjectFacts> = inner.found.iter().collect();
+            found.sort_by(|a, b| b.newest.cmp(&a.newest).then_with(|| a.path.cmp(&b.path)));
+            found.into_iter().map(|facts| facts.path.clone()).collect()
+        }
+        Step::Check => inner
+            .entries
+            .iter()
+            .map(|entry| entry.facts.path.clone())
+            .collect(),
+        Step::BringIn | Step::Done => inner
+            .run
+            .iter()
+            .flat_map(|run| &run.folders)
+            .map(|folder| folder.path.clone())
+            .collect(),
+    };
+    inner
+        .chosen
+        .clone()
+        .filter(|path| listed.contains(path))
+        .or_else(|| listed.into_iter().next())
+}
+
 /// The whole of what the window shows now.
-pub(super) fn build(backfill: &Backfill, inner: &mut Inner) -> View {
-    let folders = rows(backfill, inner);
+pub(super) fn build(inner: &Inner) -> View {
+    let folders = rows(inner);
     // The window keeps a folder on the right whenever it lists any: the one chosen if it is still listed.
     let chosen_path = inner
         .chosen
         .clone()
         .filter(|path| folders.iter().any(|row| Path::new(&row.path) == path))
         .or_else(|| folders.first().map(|row| PathBuf::from(&row.path)));
-    let chosen = chosen_path.map(|path| chosen(backfill, inner, &path));
+    let chosen = chosen_path.map(|path| chosen(inner, &path));
     let run = inner.run.as_ref().map(Run::from);
     let summary = inner
         .run
@@ -45,7 +102,7 @@ pub(super) fn build(backfill: &Backfill, inner: &mut Inner) -> View {
 }
 
 /// The list on the left: what Find found, what Check read, or the run's folders.
-fn rows(backfill: &Backfill, inner: &mut Inner) -> Vec<Folder> {
+fn rows(inner: &Inner) -> Vec<Folder> {
     match inner.step {
         Step::Find => {
             let mut found: Vec<&ProjectFacts> = inner.found.iter().collect();
@@ -73,26 +130,20 @@ fn rows(backfill: &Backfill, inner: &mut Inner) -> Vec<Folder> {
                 folder(&entry.facts, state, doubt_of(entry), false)
             })
             .collect(),
-        Step::BringIn | Step::Done => {
-            let planned: Vec<(PathBuf, FolderView)> = inner
-                .run
-                .iter()
-                .flat_map(|run| &run.folders)
-                .map(|folder| (folder.path.clone(), FolderView::from(&folder.state)))
-                .collect();
-            planned
-                .into_iter()
-                .map(|(path, state)| {
-                    let facts = facts_of(backfill, inner, &path);
-                    let doubt = inner
-                        .entries
-                        .iter()
-                        .find(|entry| entry.facts.path == path)
-                        .and_then(doubt_of);
-                    folder(&facts, state, doubt, false)
-                })
-                .collect()
-        }
+        Step::BringIn | Step::Done => inner
+            .run
+            .iter()
+            .flat_map(|run| &run.folders)
+            .map(|run_folder| {
+                let facts = facts_of(inner, &run_folder.path);
+                let doubt = inner
+                    .entries
+                    .iter()
+                    .find(|entry| entry.facts.path == run_folder.path)
+                    .and_then(doubt_of);
+                folder(&facts, FolderView::from(&run_folder.state), doubt, false)
+            })
+            .collect(),
     }
 }
 
@@ -134,49 +185,39 @@ fn doubt_of(entry: &Entry) -> Option<FolderDoubt> {
     (doubt.unreadable > 0 || doubt.unrecorded > 0 || doubt.synced_by.is_some()).then_some(doubt)
 }
 
-/// The facts of a run's folder: what Find or Check read of it, else read now (a run resumed after the app
-/// restarted), else what a folder that is gone has.
-fn facts_of(backfill: &Backfill, inner: &mut Inner, path: &Path) -> ProjectFacts {
-    let known = inner
+fn find_facts<'a>(inner: &'a Inner, path: &Path) -> Option<&'a ProjectFacts> {
+    inner
         .found
         .iter()
         .chain(inner.entries.iter().map(|entry| &entry.facts))
         .chain(inner.facts.get(path))
-        .find(|facts| facts.path == path);
-    if let Some(facts) = known {
-        return facts.clone();
-    }
-    let read = backfill
-        .registry
-        .for_project_folder(path)
-        .and_then(|daw| project_facts(path, daw, &RepoList::default()).ok())
-        .map(|facts| ProjectFacts {
+        .find(|facts| facts.path == path)
+}
+
+/// The facts of a run's folder from what is already cached in `inner`, else empty facts for a missing folder.
+fn facts_of(inner: &Inner, path: &Path) -> ProjectFacts {
+    find_facts(inner, path)
+        .cloned()
+        .unwrap_or_else(|| ProjectFacts {
+            path: path.to_path_buf(),
+            sets: 0,
+            bytes: 0,
+            newest: None,
             already: false,
-            ..facts
-        });
-    let facts = read.unwrap_or_else(|| ProjectFacts {
-        path: path.to_path_buf(),
-        sets: 0,
-        bytes: 0,
-        newest: None,
-        already: false,
-        synced_by: None,
-    });
-    inner.facts.insert(path.to_path_buf(), facts.clone());
-    facts
+            synced_by: None,
+        })
 }
 
 /// The folder on the right: its sets, with where each goes once Check has read it, and the pickers' items.
-fn chosen(backfill: &Backfill, inner: &mut Inner, path: &Path) -> Chosen {
+fn chosen(inner: &Inner, path: &Path) -> Chosen {
     let read_by_check = inner
         .entries
         .iter()
         .any(|entry| entry.facts.path == path && entry.checked().is_some());
-    // Taken before anything of `inner` is borrowed: listing reads the folder once and keeps it.
     let listed = if read_by_check {
         Vec::new()
     } else {
-        backfill.sets_of(inner, path)
+        inner.set_lists.get(path).cloned().unwrap_or_default()
     };
     let entry = inner.entries.iter().find(|entry| entry.facts.path == path);
     let planned = inner

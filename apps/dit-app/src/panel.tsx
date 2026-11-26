@@ -74,6 +74,10 @@ export function Panel(): JSX.Element {
     },
   });
 
+  const hasBanner =
+    (screen?.kind !== "machine-name" && (snapshot?.notices.length ?? 0) > 0) ||
+    reported !== null;
+
   return (
     <FocusTargetProvider value={focusTarget}>
       <CommitShortcutProvider value={commitShortcut.claim}>
@@ -88,7 +92,11 @@ export function Panel(): JSX.Element {
                   <ErrorLine error={reported} />
                   <UpdateProvider value={snapshot.update}>
                     <BackfillProvider value={snapshot.backfill}>
-                      <ScreenView snapshot={snapshot} screen={screen} />
+                      <ScreenView
+                        snapshot={snapshot}
+                        screen={screen}
+                        flushTop={!hasBanner}
+                      />
                     </BackfillProvider>
                   </UpdateProvider>
                 </>
@@ -108,9 +116,11 @@ export function Panel(): JSX.Element {
 function ScreenView({
   snapshot,
   screen,
+  flushTop,
 }: {
   snapshot: Snapshot;
   screen: Screen;
+  flushTop: boolean;
 }): JSX.Element {
   switch (screen.kind) {
     case "sign-in":
@@ -138,7 +148,9 @@ function ScreenView({
         />
       );
     case "set":
-      return <SetScreen snapshot={snapshot} open={screen.open} />;
+      return (
+        <SetScreen snapshot={snapshot} open={screen.open} flushTop={flushTop} />
+      );
     case "repos":
       return <Repos repos={snapshot.repos} renders={snapshot.renders} />;
     case "settings":

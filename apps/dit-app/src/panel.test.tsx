@@ -107,12 +107,21 @@ describe("Panel", () => {
     expect(screen.getByText("science Project")).toBeTruthy();
   });
 
-  test("shows the notices the app holds", async () => {
+  test("shows the notices the app holds without pulling the set masthead over them", async () => {
     mockApp(signedIn({ notices: ["The previous session may still be open."] }));
     showPanel();
 
     expect((await screen.findByRole("status")).textContent).toBe(
       "The previous session may still be open."
+    );
+    const masthead = screen.getByRole("region", { name: "The open set" });
+    expect(masthead.className).not.toContain("-mt-4");
+
+    await act(() => emit(STATE_EVENT, signedIn({ notices: [] })));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("region", { name: "The open set" }).className
+      ).toContain("-mt-4")
     );
   });
 
@@ -302,6 +311,20 @@ describe("Panel", () => {
 
       await openMenuItem("Quit");
       await waitFor(() => expect(argsOf(calls, "quit")).toHaveLength(1));
+    });
+
+    test("surfaces why signing out failed", async () => {
+      mockApp(signedIn(), (command) => {
+        if (command === "sign_out") throw "Can't reach the Keychain.";
+      });
+      showPanel();
+      await screen.findByRole("heading", { name: "science123" });
+
+      await openMenuItem("Sign out");
+
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Can't reach the Keychain."
+      );
     });
 
     test("says on Quit that scheduled work stops with it", async () => {

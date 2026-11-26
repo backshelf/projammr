@@ -1050,3 +1050,72 @@ fn a_run_the_state_file_never_kept_is_not_left_waiting() {
     let view = wait_for(&rig.backfill, "start fails", |view| view.error.is_some());
     assert!(view.run.is_none(), "no waiting run is left to resume");
 }
+
+#[test]
+fn ready_refuses_to_start_when_two_sets_claim_the_same_session() {
+    let rig = rig();
+    rig.checked();
+    {
+        let mut inner = lock(&rig.backfill.inner);
+        let target = SetTarget::Session(812);
+        let halogen_set = inner.entries[1].checked().unwrap().sets[0].file.clone();
+        inner.entries[1].targets.insert(halogen_set, target);
+    }
+
+    assert!(!rig.backfill.view().can_start);
+    assert_eq!(
+        rig.backfill.begin(),
+        Err("Two sets are matched to the same session.".to_string())
+    );
+}
+
+#[test]
+fn concurrent_set_project_calls_preserve_both_folders_changes() {
+    let rig = rig();
+    rig.checked();
+    let server = MockServer::route(move |request: &Recorded| {
+        let path = request.path_only().trim_start_matches("/api");
+        match path {
+            "/me/projects" => Reply::json(
+                200,
+                json!([
+                    { "id": 4, "name": "Alex", "role": "owner" },
+                    { "id": 9, "name": "Collabs", "role": "editor" }
+                ])
+                .to_string(),
+            ),
+            "/projects/4/sessions/dit-candidates" | "/projects/9/sessions/dit-candidates" => {
+                Reply::json(200, json!({ "sessions": [] }).to_string())
+            }
+            "/projects/4/tracks/summary" | "/projects/9/tracks/summary" => {
+                Reply::json(200, json!([]).to_string())
+            }
+            "/uploads/limits" => Reply::json(
+                200,
+                json!({ "maxBytes": 1_000_000_000, "audioTypes": ["wav"] }).to_string(),
+            ),
+            "/projects/4/repos/storage-check" | "/projects/9/repos/storage-check" => Reply::json(
+                200,
+                json!({ "bytes": 400, "held": 0, "remainingBytes": 600 }).to_string(),
+            ),
+            _ => Reply::json(404, json!({ "message": "no such route" }).to_string()),
+        }
+    });
+    *lock(&rig.host.hub) = Some(server);
+
+    let b1 = rig.backfill.clone();
+    let b2 = rig.backfill.clone();
+    let science = rig.science.display().to_string();
+    let halogen = rig.halogen.display().to_string();
+    let t1 = thread::spawn(move || b1.set_project(&science, 9));
+    let t2 = thread::spawn(move || b2.set_project(&halogen, 9));
+    assert_eq!(t1.join().unwrap(), Ok(()));
+    assert_eq!(t2.join().unwrap(), Ok(()));
+
+    let projects: Vec<Option<i64>> = lock(&rig.backfill.inner)
+        .entries
+        .iter()
+        .map(|entry| entry.project)
+        .collect();
+    assert_eq!(projects, [Some(9), Some(9)]);
+}

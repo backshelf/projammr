@@ -23,13 +23,6 @@ impl Backfill {
         Ok(())
     }
 
-    /// Searches the roots again.
-    pub fn find(self: &Arc<Self>) -> Result<(), String> {
-        self.on_find(|_| ())?;
-        self.search();
-        Ok(())
-    }
-
     /// Runs `change` when the window is on Find: the roots are not the person's to change on any other step.
     fn on_find(&self, change: impl FnOnce(&mut Inner)) -> Result<(), String> {
         self.update(|inner| {
@@ -97,13 +90,28 @@ impl Backfill {
         });
     }
 
-    /// The sets of `folder` with their `Backup/` copy counts, read once and kept.
-    pub(super) fn sets_of(&self, inner: &mut Inner, folder: &Path) -> Vec<SetFacts> {
-        if let Some(sets) = inner.set_lists.get(folder) {
-            return sets.clone();
-        }
-        let sets = self
-            .registry
+    /// The facts of a run folder read from disk outside the state lock, or empty facts when the folder is gone.
+    pub(super) fn read_project_facts(&self, path: &Path) -> ProjectFacts {
+        self.registry
+            .for_project_folder(path)
+            .and_then(|daw| project_facts(path, daw, &RepoList::default()).ok())
+            .map(|facts| ProjectFacts {
+                already: false,
+                ..facts
+            })
+            .unwrap_or_else(|| ProjectFacts {
+                path: path.to_path_buf(),
+                sets: 0,
+                bytes: 0,
+                newest: None,
+                already: false,
+                synced_by: None,
+            })
+    }
+
+    /// The sets of `folder` with their `Backup/` copy counts, read from disk outside the state lock.
+    pub(super) fn read_set_lists(&self, folder: &Path) -> Vec<SetFacts> {
+        self.registry
             .for_project_folder(folder)
             .map(|daw| {
                 daw.find_sets(folder)
@@ -115,8 +123,6 @@ impl Backfill {
                     })
                     .collect()
             })
-            .unwrap_or_default();
-        inner.set_lists.insert(folder.to_path_buf(), sets);
-        inner.set_lists[folder].clone()
+            .unwrap_or_default()
     }
 }

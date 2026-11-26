@@ -40,6 +40,15 @@ export function PanelMenu({ signedIn }: { signedIn: boolean }): JSX.Element {
     }
   }
 
+  async function signOut(): Promise<void> {
+    report(null);
+    try {
+      await call("sign_out");
+    } catch (reason) {
+      report(describeFailure(reason));
+    }
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -61,7 +70,7 @@ export function PanelMenu({ signedIn }: { signedIn: boolean }): JSX.Element {
               Track a folder…
             </DropdownMenuItem>
             <BackfillItem />
-            <DropdownMenuItem onClick={() => void call("sign_out")}>
+            <DropdownMenuItem onClick={() => void signOut()}>
               Sign out
             </DropdownMenuItem>
             <DropdownMenuSeparator />

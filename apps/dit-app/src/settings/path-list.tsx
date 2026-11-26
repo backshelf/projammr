@@ -5,6 +5,7 @@ import { IconButton } from "@workspace/ui/components/icon-button";
 import { Row, Rows } from "@workspace/ui/components/layout/rows";
 
 import { pickFolders } from "../bridge";
+import { describeFailure } from "../use-command";
 
 /**
  * A list of folders the person can remove from and add to with the system's folder picker. A path is wrapped, never
@@ -15,17 +16,25 @@ export function PathList({
   labelledBy,
   paths,
   onChange,
+  onError,
 }: {
   id: string;
   /** The id of the element that names the list. */
   labelledBy: string;
   paths: string[];
   onChange: (paths: string[]) => void;
+  /** Hears why the folder picker failed, or null when the next attempt starts. */
+  onError?: (error: string | null) => void;
 }): JSX.Element {
   async function add(): Promise<void> {
-    const picked = await pickFolders();
-    const added = picked.filter((path) => !paths.includes(path));
-    if (added.length > 0) onChange([...paths, ...added]);
+    onError?.(null);
+    try {
+      const picked = await pickFolders();
+      const added = picked.filter((path) => !paths.includes(path));
+      if (added.length > 0) onChange([...paths, ...added]);
+    } catch (reason) {
+      onError?.(describeFailure(reason));
+    }
   }
 
   return (

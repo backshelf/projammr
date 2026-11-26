@@ -81,13 +81,30 @@ describe("Adopt", () => {
     expect(track.disabled).toBe(true);
   });
 
-  test("takes up the project list the app reads from the hub after the offer appears", () => {
-    mockApp(base);
+  test("allows offline adoption with projectId null when no projects are listed", async () => {
+    const calls = mockApp(base);
+    const noProjects = { ...offer, projectId: null, projects: [] };
+    renderScreen(<Adopt offer={noProjects} />);
+    const track = screen.getByRole("button", {
+      name: "Track it",
+    }) as HTMLButtonElement;
+    expect(track.disabled).toBe(false);
+
+    fireEvent.click(track);
+
+    await waitFor(() =>
+      expect(argsOf(calls, "adopt")).toEqual([
+        { folder: "/Users/me/Music/new Project", projectId: null },
+      ])
+    );
+  });
+
+  test("takes up the project list the app reads from the hub after the offer appears", async () => {
+    const calls = mockApp(base);
     const noProjects = { ...offer, projectId: null, projects: [] };
     const { rerender } = renderScreen(<Adopt offer={noProjects} />);
     const track = (): HTMLButtonElement =>
       screen.getByRole("button", { name: "Track it" });
-    expect(track().disabled).toBe(true);
 
     rerender(
       <Chrome nav="home">
@@ -96,6 +113,12 @@ describe("Adopt", () => {
     );
 
     expect(track().disabled).toBe(false);
+    fireEvent.click(track());
+    await waitFor(() =>
+      expect(argsOf(calls, "adopt")).toEqual([
+        { folder: "/Users/me/Music/new Project", projectId: 9 },
+      ])
+    );
   });
 
   test("starts on the only project there is", () => {

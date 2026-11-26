@@ -312,7 +312,18 @@ impl Reducer {
             self.adopt_saved(repo, file);
         }
         match event {
-            DaemonEvent::SaveRecorded { repo, .. } | DaemonEvent::Committed { repo, .. } => {
+            DaemonEvent::SaveRecorded { repo, .. } => {
+                self.touch(repo);
+                self.want(repo);
+                self.reread_if_open(repo);
+            }
+            DaemonEvent::Committed {
+                repo,
+                set_id,
+                branch,
+                ..
+            } => {
+                self.clear_draft_for(repo, set_id, branch);
                 self.touch(repo);
                 self.want(repo);
                 self.reread_if_open(repo);
@@ -368,7 +379,7 @@ impl Reducer {
 
     /// Reads the open set's repo again: what a commit made outside the daemon, or the passing of time, changed.
     pub fn refresh(&mut self) {
-        self.reread();
+        self.reread_current();
         self.derive();
     }
 
@@ -607,8 +618,7 @@ impl Reducer {
         self.snapshot.notices.clear();
     }
 
-    /// Keeps `text` as the commit box's text for the set file at `set`; an empty one lets the draft go. Quiet: the
-    /// next snapshot to go out carries it.
+    /// Keeps `text` as the commit box's text for the set file at `set`; an empty one lets the draft go.
     pub fn set_draft(&mut self, set: String, text: String) {
         if text.is_empty() {
             self.drafts.remove(&set);
@@ -616,6 +626,23 @@ impl Reducer {
             self.drafts.insert(set, text);
         }
         self.show_draft();
+    }
+
+    /// Clears stored drafts for sets inside `folder` (a commit made via the cli over the socket).
+    pub fn clear_drafts_in(&mut self, folder: &Path) {
+        self.drafts
+            .retain(|set, _| !Path::new(set).starts_with(folder));
+        self.show_draft();
+    }
+
+    /// Clears the open set's draft when the daemon reports a commit on its branch.
+    fn clear_draft_for(&mut self, repo: &Path, set_id: &str, branch: &str) {
+        let matches_focus = self.focus.as_ref().is_some_and(|focus| {
+            focus.repo == repo && focus.set_id == set_id && focus.branch == branch
+        });
+        if matches_focus && let Some(open) = &self.snapshot.open {
+            self.drafts.remove(&open.path);
+        }
     }
 
     /// What the app asks the hub about the open set; `None` while there is nothing to ask (no sign-in, or the set is
@@ -910,7 +937,29 @@ impl Reducer {
 
     fn reread_if_open(&mut self, repo: &Path) {
         if self.focus.as_ref().is_some_and(|focus| focus.repo == repo) {
-            self.reread();
+            self.reread_current();
+        }
+    }
+
+    /// Re-reads the currently open set and drops its draft if a commit landed outside the panel (head commit moved or
+    /// pending saves cleared).
+    fn reread_current(&mut self) {
+        let had_saves = !self.read.saves.is_empty();
+        let prev_commit = self
+            .read
+            .last_commit
+            .as_ref()
+            .map(|head| (head.at, head.message.clone()));
+        self.reread();
+        let next_commit = self
+            .read
+            .last_commit
+            .as_ref()
+            .map(|head| (head.at, head.message.clone()));
+        let committed_externally = (had_saves && self.read.saves.is_empty())
+            || (next_commit.is_some() && next_commit != prev_commit);
+        if committed_externally && let Some(open) = &self.snapshot.open {
+            self.drafts.remove(&open.path);
         }
     }
 
@@ -1917,6 +1966,47 @@ mod tests {
         assert_eq!(reducer.snapshot().draft, "tightened the kick, more air");
 
         reducer.set_draft(path, String::new());
+        assert_eq!(reducer.snapshot().draft, "");
+    }
+
+    #[test]
+    fn an_external_commit_clears_the_open_sets_draft() {
+        let fake = Arc::new(Fake::default());
+        *fake.0.lock().unwrap() = SetReadout {
+            saves: vec![save("s1", SavePush::Pending)],
+            last_commit: Some(head("earlier", SavePush::Pushed)),
+            ..SetReadout::default()
+        };
+        let mut reducer = reducer_with(&fake);
+        let path = "/Music/science Project/science123.als".to_string();
+        reducer.apply(&DaemonEvent::OpenSet(Some(open_info())));
+        reducer.set_draft(path.clone(), "stale draft".to_string());
+        assert_eq!(reducer.snapshot().draft, "stale draft");
+
+        // External CLI commit advances the head commit and clears pending saves.
+        *fake.0.lock().unwrap() = SetReadout {
+            saves: Vec::new(),
+            last_commit: Some(head("cli commit", SavePush::Pending)),
+            ..SetReadout::default()
+        };
+        reducer.refresh();
+        assert_eq!(reducer.snapshot().draft, "");
+
+        // A daemon commit event also clears the open set's draft.
+        reducer.set_draft(path.clone(), "another draft".to_string());
+        reducer.apply(&DaemonEvent::Committed {
+            repo: repo(),
+            set_id: "a1b2c3d4".to_string(),
+            branch: "main".to_string(),
+            commit: ObjectId::of(ObjectKind::Commit, b"c"),
+            kind: CommitKind::Checkpoint,
+            message: "checkpoint".to_string(),
+        });
+        assert_eq!(reducer.snapshot().draft, "");
+
+        // Clearing drafts by repo folder removes drafts for non-open sets in that folder too.
+        reducer.set_draft(path, "in repo".to_string());
+        reducer.clear_drafts_in(&repo());
         assert_eq!(reducer.snapshot().draft, "");
     }
 
