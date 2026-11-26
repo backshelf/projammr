@@ -96,6 +96,7 @@ impl Backfill {
             .for_project_folder(path)
             .and_then(|daw| project_facts(path, daw, &RepoList::default()).ok())
             .map(|facts| ProjectFacts {
+                path: path.to_path_buf(),
                 already: false,
                 ..facts
             })

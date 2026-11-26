@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
 import { stubEnv, unstubAllEnvs } from "@workspace/test/env";
-import type { Pool } from "pg";
+import { Pool } from "pg";
 import { redirectLogs } from "../lib/log.js";
 import { withThrowawayDatabase } from "../test/database.js";
 import {
@@ -156,12 +156,43 @@ describe("applyMigrations", () => {
   it("disables statement_timeout during migrate and restores it afterward", async () => {
     await withThrowawayDatabase(async (pool) => {
       stubEnv("MIGRATE_BACKUP", "0");
-      await applyMigrations(pool);
+      const timedPool = new Pool({
+        ...pool.options,
+        statement_timeout: 5_000,
+      });
+      const statements: string[] = [];
+      const originalConnect = timedPool.connect.bind(timedPool);
+      timedPool.connect = (async () => {
+        const client = await originalConnect();
+        const originalQuery = client.query.bind(client) as (
+          ...args: unknown[]
+        ) => unknown;
+        client.query = ((...args: unknown[]) => {
+          const text =
+            typeof args[0] === "string"
+              ? args[0]
+              : (args[0] as { text?: string } | undefined)?.text;
+          if (typeof text === "string") statements.push(text);
+          return originalQuery(...args);
+        }) as typeof client.query;
+        return client;
+      }) as typeof timedPool.connect;
 
-      const { rows } = await pool.query<{ statement_timeout: string }>(
-        "show statement_timeout"
-      );
-      expect(rows[0]?.statement_timeout).not.toBe("0");
+      try {
+        await applyMigrations(timedPool);
+
+        const disableIndex = statements.indexOf("set statement_timeout = 0");
+        const resetIndex = statements.indexOf("reset statement_timeout");
+        expect(disableIndex).toBeGreaterThanOrEqual(0);
+        expect(resetIndex).toBeGreaterThan(disableIndex);
+
+        const { rows } = await timedPool.query<{ statement_timeout: string }>(
+          "show statement_timeout"
+        );
+        expect(rows[0]?.statement_timeout).toBe("5s");
+      } finally {
+        await timedPool.end();
+      }
     }, "migrator_test");
   }, 30_000);
 });

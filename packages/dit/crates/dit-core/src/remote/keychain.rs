@@ -8,9 +8,6 @@ use keyring_core::{Entry, Error};
 
 use super::{Instance, RemoteError, Token, TokenStore};
 
-/// The default keyring service a token is stored under; its account is the instance's address.
-pub(super) const DEFAULT_SERVICE: &str = "dit";
-
 /// One generic password per instance in the login Keychain under a chosen service name.
 pub(super) struct Keychain {
     store: Arc<Store>,

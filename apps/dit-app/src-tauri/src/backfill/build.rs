@@ -190,8 +190,8 @@ fn find_facts<'a>(inner: &'a Inner, path: &Path) -> Option<&'a ProjectFacts> {
         .found
         .iter()
         .chain(inner.entries.iter().map(|entry| &entry.facts))
-        .chain(inner.facts.get(path))
         .find(|facts| facts.path == path)
+        .or_else(|| inner.facts.get(path))
 }
 
 /// The facts of a run's folder from what is already cached in `inner`, else empty facts for a missing folder.

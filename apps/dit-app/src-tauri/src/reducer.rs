@@ -372,7 +372,8 @@ impl Reducer {
                 self.notice(message.clone());
             }
             DaemonEvent::Render(card) => self.render(card),
-            DaemonEvent::RejectionsSynced => {}
+            DaemonEvent::RejectionsSynced | DaemonEvent::Launched | DaemonEvent::Adopted { .. } => {
+            }
         }
         self.derive();
     }
