@@ -230,7 +230,7 @@ COPY --from=prod-deps --chown=bun:bun /app/packages/settings/node_modules /app/p
 COPY --from=build-api --chown=bun:bun /app/apps/server/package.json ./
 COPY --from=build-api --chown=bun:bun /app/apps/server/dist ./dist
 COPY --from=build-api --chown=bun:bun /app/apps/server/src/db/migrations ./src/db/migrations
-COPY --chown=bun:bun apps/server/docker-entrypoint.sh ./
+COPY --chown=bun:bun --chmod=755 apps/server/docker-entrypoint.sh ./
 # Uploads live under ./static and pre-migrate dumps under ./backups, both
 # compose volumes. The directories exist and belong to the runtime user so a
 # fresh volume inherits them.
