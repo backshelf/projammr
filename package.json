@@ -25,11 +25,11 @@
   ],
   "devDependencies": {
     "@workspace/typescript-config": "workspace:*",
-    "knip": "^6.44.2",
+    "knip": "^6.48.0",
     "prettier": "^3.9.10",
     "prettier-plugin-astro": "^1.1.2",
     "prettier-plugin-tailwindcss": "^0.8.1",
-    "turbo": "^2.11.10",
+    "turbo": "^2.11.13",
     "typescript": "^7.1.0-dev.20261010.1"
   },
   "overrides": {
