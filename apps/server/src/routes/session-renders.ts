@@ -1,25 +1,25 @@
 import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { AuthedEnv } from "../auth.js";
-import { requireMembership } from "../db/queries/authorization.js";
 import {
   acceptRender,
   renderAcceptedSchema,
 } from "../entities/session/renders.js";
-import { getSessionRow } from "../entities/session/queries.js";
 import { describer, idParam, respond, validator } from "../lib/http.js";
 
 const { describe } = describer("Sessions");
 
 const renderBodySchema = z.object({
   /** The audio file rendered. */
-  assetId: z.number(),
+  assetId: z.number().int().positive(),
   /** The save the render was bounced from, or null when none. */
-  bouncedFromSaveId: z.number().nullable(),
+  bouncedFromSaveId: z.number().int().positive().nullable(),
 });
 
-/** A session's renders. Accepting one needs the editor role on its project. */
+/**
+ * A session's renders. Mounted under `/sessions`, which `mountEntities` has
+ * already gated on the session's project with the editor role for `POST`.
+ */
 export function sessionRenderRoutes(): Hono<AuthedEnv> {
   const renders = new Hono<AuthedEnv>();
 
@@ -43,16 +43,6 @@ export function sessionRenderRoutes(): Hono<AuthedEnv> {
     async (c) => {
       const { id } = c.req.valid("param");
       const body = c.req.valid("json");
-      const session = await getSessionRow(id);
-      if (!session) {
-        throw new HTTPException(404, { message: "Session not found" });
-      }
-      await requireMembership(
-        c.get("user").id,
-        session.projectId,
-        "editor",
-        "Session not found"
-      );
       return respond(
         c,
         renderAcceptedSchema,

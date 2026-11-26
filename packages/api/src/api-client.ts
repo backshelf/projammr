@@ -118,9 +118,42 @@ function isStaleSocket(error: unknown): boolean {
 }
 
 /**
+ * HTTP methods that are safe to auto-retry on transient gateway or socket
+ * failures. Non-idempotent methods (`POST`, `PATCH`) are never retried
+ * automatically so a dropped response never duplicates a mutation.
+ */
+const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "OPTIONS", "PUT", "DELETE"]);
+
+function abortReason(signal: AbortSignal): unknown {
+  return (
+    signal.reason ||
+    new DOMException("The operation was aborted.", "AbortError")
+  );
+}
+
+/** Waits `delayMs`, rejecting immediately if `signal` aborts during the sleep. */
+function sleepWithSignal(
+  delayMs: number,
+  signal?: AbortSignal | null
+): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortReason(signal));
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason(signal!));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
  * Creates a fetch function that wraps `fetch` with automatic retry logic for
  * transient socket closures (e.g. stale keep-alive sockets, EPIPE, UND_ERR_SOCKET)
- * and gateway timeouts.
+ * and gateway timeouts on idempotent HTTP methods.
  */
 export function createFetchWithRetry(options: RetryOptions = {}): FetchFn {
   const {
@@ -144,30 +177,30 @@ export function createFetchWithRetry(options: RetryOptions = {}): FetchFn {
 
     if (input instanceof Request) {
       requestUrl = input.url;
-      requestMethod = input.method;
-      requestSignal = input.signal;
-
-      if (input.body && !input.bodyUsed) {
-        try {
-          bufferedBody = await input.clone().arrayBuffer();
-        } catch {
-          // If clone fails (e.g. stream already locked), proceed with input as-is
-        }
-      }
+      requestMethod = (init?.method || input.method).toUpperCase();
+      requestSignal = init?.signal ?? input.signal;
     } else {
       requestUrl = typeof input === "string" ? input : input.toString();
-      requestMethod = init?.method || "GET";
+      requestMethod = (init?.method || "GET").toUpperCase();
       requestSignal = init?.signal;
+    }
+
+    const canRetry = IDEMPOTENT_METHODS.has(requestMethod);
+    const allowedRetries = canRetry ? maxRetries : 0;
+
+    if (canRetry && input instanceof Request && input.body && !input.bodyUsed) {
+      try {
+        bufferedBody = await input.clone().arrayBuffer();
+      } catch {
+        // If clone fails (e.g. stream already locked), proceed with input as-is
+      }
     }
 
     let lastError: unknown;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= allowedRetries; attempt++) {
       if (requestSignal?.aborted) {
-        throw (
-          requestSignal.reason ||
-          new DOMException("The operation was aborted.", "AbortError")
-        );
+        throw abortReason(requestSignal);
       }
 
       try {
@@ -203,7 +236,7 @@ export function createFetchWithRetry(options: RetryOptions = {}): FetchFn {
         if (
           !response.ok &&
           retryOnStatus.includes(response.status) &&
-          attempt < maxRetries
+          attempt < allowedRetries
         ) {
           const delay = Math.min(
             initialDelayMs * Math.pow(backoffFactor, attempt),
@@ -213,10 +246,10 @@ export function createFetchWithRetry(options: RetryOptions = {}): FetchFn {
             onRetry(new Error(`HTTP ${response.status}`), attempt + 1, delay);
           } else {
             console.warn(
-              `[fetch-retry] ${requestMethod} ${requestUrl} returned ${response.status}. Retrying (${attempt + 1}/${maxRetries}) in ${delay}ms...`
+              `[fetch-retry] ${requestMethod} ${requestUrl} returned ${response.status}. Retrying (${attempt + 1}/${allowedRetries}) in ${delay}ms...`
             );
           }
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await sleepWithSignal(delay, requestSignal);
           continue;
         }
 
@@ -228,7 +261,7 @@ export function createFetchWithRetry(options: RetryOptions = {}): FetchFn {
           throw err;
         }
 
-        if (isTransientNetworkError(err) && attempt < maxRetries) {
+        if (isTransientNetworkError(err) && attempt < allowedRetries) {
           const delay =
             isStaleSocket(err) && attempt === 0
               ? 50
@@ -242,11 +275,11 @@ export function createFetchWithRetry(options: RetryOptions = {}): FetchFn {
             onRetry(err, attempt + 1, delay);
           } else {
             console.warn(
-              `[fetch-retry] ${requestMethod} ${requestUrl} failed with transient error (${errMsg}). Retrying (${attempt + 1}/${maxRetries}) in ${delay}ms...`
+              `[fetch-retry] ${requestMethod} ${requestUrl} failed with transient error (${errMsg}). Retrying (${attempt + 1}/${allowedRetries}) in ${delay}ms...`
             );
           }
 
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await sleepWithSignal(delay, requestSignal);
           continue;
         }
 

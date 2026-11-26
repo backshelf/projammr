@@ -13,11 +13,14 @@ import { machines } from "../schema/machines.js";
 /** The most bind parameters one rejection takes in its insert. */
 const BINDS_PER_REJECTION = 5;
 
+type ReadExecutor = Pick<typeof db, "select">;
+
 /** The caller's "Not a bounce" files, oldest first. */
 export async function listNotABounce(
-  userId: string
+  userId: string,
+  executor: ReadExecutor = db
 ): Promise<Rejections["notABounce"]> {
-  const rows = await db
+  const rows = await executor
     .select({
       id: renderRejections.id,
       fingerprint: renderRejections.fingerprint,
@@ -33,14 +36,19 @@ export async function listNotABounce(
     )
     .orderBy(asc(renderRejections.createdAt), asc(renderRejections.id));
   // The kind's check constraint keeps a row's fields of its kind set.
-  return rows.map((row) => ({ ...row, fingerprint: row.fingerprint! }));
+  return rows.flatMap((row) =>
+    row.fingerprint === null ? [] : [{ ...row, fingerprint: row.fingerprint }]
+  );
 }
 
 /** The caller's rejections of both kinds, oldest first. A removed machine's folders are not listed. */
-export async function listRejections(userId: string): Promise<Rejections> {
+export async function listRejections(
+  userId: string,
+  executor: ReadExecutor = db
+): Promise<Rejections> {
   const [notABounce, neverHere] = await Promise.all([
-    listNotABounce(userId),
-    db
+    listNotABounce(userId, executor),
+    executor
       .select({
         id: renderRejections.id,
         machineId: renderRejections.machineId,
@@ -59,33 +67,39 @@ export async function listRejections(userId: string): Promise<Rejections> {
   ]);
   return {
     notABounce,
-    neverHere: neverHere.map((row) => ({
-      ...row,
-      machineId: row.machineId!,
-      folder: row.folder!,
-    })),
+    neverHere: neverHere.flatMap((row) =>
+      row.machineId === null || row.folder === null
+        ? []
+        : [{ id: row.id, machineId: row.machineId, folder: row.folder }]
+    ),
   };
 }
 
 /**
  * Refuses a write naming a machine the caller cannot add a folder to: another
- * account's is a 403, one that does not exist or was removed a 404.
+ * account's is a 403, one that does not exist or was removed a 404. Locks the
+ * referenced machine rows `FOR SHARE` in id order so a concurrent removal
+ * cannot race between the check and the insert inside the same transaction.
  */
 async function assertOwnMachines(
   userId: string,
-  ids: readonly string[]
+  ids: readonly string[],
+  executor: ReadExecutor = db
 ): Promise<void> {
-  if (ids.length === 0) return;
+  const distinct = [...new Set(ids)];
+  if (distinct.length === 0) return;
   const held = new Map(
     (
-      await db
+      await executor
         .select({
           id: machines.id,
           userId: machines.userId,
           removedAt: machines.removedAt,
         })
         .from(machines)
-        .where(inArray(machines.id, [...new Set(ids)]))
+        .where(inArray(machines.id, distinct))
+        .orderBy(asc(machines.id))
+        .for("share")
     ).map((row) => [row.id, row])
   );
   for (const id of ids) {
@@ -112,13 +126,6 @@ export async function writeRejections(
   userId: string,
   items: NewRejection[]
 ): Promise<WrittenRejections> {
-  await assertOwnMachines(
-    userId,
-    items.flatMap((item) =>
-      item.kind === "never-here" ? [item.machineId] : []
-    )
-  );
-
   // One statement cannot touch the same row twice, so a write naming one
   // rejection more than once records it once, under its first mention.
   const bounces = new Map<string, { fileName: string | null }>();
@@ -137,7 +144,15 @@ export async function writeRejections(
     1,
     Math.floor((bindParamLimit() - 1) / BINDS_PER_REJECTION)
   );
-  await db.transaction(async (tx) => {
+  const held = await db.transaction(async (tx) => {
+    await assertOwnMachines(
+      userId,
+      items.flatMap((item) =>
+        item.kind === "never-here" ? [item.machineId] : []
+      ),
+      tx
+    );
+
     const bounceRows = [...bounces].map(([fingerprint, { fileName }]) => ({
       userId,
       kind: "not-a-bounce" as const,
@@ -172,9 +187,10 @@ export async function writeRejections(
           where: sql`${renderRejections.kind} = 'never-here'`,
         });
     }
+
+    return listRejections(userId, tx);
   });
 
-  const held = await listRejections(userId);
   const files = new Map(held.notABounce.map((row) => [row.fingerprint, row]));
   const places = new Map(
     held.neverHere.map((row) => [
@@ -185,13 +201,15 @@ export async function writeRejections(
   const stored = new Map<string, WrittenRejections["items"][number]>();
   for (const item of items) {
     if (item.kind === "not-a-bounce") {
-      const row = files.get(item.fingerprint)!;
+      const row = files.get(item.fingerprint);
+      if (!row) continue;
       stored.set(JSON.stringify([item.kind, item.fingerprint]), {
         kind: item.kind,
         ...row,
       });
     } else {
-      const row = places.get(JSON.stringify([item.machineId, item.folder]))!;
+      const row = places.get(JSON.stringify([item.machineId, item.folder]));
+      if (!row) continue;
       stored.set(JSON.stringify([item.kind, item.machineId, item.folder]), {
         kind: item.kind,
         ...row,

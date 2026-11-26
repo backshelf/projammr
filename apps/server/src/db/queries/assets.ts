@@ -269,36 +269,48 @@ export async function findAssetsByFingerprint(
   projectId: number,
   fingerprints: string[]
 ): Promise<AssetFingerprintMatch[]> {
-  if (fingerprints.length === 0) return [];
+  const unique = [...new Set(fingerprints)];
+  if (unique.length === 0) return [];
 
-  const rows = await db
-    .select({
-      id: assets.id,
-      name: assets.name,
-      fingerprint: assets.fingerprint,
-    })
-    .from(assets)
-    .where(
-      and(
-        eq(assets.projectId, projectId),
-        inArray(assets.fingerprint, fingerprints)
-      )
+  const rows: { id: number; name: string; fingerprint: string | null }[] = [];
+  for (const batch of chunk(unique, Math.max(1, bindParamLimit() - 1))) {
+    rows.push(
+      ...(await db
+        .select({
+          id: assets.id,
+          name: assets.name,
+          fingerprint: assets.fingerprint,
+        })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.projectId, projectId),
+            inArray(assets.fingerprint, batch)
+          )
+        ))
     );
+  }
 
   if (rows.length === 0) return [];
 
-  const attachedSessions = await db
-    .select({
-      assetId: sessionAttachments.assetId,
-      sessionId: sessionAttachments.sessionId,
-    })
-    .from(sessionAttachments)
-    .where(
-      inArray(
-        sessionAttachments.assetId,
-        rows.map((row) => row.id)
-      )
+  const attachedSessions: {
+    assetId: number | null;
+    sessionId: number | null;
+  }[] = [];
+  for (const batch of chunk(
+    rows.map((row) => row.id),
+    bindParamLimit()
+  )) {
+    attachedSessions.push(
+      ...(await db
+        .select({
+          assetId: sessionAttachments.assetId,
+          sessionId: sessionAttachments.sessionId,
+        })
+        .from(sessionAttachments)
+        .where(inArray(sessionAttachments.assetId, batch)))
     );
+  }
 
   const sessionsByAsset = new Map<number, number[]>();
   for (const { assetId, sessionId } of attachedSessions) {

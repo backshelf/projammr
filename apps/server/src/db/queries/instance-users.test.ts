@@ -3,6 +3,11 @@ import { describe, expect, it } from "bun:test";
 import { eq } from "drizzle-orm";
 import type { db } from "../index.js";
 import { authSessions, users } from "../schema/auth.js";
+import {
+  oauthAccessTokens,
+  oauthClients,
+  oauthRefreshTokens,
+} from "../schema/oauth.js";
 import { mkUserRow, withMigratedDatabase } from "../../test/database.js";
 import { changeInstanceUser } from "./instance-users.js";
 
@@ -76,12 +81,37 @@ describe("changeInstanceUser", () => {
     });
   }, 30_000);
 
-  it("revokes every session of an account it disables", async () => {
+  it("revokes every session and OAuth token of an account it disables", async () => {
     await withMigratedDatabase(async (database) => {
       await mkUserRow(database, { instanceRole: "admin" });
       const target = await mkUserRow(database);
       await mkSessionRow(database, target);
       await mkSessionRow(database, target);
+
+      const clientId = `client-${randomUUID()}`;
+      await database.insert(oauthClients).values({
+        id: randomUUID(),
+        clientId,
+        redirectUris: ["http://localhost/callback"],
+      });
+      const refreshId = randomUUID();
+      await database.insert(oauthRefreshTokens).values({
+        id: refreshId,
+        token: randomUUID(),
+        clientId,
+        userId: target,
+        expiresAt: new Date(Date.now() + 60_000),
+        scopes: ["read"],
+      });
+      await database.insert(oauthAccessTokens).values({
+        id: randomUUID(),
+        token: randomUUID(),
+        clientId,
+        userId: target,
+        refreshId,
+        expiresAt: new Date(Date.now() + 60_000),
+        scopes: ["read"],
+      });
 
       const changed = await changeInstanceUser(
         target,
@@ -95,7 +125,17 @@ describe("changeInstanceUser", () => {
         .select({ id: authSessions.id })
         .from(authSessions)
         .where(eq(authSessions.userId, target));
+      const accessTokens = await database
+        .select({ id: oauthAccessTokens.id })
+        .from(oauthAccessTokens)
+        .where(eq(oauthAccessTokens.userId, target));
+      const refreshTokens = await database
+        .select({ id: oauthRefreshTokens.id })
+        .from(oauthRefreshTokens)
+        .where(eq(oauthRefreshTokens.userId, target));
       expect(sessions).toHaveLength(0);
+      expect(accessTokens).toHaveLength(0);
+      expect(refreshTokens).toHaveLength(0);
     });
   }, 30_000);
 

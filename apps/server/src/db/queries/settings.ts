@@ -1211,6 +1211,40 @@ export async function instanceValues<const K extends SettingKey>(
 }
 
 /**
+ * Resolves a single project-scope setting across many projects in memory from
+ * pre-fetched stored values (`undefined` when a project has no row) and the
+ * cached instance rows, avoiding per-project queries.
+ */
+export async function resolveProjectValuesBatch<K extends SettingKey>(
+  key: K,
+  storedByProject: ReadonlyMap<number, unknown>
+): Promise<Map<number, SettingsValues[K]>> {
+  const definition = definitionOf(key);
+  const instance = await instanceRows();
+  const result = new Map<number, SettingsValues[K]>();
+  for (const [projectId, value] of storedByProject) {
+    const project: StoredSetting[] =
+      value === undefined
+        ? []
+        : [
+            {
+              key,
+              value,
+              locked: false,
+              updatedAt: new Date(0),
+              updatedBy: null,
+            },
+          ];
+    const { layers, locks } = layersOf({ instance, project });
+    result.set(
+      projectId,
+      resolveSetting(definition, layers, locks).value as SettingsValues[K]
+    );
+  }
+  return result;
+}
+
+/**
  * Several project-scope keys as a caller in project `projectId` reads them,
  * each typed by its key: the project's row, then the instance's, then the
  * `env` layer and the default. The project's rows are read fresh, the

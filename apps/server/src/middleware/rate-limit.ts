@@ -5,7 +5,12 @@ import type { AuthType } from "../auth.js";
 import { clientAddress } from "../lib/client-address.js";
 import { instancePolicy } from "../lib/instance-policy.js";
 
-type Bucket = { tokens: number; refilledAt: number; burst: number };
+type Bucket = {
+  name: RateBucketName;
+  tokens: number;
+  refilledAt: number;
+  burst: number;
+};
 
 /** One spend's outcome: allowed, or refused with how long until a token is back. */
 type Spend = { allowed: true } | { allowed: false; retryAfterSeconds: number };
@@ -20,17 +25,34 @@ const IDLE_MS = 60 * 60_000;
  */
 const buckets = new Map<string, Bucket>();
 
-// Unreferenced so the sweep cannot hold the process — or the test runner —
-// open on its own. Only a full bucket is swept: deleting one that still owes
-// refill would hand back tokens early, but tearing down a full one and
-// rebuilding it fresh next time is exactly the same state.
-setInterval(() => {
-  const cutoff = Date.now() - IDLE_MS;
+/**
+ * Removes every idle bucket whose allowance has refilled back to full.
+ * Computing effective tokens from elapsed time avoids evicting a bucket that
+ * still owes refill while ensuring idle buckets that stopped receiving traffic
+ * after spending tokens are actually reclaimed.
+ */
+export function sweepIdleBuckets(now = Date.now()): number {
+  const cutoff = now - IDLE_MS;
+  let evicted = 0;
   for (const [key, bucket] of buckets) {
-    if (bucket.tokens >= bucket.burst && bucket.refilledAt < cutoff) {
+    if (bucket.refilledAt >= cutoff) continue;
+    const { burst, perMinute } = instancePolicy().rateLimits[bucket.name];
+    const effectiveTokens = Math.min(
+      burst,
+      bucket.tokens + (now - bucket.refilledAt) * (perMinute / 60_000)
+    );
+    if (effectiveTokens >= burst) {
       buckets.delete(key);
+      evicted += 1;
     }
   }
+  return evicted;
+}
+
+// Unreferenced so the sweep cannot hold the process — or the test runner —
+// open on its own.
+setInterval(() => {
+  sweepIdleBuckets();
 }, SWEEP_INTERVAL_MS).unref();
 
 /**
@@ -48,6 +70,7 @@ function spend(name: RateBucketName, key: string): Spend {
   const now = Date.now();
 
   const bucket = buckets.get(bucketKey) ?? {
+    name,
     tokens: burst,
     refilledAt: now,
     burst,
@@ -63,7 +86,10 @@ function spend(name: RateBucketName, key: string): Spend {
   if (bucket.tokens < 1) {
     return {
       allowed: false,
-      retryAfterSeconds: Math.ceil((1 - bucket.tokens) / refillPerMs / 1000),
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil((1 - bucket.tokens) / refillPerMs / 1000)
+      ),
     };
   }
 
@@ -82,11 +108,20 @@ export function takeToken(name: RateBucketName, key: string): boolean {
 
 /**
  * `takeToken` for a caller outside the middleware chain — an MCP tool, the MCP
- * route — which answers a refusal with the same 429 a route does.
+ * route, machine heartbeats — which answers a refusal with a 429 carrying a
+ * standard `Retry-After` header (seconds).
  */
 export function spendToken(name: RateBucketName, key: string): void {
-  if (!takeToken(name, key)) {
-    throw new HTTPException(429, { message: "Too many requests" });
+  const result = spend(name, key);
+  if (!result.allowed) {
+    const res = new Response(JSON.stringify({ error: "Too many requests" }), {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": String(result.retryAfterSeconds),
+      },
+    });
+    throw new HTTPException(429, { message: "Too many requests", res });
   }
 }
 

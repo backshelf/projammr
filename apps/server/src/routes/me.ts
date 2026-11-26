@@ -1,10 +1,12 @@
 import { isAPIError } from "better-auth/api";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { deleteCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { auth, type AuthedEnv } from "../auth.js";
 import { db } from "../db/index.js";
+import { isUniqueViolation } from "../db/unique-violation.js";
 import {
   deletionPlan,
   deletionPlanSchema,
@@ -176,21 +178,33 @@ app.patch(
       throw error;
     }
 
-    const [existing] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, normalised));
-    if (existing) {
-      throw new HTTPException(409, { message: "That email is already in use" });
+    let updated: typeof users.$inferSelect | undefined;
+    try {
+      [updated] = await db
+        .update(users)
+        .set({ email: normalised, emailVerified: false })
+        .where(eq(users.id, user.id))
+        .returning();
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new HTTPException(409, {
+          message: "That email is already in use",
+        });
+      }
+      throw error;
     }
 
-    const [updated] = await db
-      .update(users)
-      .set({ email: normalised, emailVerified: false })
-      .where(eq(users.id, user.id))
-      .returning();
+    if (!updated) throw new HTTPException(404, { message: "User not found" });
 
-    return respond(c, meSchema, me(updated!));
+    // Drop Better Auth's session cookie cache so the next request reads the
+    // updated address from Postgres instead of serving the cached copy.
+    deleteCookie(c, "better-auth.session_data", { path: "/" });
+    deleteCookie(c, "__Secure-better-auth.session_data", {
+      path: "/",
+      secure: true,
+    });
+
+    return respond(c, meSchema, me(updated));
   }
 );
 

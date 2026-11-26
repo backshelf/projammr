@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AuthedEnv } from "../auth.js";
 import {
   changeInstanceUser,
-  getInstanceUser,
+  getAccountIdentity,
   instanceUserPatchSchema,
   instanceUserSchema,
   instanceUsersSchema,
@@ -201,7 +201,7 @@ app.post(
   ),
   params({ id: z.string().min(1) }),
   async (c) => {
-    const target = await getInstanceUser(c.req.valid("param").id);
+    const target = await getAccountIdentity(c.req.valid("param").id);
     const url = await mintResetLink(target.id);
     await clearLockout(target.email);
     const byUserId = c.get("user").id;

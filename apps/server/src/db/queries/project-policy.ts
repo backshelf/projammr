@@ -13,7 +13,7 @@ import {
 } from "@workspace/settings/groups/project-sharing";
 import type { Sharelink } from "../schema/sharelinks.js";
 import type { AssignableRole } from "./authorization.js";
-import { projectValues } from "./settings.js";
+import { projectValues, resolveProjectValuesBatch } from "./settings.js";
 
 export type { DuplicateKeep };
 
@@ -203,6 +203,26 @@ export async function projectPolicy(projectId: number): Promise<ProjectPolicy> {
     conventions: { ...policy.conventions, ...patch.conventions },
     audio: { ...policy.audio, ...patch.audio },
   };
+}
+
+/**
+ * Resolves `project-audio.storageCapGb` for every project in `storedByProject`
+ * (using `undefined` when a project has no row), applying instance defaults,
+ * locks, and any active test patch without per-project database queries.
+ */
+export async function projectStorageCaps(
+  storedByProject: ReadonlyMap<number, unknown>
+): Promise<Map<number, number | null>> {
+  const caps = await resolveProjectValuesBatch(
+    "project-audio.storageCapGb",
+    storedByProject
+  );
+  for (const [projectId, patch] of testPatches) {
+    if (caps.has(projectId) && patch.audio?.storageCapGb !== undefined) {
+      caps.set(projectId, patch.audio.storageCapGb);
+    }
+  }
+  return caps;
 }
 
 /**

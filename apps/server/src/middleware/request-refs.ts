@@ -14,9 +14,9 @@ export function segments(c: Context): string[] {
 }
 
 export function positiveInt(value: string | undefined): number | null {
-  if (value === undefined) return null;
+  if (value === undefined || !/^\d+$/.test(value)) return null;
   const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
 /**
@@ -48,9 +48,13 @@ export async function readBody(c: Context): Promise<unknown> {
 }
 
 export function numberOf(value: unknown): number | null {
-  if (value == null) return null;
-  const n = Number(value);
-  return Number.isNaN(n) ? null : n;
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+  if (typeof value === "string") {
+    return positiveInt(value.trim());
+  }
+  return null;
 }
 
 /**

@@ -216,19 +216,26 @@ export function parseFfmpegDurationMs(stderrLine: string): number | null {
   );
 }
 
+/** Maximum stderr retained per ffmpeg child, keeping the tail for diagnostics. */
+export const MAX_FFMPEG_STDERR_CHARS = 16 * 1024;
+
 /**
  * ffmpeg's stderr as it arrives. The pipe splits it wherever it likes, so the
  * `Duration:` banner can land across two chunks; the duration is read from
- * everything received so far rather than from any one chunk, and stays fixed
- * once found.
+ * what has been received so far rather than from any one chunk, and stays
+ * fixed once found. Retained text is capped at {@link MAX_FFMPEG_STDERR_CHARS}
+ * (tail) so a noisy stream cannot grow memory without bound.
  */
-export function ffmpegStderr() {
+export function ffmpegStderr(maxChars = MAX_FFMPEG_STDERR_CHARS) {
   let text = "";
   let durationMs: number | null = null;
   return {
     push(chunk: string) {
       text += chunk;
       durationMs ??= parseFfmpegDurationMs(text);
+      if (text.length > maxChars) {
+        text = text.slice(text.length - maxChars);
+      }
     },
     durationMs: () => durationMs,
     text: () => text,
@@ -299,6 +306,18 @@ export class MediaLimitError extends Error {
   }
 }
 
+/**
+ * Thrown when an ffmpeg decode or transcode exceeds its wall-clock deadline.
+ * Distinct from a caller-initiated `AbortError` so the job runner records a
+ * failure and retries instead of misclassifying the timeout as a cancellation.
+ */
+export class MediaTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MediaTimeoutError";
+  }
+}
+
 /** Restricts every ffmpeg read to the local file it was given and caps how
  *  much of it can ever be read, regardless of what the input claims. */
 const inputGuards = () => [
@@ -311,25 +330,29 @@ const inputGuards = () => [
 /**
  * Spawns ffmpeg with `args` under `deadlineMs`, the one place `decodeInto`,
  * `convertAudio` and `probeMediaSeconds` all get a child, an abort that
- * kills it, and the duration their progress divides against — the plan's
- * "one module owns spawn-and-cancel". `deadlineMs` and `signal` combine
- * through `AbortSignal.any`, so a deadline that fires kills the child exactly
- * as a cancel would, and the returned `signal` is what a caller checks
- * afterwards to tell which — or whether — either did. Rejects with an
- * `AbortError` before spawning anything when the combined signal has already
- * fired, so a cancel that lands before a caller starts never runs ffmpeg on a
- * file nobody wants decoded or encoded anymore.
+ * kills it, and the duration their progress divides against. `deadlineMs` and
+ * `signal` combine through `AbortSignal.any`, so a deadline that fires kills
+ * the child exactly as a cancel would, while `timedOut()` tells the caller
+ * whether the deadline rather than `signal` fired. Rejects with an `AbortError`
+ * before spawning anything when `signal` has already aborted, so a cancel that
+ * lands before a caller starts never runs ffmpeg on a file nobody wants decoded
+ * or encoded anymore.
  */
 function spawnFfmpeg(
   args: string[],
   { signal, deadlineMs }: { signal?: AbortSignal; deadlineMs: number }
 ) {
-  const combined = AbortSignal.any([
-    ...(signal ? [signal] : []),
-    AbortSignal.timeout(deadlineMs),
-  ]);
-  if (combined.aborted) {
+  const timeoutSignal = AbortSignal.timeout(deadlineMs);
+  const combined = signal
+    ? AbortSignal.any([signal, timeoutSignal])
+    : timeoutSignal;
+  if (signal?.aborted) {
     throw new DOMException("aborted before ffmpeg started", "AbortError");
+  }
+  if (timeoutSignal.aborted) {
+    throw new MediaTimeoutError(
+      `ffmpeg exceeded ${deadlineMs}ms deadline before starting`
+    );
   }
   const child = spawn(FFMPEG_PATH, args, { stdio: ["ignore", "pipe", "pipe"] });
   const onAbort = () => child.kill("SIGKILL");
@@ -348,6 +371,8 @@ function spawnFfmpeg(
     child,
     /** Fires on a cancel, a deadline, or both — the child is already dead either way. */
     signal: combined,
+    /** Whether the wall-clock deadline (rather than a caller abort) fired. */
+    timedOut: () => timeoutSignal.aborted,
     durationMs: stderr.durationMs,
     stderrTail: stderr.text,
     exit,
@@ -448,7 +473,8 @@ function requireKnownDuration(
  * `PROGRESS_INTERVAL_MS` and never above 0.999, since the true end is
  * `session.finish()` returning. Resolves to the frame count decoded, or null
  * when ffmpeg cannot read the file. `signal` kills the child with `SIGKILL`
- * and rejects with an `AbortError`, as does the deadline itself.
+ * and rejects with an `AbortError`; exceeding the wall-clock deadline kills
+ * the child and rejects with a {@link MediaTimeoutError}.
  */
 export async function decodeInto(
   path: string,
@@ -459,6 +485,7 @@ export async function decodeInto(
     durationSeconds,
     maxMediaSeconds: maxSeconds = maxMediaSeconds(),
     probeTimeoutMs = PROBE_TIMEOUT_MS,
+    deadlineMs,
   }: {
     onProgress?: MediaProgress;
     signal?: AbortSignal;
@@ -468,6 +495,8 @@ export async function decodeInto(
     maxMediaSeconds?: number;
     /** Overridable so a test can make a stalled probe fail fast. */
     probeTimeoutMs?: number;
+    /** Overridable so a test can exercise the decode deadline without waiting 60s. */
+    deadlineMs?: number;
   } = {}
 ): Promise<number | null> {
   const probedSeconds =
@@ -479,17 +508,12 @@ export async function decodeInto(
           timeoutMs: probeTimeoutMs,
         });
 
-  const {
-    child,
-    durationMs,
-    exit,
-    cleanup,
-    signal: deadline,
-  } = spawnFfmpeg(
+  const decodeDeadlineMs = deadlineMs ?? mediaDeadlineMs(probedSeconds ?? 0);
+  const { child, durationMs, exit, cleanup, timedOut } = spawnFfmpeg(
     [...DECODE_ARGS_HEAD, ...inputGuards(), "-i", path, ...DECODE_ARGS_TAIL],
     {
       signal,
-      deadlineMs: mediaDeadlineMs(probedSeconds ?? 0),
+      deadlineMs: decodeDeadlineMs,
     }
   );
 
@@ -524,13 +548,23 @@ export async function decodeInto(
     }
   } catch (error) {
     child.kill("SIGKILL");
-    if (deadline.aborted) throw error;
+    if (signal?.aborted) throw error;
+    if (timedOut()) {
+      throw new MediaTimeoutError(
+        `decoding ${path} exceeded ${decodeDeadlineMs}ms deadline`
+      );
+    }
     return null;
   } finally {
     cleanup();
   }
-  if (deadline.aborted) {
+  if (signal?.aborted) {
     throw new DOMException("decode aborted", "AbortError");
+  }
+  if (timedOut()) {
+    throw new MediaTimeoutError(
+      `decoding ${path} exceeded ${decodeDeadlineMs}ms deadline`
+    );
   }
   if ((await exit) !== 0) return null;
   session.finish();
@@ -557,7 +591,8 @@ export function getDsp(): Promise<Dsp> {
  * `onProgress`, called at most once per `PROGRESS_INTERVAL_MS` and never
  * above 0.999. Rejects when ffmpeg fails, so the caller decides what an
  * unconvertible file means. `signal` kills the child with `SIGKILL` and
- * rejects with an `AbortError`, as does the deadline itself.
+ * rejects with an `AbortError`; exceeding the wall-clock deadline kills the
+ * child and rejects with a {@link MediaTimeoutError}.
  */
 export async function convertAudio(
   input: string,
@@ -569,6 +604,7 @@ export async function convertAudio(
     signal,
     durationSeconds,
     maxMediaSeconds: maxSeconds = maxMediaSeconds(),
+    deadlineMs,
   }: {
     onProgress?: MediaProgress;
     signal?: AbortSignal;
@@ -576,6 +612,8 @@ export async function convertAudio(
      *  length; still checked against `maxMediaSeconds`. */
     durationSeconds?: number;
     maxMediaSeconds?: number;
+    /** Overridable so a test can exercise the convert deadline without waiting 60s. */
+    deadlineMs?: number;
   } = {}
 ): Promise<void> {
   const probedSeconds =
@@ -588,28 +626,23 @@ export async function convertAudio(
 
   const codec =
     format === ".mp3" ? ["-c:a", "libmp3lame", "-b:a", `${kbps}k`] : [];
-  const {
-    child,
-    durationMs,
-    stderrTail,
-    exit,
-    cleanup,
-    signal: deadline,
-  } = spawnFfmpeg(
-    [
-      "-y",
-      "-hide_banner",
-      "-nostats",
-      ...inputGuards(),
-      "-i",
-      input,
-      ...codec,
-      "-progress",
-      "pipe:1",
-      output,
-    ],
-    { signal, deadlineMs: mediaDeadlineMs(probedSeconds ?? 0) }
-  );
+  const convertDeadlineMs = deadlineMs ?? mediaDeadlineMs(probedSeconds ?? 0);
+  const { child, durationMs, stderrTail, exit, cleanup, timedOut } =
+    spawnFfmpeg(
+      [
+        "-y",
+        "-hide_banner",
+        "-nostats",
+        ...inputGuards(),
+        "-i",
+        input,
+        ...codec,
+        "-progress",
+        "pipe:1",
+        output,
+      ],
+      { signal, deadlineMs: convertDeadlineMs }
+    );
 
   let carry = "";
   let lastReport = 0;
@@ -637,14 +670,24 @@ export async function convertAudio(
     }
   } catch (error) {
     // A stream error unrelated to a cancel still leaves the child to be
-    // reaped below by its exit code; only a cancel rethrows directly.
+    // reaped below by its exit code; a cancel or deadline rethrows directly.
     child.kill("SIGKILL");
-    if (deadline.aborted) throw error;
+    if (signal?.aborted) throw error;
+    if (timedOut()) {
+      throw new MediaTimeoutError(
+        `converting ${input} exceeded ${convertDeadlineMs}ms deadline`
+      );
+    }
   } finally {
     cleanup();
   }
-  if (deadline.aborted) {
+  if (signal?.aborted) {
     throw new DOMException("convert aborted", "AbortError");
+  }
+  if (timedOut()) {
+    throw new MediaTimeoutError(
+      `converting ${input} exceeded ${convertDeadlineMs}ms deadline`
+    );
   }
   const code = await exit;
   if (code !== 0) {

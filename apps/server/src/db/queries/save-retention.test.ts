@@ -262,6 +262,7 @@ const sweptTables = [
   "repo_objects",
   "save_objects",
   "save_sample_objects",
+  "commits",
   "saves",
   "sessions",
 ];
@@ -621,6 +622,66 @@ describe("sweepSaveContent", () => {
     expect(await linksOf(set.repoId)).toEqual([fresh]);
   });
 
+  it("keeps pushed lineage objects (save and commit) past the push grace through unlink and reap", async () => {
+    requireProject();
+    const set = await adoptNewSet(suite, "lineage-kept");
+    const own = savePayload("lineage-own", ancient(1));
+    const commitHash = hashOf("commit-lineage-0");
+    const orphan = hashOf("lineage-orphan");
+    const lineageHashes = [own.hash, commitHash];
+    filed.push(...lineageHashes, orphan);
+
+    await storeObjects([
+      { hash: own.hash, bytes: new Uint8Array([4, 1, 2]) },
+      { hash: commitHash, bytes: new Uint8Array([5, 3, 4]) },
+      { hash: orphan, bytes: new Uint8Array([1, 9, 9]) },
+    ]);
+    await db
+      .insert(objects)
+      .values([
+        { hash: own.hash, kind: 4, size: 3 },
+        { hash: commitHash, kind: 5, size: 3 },
+        { hash: orphan, kind: 1, size: 3 },
+      ])
+      .onConflictDoNothing();
+    await db
+      .insert(repoObjects)
+      .values(
+        [...lineageHashes, orphan].map((objectHash) => ({
+          repoId: set.repoId,
+          objectHash,
+          pushedBy: owner.userId,
+        }))
+      )
+      .onConflictDoNothing();
+
+    await seedObjects(set.repoId, owner.userId, objectsOf(own));
+    expect((await pushSaves(suite, set, "main", [own])).ok).toBe(true);
+    expect(
+      (
+        await pushCommits(suite, set, "main", [
+          commitPayload("lineage-0", null, [own], {
+            lineageObjects: lineageHashes,
+          }),
+        ])
+      ).ok
+    ).toBe(true);
+    await ageLinks(set.repoId, [...objectsOf(own), ...lineageHashes, orphan]);
+
+    await sweepSaveContent();
+
+    const links = await linksOf(set.repoId);
+    expect(links).toContain(own.hash);
+    expect(links).toContain(commitHash);
+    expect(links).not.toContain(orphan);
+    expect(await objectRows([...lineageHashes, orphan])).toEqual(
+      sorted(lineageHashes)
+    );
+    expect(await storedFileExists(objectKey(own.hash))).toBe(true);
+    expect(await storedFileExists(objectKey(commitHash))).toBe(true);
+    expect(await storedFileExists(objectKey(orphan))).toBe(false);
+  });
+
   it("keeps an object an unpruned save still rebuilds from, however old its link", async () => {
     requireProject();
     const set = await adoptNewSet(suite, "held");
@@ -964,6 +1025,7 @@ describe("sweepSaveContent", () => {
             tables: [
               "save_objects",
               "save_sample_objects",
+              "commits",
               "saves",
               "sessions",
             ],

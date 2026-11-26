@@ -82,13 +82,13 @@ const pushedSaveSchema = z.object({
 export const pushSavesBodySchema = z.object({
   ditSetId: ditSetIdSchema,
   branch: branchNameSchema,
-  saves: z.array(pushedSaveSchema).min(1),
+  saves: z.array(pushedSaveSchema).min(1).max(1000),
 });
 
 /** A save a commit covers, with the objects that save rebuilds from. */
 const commitSaveSchema = z.object({
   hash: hashSchema,
-  objects: z.array(hashSchema),
+  objects: z.array(hashSchema).max(100_000),
 });
 
 const pushedCommitSchema = z
@@ -100,9 +100,9 @@ const pushedCommitSchema = z
     kind: z.enum(rawCommitKindEnum),
     committedAt: epochDate,
     machineName: pushedMachineNameSchema,
-    saves: z.array(commitSaveSchema).min(1),
+    saves: z.array(commitSaveSchema).min(1).max(2000),
     /** The leaf ids of the commit's own save's samples, which the hub links for those it holds. */
-    sampleObjects: z.array(hashSchema).optional(),
+    sampleObjects: z.array(hashSchema).max(10_000).optional(),
     /**
      * The commit's lineage: its own save and the commit object, which the hub
      * links into the repo so a restore can fetch them back. At most two, the
@@ -118,7 +118,7 @@ const pushedCommitSchema = z
 export const pushCommitsBodySchema = z.object({
   ditSetId: ditSetIdSchema,
   branch: branchNameSchema,
-  commits: z.array(pushedCommitSchema).min(1),
+  commits: z.array(pushedCommitSchema).min(1).max(500),
 });
 
 export const savesPushedSchema = z.object({ saved: z.number().int() });

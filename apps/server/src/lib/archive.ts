@@ -39,6 +39,27 @@ function entryName(name: string): string {
 }
 
 /**
+ * Picks a unique archive entry name for `fileName` given the names already
+ * `used`, appending ` (2)`, ` (3)`, … to the sanitised base name before its
+ * extension rather than stacking suffixes onto previous attempts.
+ */
+export function uniqueEntryName(
+  fileName: string,
+  used: ReadonlySet<string>
+): string {
+  const base = entryName(fileName);
+  const dot = base.lastIndexOf(".");
+  let name = base;
+  for (let n = 2; used.has(name); n++) {
+    name =
+      dot > 0
+        ? `${base.slice(0, dot)} (${n})${base.slice(dot)}`
+        : `${base} (${n})`;
+  }
+  return name;
+}
+
+/**
  * A reference's project-relative path as a safe archive path, or null when it
  * is not one: dit only reports `relative` under `Samples/`, but the hub does
  * not take a path from a client into an archive unchecked. An absolute path,
@@ -111,14 +132,7 @@ export async function* archiveEntries(
   const written = new Set<string>();
   for (const { set, refs, kinds } of loaded) {
     const bytes = set.file ?? (await saveFile(set.saveId));
-    let name = entryName(set.fileName);
-    for (let n = 2; used.has(name); n++) {
-      const dot = name.lastIndexOf(".");
-      name =
-        dot > 0
-          ? `${name.slice(0, dot)} (${n})${name.slice(dot)}`
-          : `${name} (${n})`;
-    }
+    const name = uniqueEntryName(set.fileName, used);
     used.add(name);
     yield { name, data: bytes };
 

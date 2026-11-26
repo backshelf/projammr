@@ -176,10 +176,15 @@ export async function applyMigrations(pool: Pool = db.$client): Promise<void> {
       await dumpBeforeMigrate(pool, pending[0]!.name);
     }
 
+    // Migrations can rebuild large indexes or backfill tables past the pool's
+    // 30 s statement timeout; disable it for the duration on this session and
+    // restore the pool's setting before releasing the client.
+    await client.query("set statement_timeout = 0");
     await migrate(drizzle({ client }), {
       migrationsFolder: MIGRATIONS_FOLDER,
     });
   } finally {
+    await client.query("reset statement_timeout").catch(() => {});
     await client
       .query("select pg_advisory_unlock($1)", [MIGRATION_LOCK])
       .catch(() => {});

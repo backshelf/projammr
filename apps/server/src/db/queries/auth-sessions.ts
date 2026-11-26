@@ -1,16 +1,18 @@
 import { eq } from "drizzle-orm";
 import { db } from "../index.js";
 import { authSessions } from "../schema/auth.js";
+import { oauthAccessTokens, oauthRefreshTokens } from "../schema/oauth.js";
 
 /** The pool, or a transaction on it. */
 type Executor = Pick<typeof db, "delete">;
 
 /**
- * Deletes every session an account holds, signing it out everywhere. Better
- * Auth's cookie cache means a session it has already minted a cached copy of
- * keeps resolving until that copy expires (`session.cookieCache.maxAge`), so
- * this is what ends the session everywhere the cache is not in play — and what
- * makes the next cache miss land on nothing.
+ * Deletes every auth session and OAuth token an account holds, signing it out
+ * everywhere (browser, dit, and MCP/OAuth clients). Better Auth's cookie cache
+ * means a session it has already minted a cached copy of keeps resolving until
+ * that copy expires (`session.cookieCache.maxAge`), so this is what ends the
+ * session everywhere the cache is not in play — and what makes the next cache
+ * miss or token refresh land on nothing.
  */
 export async function revokeUserSessions(
   userId: string,
@@ -20,5 +22,11 @@ export async function revokeUserSessions(
     .delete(authSessions)
     .where(eq(authSessions.userId, userId))
     .returning({ id: authSessions.id });
+  await executor
+    .delete(oauthAccessTokens)
+    .where(eq(oauthAccessTokens.userId, userId));
+  await executor
+    .delete(oauthRefreshTokens)
+    .where(eq(oauthRefreshTokens.userId, userId));
   return removed.length;
 }

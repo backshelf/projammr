@@ -7,7 +7,7 @@ import {
   type StorageReport,
   type StorageScopeKind,
 } from "../schema/storage-usage.js";
-import { projectPolicy } from "./project-policy.js";
+import { projectPolicy, projectStorageCaps } from "./project-policy.js";
 
 /** Anything that can run a statement: the pool, or a transaction on it. */
 type Executor = Pick<typeof db, "execute">;
@@ -582,7 +582,8 @@ export async function repoStorages(
 /**
  * Every counter, biggest first, with the name of the project or account it
  * belongs to. A row whose scope has been deleted but not yet audited away has
- * no name.
+ * no name. Project storage caps are fetched in the same query and resolved in
+ * batch against the cached instance policy instead of querying per project.
  */
 export async function allUsageReports(
   executor: Executor = db
@@ -592,27 +593,65 @@ export async function allUsageReports(
     scope_id: string;
     bytes: string | number;
     name: string | null;
+    has_project_cap: boolean;
+    project_cap_value: unknown;
   }>(sql`
-    select su.scope_kind, su.scope_id, su.bytes, coalesce(p.name, u.name) as name
+    select su.scope_kind,
+           su.scope_id,
+           su.bytes,
+           coalesce(p.name, u.name) as name,
+           ps.key is not null as has_project_cap,
+           ps.value as project_cap_value
       from storage_usage su
       left join projects p on su.scope_kind = 'project' and p.id::text = su.scope_id
+      left join project_settings ps
+        on su.scope_kind = 'project'
+       and ps.project_id = p.id
+       and ps.key = 'project-audio.storageCapGb'
       left join users u on su.scope_kind = 'user' and u.id = su.scope_id
      order by su.bytes desc
   `);
 
-  return Promise.all(
-    rows.map(async (row) => ({
+  const storedProjectCaps = new Map<number, unknown>();
+  for (const row of rows) {
+    if (row.scope_kind !== "project") continue;
+    storedProjectCaps.set(
+      Number(row.scope_id),
+      row.has_project_cap ? row.project_cap_value : undefined
+    );
+  }
+  const resolvedProjectCaps =
+    storedProjectCaps.size > 0
+      ? await projectStorageCaps(storedProjectCaps)
+      : new Map<number, number | null>();
+
+  const projectInstanceCap = instanceCapFor("project");
+  const userInstanceCap = instanceCapFor("user");
+
+  return rows.map((row) => {
+    let limitBytes: number | null;
+    if (row.scope_kind === "project") {
+      const projectCap = capBytes(
+        resolvedProjectCaps.get(Number(row.scope_id)) ?? null
+      );
+      limitBytes =
+        projectCap == null
+          ? projectInstanceCap
+          : projectInstanceCap == null
+            ? projectCap
+            : Math.min(projectInstanceCap, projectCap);
+    } else {
+      limitBytes = userInstanceCap;
+    }
+
+    return {
       scopeKind: row.scope_kind,
       scopeId: row.scope_id,
       name: row.name,
       usedBytes: Number(row.bytes),
-      limitBytes: await limitFor(
-        row.scope_kind === "project"
-          ? projectScope(Number(row.scope_id))
-          : userScope(row.scope_id)
-      ),
-    }))
-  );
+      limitBytes,
+    };
+  });
 }
 
 /**

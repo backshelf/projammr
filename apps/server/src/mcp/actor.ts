@@ -46,17 +46,20 @@ function parseScopes(scopeClaim: unknown): ReadonlySet<Scope> {
 }
 
 /**
- * The verified token's subject, as a `users` row; a token for a deleted user
- * is 401 rather than a crash, since `requireMcpAuth` only checks the JWT's
- * signature and claims and never whether the row behind `sub` still exists.
- * A share-page guest's anonymous session is refused with the same 403 the
- * `authenticated` middleware answers a cookie caller with — MCP has no
- * guest-facing surface for it to reach.
+ * The verified token's subject, as a `users` row; a token for a deleted or
+ * disabled user is 401 rather than a crash or bypass, since `requireMcpAuth`
+ * only checks the JWT's signature and claims and never whether the row behind
+ * `sub` is still active. A share-page guest's anonymous session is refused with
+ * the same 403 the `authenticated` middleware answers a cookie caller with —
+ * MCP has no guest-facing surface for it to reach.
  */
 export async function loadActor(claims: McpClaims): Promise<Actor> {
   const id = stringClaim(claims.sub);
   const [user] = await db.select().from(users).where(eq(users.id, id));
   if (!user) throw new HTTPException(401, { message: "Unknown user" });
+  if (user.disabledAt != null) {
+    throw new HTTPException(401, { message: "Account disabled" });
+  }
   if (user.isAnonymous) {
     throw new HTTPException(403, { message: "This needs an account" });
   }

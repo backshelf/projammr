@@ -98,8 +98,8 @@ export const resolveCommentRoute: ProjectIdResolver = async (c) => {
   try {
     const body = await c.req.json();
     const targetType = z.enum(rawCommentTargetEnum).safeParse(body?.targetType);
-    const targetId = Number(body?.targetId);
-    if (!targetType.success || Number.isNaN(targetId)) return null;
+    const targetId = numberOf(body?.targetId);
+    if (!targetType.success || targetId == null) return null;
     return projectScope(
       await projectIdForCommentTarget(targetType.data, targetId)
     );

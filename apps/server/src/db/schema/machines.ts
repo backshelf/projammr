@@ -97,6 +97,13 @@ export const pushedRepoSchema = z.object({
 });
 export type PushedRepo = z.infer<typeof pushedRepoSchema>;
 
+/** A session a machine currently has open, as its owner may read it. */
+export const openSessionSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  projectId: z.number().int(),
+});
+
 /**
  * One of the caller's machines: the repos it tracks (`repoIds`, as its beats
  * report them), the set it has open, the repos it has pushed to and the
@@ -104,7 +111,7 @@ export type PushedRepo = z.infer<typeof pushedRepoSchema>;
  */
 export const machineListItemSchema = machineSchema.extend({
   repoIds: z.array(z.number().int()),
-  openSession: z.object({ id: z.number().int(), name: z.string() }).nullable(),
+  openSession: openSessionSchema.nullable(),
   pushedRepos: z.array(pushedRepoSchema),
   neverHere: z.array(z.object({ id: z.number().int(), folder: z.string() })),
 });

@@ -170,8 +170,8 @@ app.post(
   validator(
     "json",
     z.object({
-      projectId: z.number(),
-      fingerprints: z.array(z.string()),
+      projectId: z.number().int().positive(),
+      fingerprints: z.array(z.string()).max(2000),
     })
   ),
   async (c) => {

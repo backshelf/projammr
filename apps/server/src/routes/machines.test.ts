@@ -484,7 +484,7 @@ describe("GET /machines: the set open and the repos pushed", () => {
 
   type Described = {
     id: string;
-    openSession: { id: number; name: string } | null;
+    openSession: { id: number; name: string; projectId: number } | null;
     pushedRepos: { id: number; name: string; projectId: number }[];
     neverHere: unknown[];
   };
@@ -508,6 +508,7 @@ describe("GET /machines: the set open and the repos pushed", () => {
     expect((await describedBy(owner, id)).openSession).toEqual({
       id: session.id,
       name: session.name,
+      projectId: suite.projectId,
     });
 
     await goOffline(id);

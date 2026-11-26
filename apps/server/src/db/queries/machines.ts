@@ -274,7 +274,7 @@ async function openSessionsOf(
   rows: readonly MachineRow[],
   userId: string,
   now: number
-): Promise<Map<number, { id: number; name: string }>> {
+): Promise<Map<number, { id: number; name: string; projectId: number }>> {
   const openable = rows.flatMap((row) =>
     row.openSessionId !== null && isOnline(row.lastSeenAt, now)
       ? [row.openSessionId]
@@ -282,7 +282,11 @@ async function openSessionsOf(
   );
   if (openable.length === 0) return new Map();
   const found = await db
-    .select({ id: sessions.id, name: sessions.name })
+    .select({
+      id: sessions.id,
+      name: sessions.name,
+      projectId: sessions.projectId,
+    })
     .from(sessions)
     .innerJoin(
       members,

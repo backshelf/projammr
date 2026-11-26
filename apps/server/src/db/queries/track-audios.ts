@@ -461,6 +461,97 @@ async function analysesOnLink(trackId: number): Promise<boolean> {
 }
 
 /**
+ * Links audio asset ids to a track inside a caller-owned transaction,
+ * resequences versions, and updates the primary version. Callers must invoke
+ * {@link enqueueLinkedAnalysis} after the transaction commits.
+ */
+export async function linkTrackAudiosWithin(
+  tx: Tx,
+  trackId: number,
+  audioIds: number[],
+  primaryAssetId?: number
+): Promise<{ id: number }[]> {
+  // The assets first, then the track's lock, both before the insert
+  // (`docs/agents/db.md`, Lock order). The insert key-share-locks each
+  // asset and the track's row through its foreign keys; a track delete
+  // holds the track's lock while it deletes that row, so a link that had
+  // the row first and then waited on the lock would deadlock against it.
+  await tx
+    .select({ id: assets.id })
+    .from(assets)
+    .where(inArray(assets.id, audioIds))
+    .orderBy(assets.id)
+    .for("key share");
+  await lockTracksForAnalysis(tx, [trackId]);
+
+  const hadPrimary = await tx.query.trackAudios.findFirst({
+    where: { trackId, isPrimary: true },
+    columns: { id: true, primaryPinned: true },
+  });
+
+  // Insert past the current max version so the whole set stays positive and
+  // distinct; resequenceVersions then renumbers everything by asset date.
+  const versionRows = await tx
+    .select({
+      maxVersion: sql<number>`COALESCE(MAX(${trackAudios.version}), 0)`,
+    })
+    .from(trackAudios)
+    .where(eq(trackAudios.trackId, trackId));
+  const maxVersion = versionRows[0]?.maxVersion ?? 0;
+
+  const rows = await tx
+    .insert(trackAudios)
+    .values(
+      audioIds.map((assetId, i) => ({
+        trackId,
+        assetId,
+        version: maxVersion + 1 + i,
+      }))
+    )
+    .onConflictDoNothing({
+      target: [trackAudios.trackId, trackAudios.assetId],
+    })
+    .returning({ id: trackAudios.id });
+
+  await resequenceVersions(tx, trackId);
+
+  if (primaryAssetId !== undefined) {
+    const [row] = await tx
+      .select({ id: trackAudios.id })
+      .from(trackAudios)
+      .where(
+        and(
+          eq(trackAudios.trackId, trackId),
+          eq(trackAudios.assetId, primaryAssetId)
+        )
+      );
+    if (row) await setPrimaryWithin(tx, trackId, row.id, true);
+  } else if (!hadPrimary || !hadPrimary.primaryPinned) {
+    const [newest] = await tx
+      .select({ id: trackAudios.id })
+      .from(trackAudios)
+      .where(eq(trackAudios.trackId, trackId))
+      .orderBy(sql`${trackAudios.version} DESC`)
+      .limit(1);
+    if (newest) await setPrimaryWithin(tx, trackId, newest.id);
+  }
+
+  return rows;
+}
+
+/** Queues analysis for newly linked track-audio rows once their transaction has committed. */
+export async function enqueueLinkedAnalysis(
+  trackId: number,
+  inserted: { id: number }[]
+): Promise<number[]> {
+  if (inserted.length === 0) return [];
+  const jobs = (await analysesOnLink(trackId))
+    ? await enqueueAudioAnalysis(inserted.map((row) => row.id))
+    : [];
+  return jobs.map((job) => job.id);
+}
+
+/**
  * Links assets to a track as audios. Ids that are not audio files are dropped,
  * so the returned list is the authority on what was linked. Idempotent: an
  * asset already linked is left untouched via `onConflictDoNothing` on
@@ -485,85 +576,18 @@ export async function linkTrackAudios(
   if (audioIds.length === 0)
     return { audios: await getTrackAudios(trackId), analysisJobIds: [] };
 
-  const inserted = await db.transaction(async (tx) => {
-    // The assets first, then the track's lock, both before the insert
-    // (`docs/agents/db.md`, Lock order). The insert key-share-locks each
-    // asset and the track's row through its foreign keys; a track delete
-    // holds the track's lock while it deletes that row, so a link that had
-    // the row first and then waited on the lock would deadlock against it.
-    await tx
-      .select({ id: assets.id })
-      .from(assets)
-      .where(inArray(assets.id, audioIds))
-      .orderBy(assets.id)
-      .for("key share");
-    await lockTracksForAnalysis(tx, [trackId]);
-
-    const hadPrimary = await tx.query.trackAudios.findFirst({
-      where: { trackId, isPrimary: true },
-      columns: { id: true, primaryPinned: true },
-    });
-
-    // Insert past the current max version so the whole set stays positive and
-    // distinct; resequenceVersions then renumbers everything by asset date.
-    const versionRows = await tx
-      .select({
-        maxVersion: sql<number>`COALESCE(MAX(${trackAudios.version}), 0)`,
-      })
-      .from(trackAudios)
-      .where(eq(trackAudios.trackId, trackId));
-    const maxVersion = versionRows[0]?.maxVersion ?? 0;
-
-    const rows = await tx
-      .insert(trackAudios)
-      .values(
-        audioIds.map((assetId, i) => ({
-          trackId,
-          assetId,
-          version: maxVersion + 1 + i,
-        }))
-      )
-      .onConflictDoNothing({
-        target: [trackAudios.trackId, trackAudios.assetId],
-      })
-      .returning({ id: trackAudios.id });
-
-    await resequenceVersions(tx, trackId);
-
-    if (primaryAssetId !== undefined) {
-      const [row] = await tx
-        .select({ id: trackAudios.id })
-        .from(trackAudios)
-        .where(
-          and(
-            eq(trackAudios.trackId, trackId),
-            eq(trackAudios.assetId, primaryAssetId)
-          )
-        );
-      if (row) await setPrimaryWithin(tx, trackId, row.id, true);
-    } else if (!hadPrimary || !hadPrimary.primaryPinned) {
-      const [newest] = await tx
-        .select({ id: trackAudios.id })
-        .from(trackAudios)
-        .where(eq(trackAudios.trackId, trackId))
-        .orderBy(sql`${trackAudios.version} DESC`)
-        .limit(1);
-      if (newest) await setPrimaryWithin(tx, trackId, newest.id);
-    }
-
-    return rows;
-  });
+  const inserted = await db.transaction((tx) =>
+    linkTrackAudiosWithin(tx, trackId, audioIds, primaryAssetId)
+  );
 
   // Enqueued after the commit so the background pass can read the rows. A
   // project that does not analyse automatically queues nothing here: its new
   // versions wait until someone asks for their analysis.
-  const jobs = (await analysesOnLink(trackId))
-    ? await enqueueAudioAnalysis(inserted.map((row) => row.id))
-    : [];
+  const analysisJobIds = await enqueueLinkedAnalysis(trackId, inserted);
 
   return {
     audios: await getTrackAudios(trackId),
-    analysisJobIds: jobs.map((job) => job.id),
+    analysisJobIds,
   };
 }
 
@@ -656,6 +680,36 @@ export async function setPrimaryTrackAudio(id: number) {
     });
     if (!stillThere) return undefined;
     return setPrimaryWithin(tx, audio.trackId, id, true);
+  });
+}
+
+/**
+ * Clears `primaryPinned` on the track's versions and promotes the newest
+ * version to primary so the track resumes following the latest bounce.
+ */
+export async function unpinPrimaryTrackAudio(id: number) {
+  return db.transaction(async (tx) => {
+    const audio = await tx.query.trackAudios.findFirst({
+      where: { id },
+      columns: { trackId: true },
+    });
+    if (!audio) return undefined;
+
+    await lockTracksForAnalysis(tx, [audio.trackId]);
+    const stillThere = await tx.query.trackAudios.findFirst({
+      where: { id, trackId: audio.trackId },
+      columns: { id: true },
+    });
+    if (!stillThere) return undefined;
+
+    const [newest] = await tx
+      .select({ id: trackAudios.id })
+      .from(trackAudios)
+      .where(eq(trackAudios.trackId, audio.trackId))
+      .orderBy(sql`${trackAudios.version} DESC`)
+      .limit(1);
+    if (!newest) return undefined;
+    return setPrimaryWithin(tx, audio.trackId, newest.id, false);
   });
 }
 

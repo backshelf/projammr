@@ -238,7 +238,8 @@ const unreferenced = (hash: SQL) => sql`
  * the walk read it is not among them.
  *
  * A link is taken once no save of a session in its repo rebuilds from its
- * object or lists it as a sample (`save_sample_objects`, probed the same way):
+ * object, lists it as a sample (`save_sample_objects`, probed the same way),
+ * or names it as a lineage object (`commits.hash` or `saves.hash`):
  * the saves that do are found by the object's hash, then each one's
  * session by a primary-key probe of `saves` and of `sessions` in turn. Written
  * as a join, the planner may reach the saves through the repo's sessions,
@@ -278,6 +279,20 @@ const unlinkBatch = (
                  where se.id = (select s.session_id
                                   from saves s
                                  where s.id = sso.save_id)) = ${row(repoObjects.repoId)}
+      )
+      and not exists (
+        select 1
+          from commits c
+         where c.repo_id = ${row(repoObjects.repoId)}
+           and c.hash = ${row(repoObjects.objectHash)}
+      )
+      and not exists (
+        select 1
+          from saves s
+         where s.hash = ${row(repoObjects.objectHash)}
+           and (select se.repo_id
+                  from sessions se
+                 where se.id = s.session_id) = ${row(repoObjects.repoId)}
       )`,
     limit
   )}, gone as (

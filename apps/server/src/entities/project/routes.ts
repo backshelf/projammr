@@ -316,9 +316,9 @@ const sessionDawsSchema = z.array(sessionDawSchema);
 app.get(
   "/:id/sessions/daws",
   describe(
-    "Every DAW the project's sessions are tagged with: the scanner " +
-      "module's id and, where known, its display name. Feeds the sessions " +
-      "table's DAW filter and the manual session form's suggestions.",
+    "Every DAW the project's sessions are tagged with: dit's DAW module id " +
+      "and, where known, its display name. Feeds the sessions table's DAW " +
+      "filter and the manual session form's suggestions.",
     { schema: sessionDawsSchema, description: "DAWs fetched successfully" },
     400
   ),

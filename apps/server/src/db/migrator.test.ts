@@ -152,6 +152,18 @@ describe("applyMigrations", () => {
       expect(names).toHaveLength(FOLDER_COUNT);
     }, "migrator_test");
   }, 30_000);
+
+  it("disables statement_timeout during migrate and restores it afterward", async () => {
+    await withThrowawayDatabase(async (pool) => {
+      stubEnv("MIGRATE_BACKUP", "0");
+      await applyMigrations(pool);
+
+      const { rows } = await pool.query<{ statement_timeout: string }>(
+        "show statement_timeout"
+      );
+      expect(rows[0]?.statement_timeout).not.toBe("0");
+    }, "migrator_test");
+  }, 30_000);
 });
 
 describe("pruneBackups", () => {

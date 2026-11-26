@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { listMachineSummaries } from "../../db/queries/machines.js";
-import { pushedRepoSchema } from "../../db/schema/machines.js";
+import {
+  openSessionSchema,
+  pushedRepoSchema,
+} from "../../db/schema/machines.js";
 import { requireProject } from "../authorize.js";
 import { defineTool } from "../spec.js";
 
@@ -11,7 +14,7 @@ const machineSummarySchema = z.object({
   appVersion: z.string(),
   lastSeenAt: z.date(),
   online: z.boolean(),
-  openSession: z.object({ id: z.number().int(), name: z.string() }).nullable(),
+  openSession: openSessionSchema.nullable(),
   pushedRepos: z.array(pushedRepoSchema),
 });
 

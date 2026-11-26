@@ -21,7 +21,7 @@ type ListedMachine = {
   platform: string;
   appVersion: string;
   online: boolean;
-  openSession: { id: number; name: string } | null;
+  openSession: { id: number; name: string; projectId: number } | null;
   pushedRepos: { id: number; name: string; projectId: number }[];
 };
 
@@ -108,7 +108,11 @@ describe("list_machines", () => {
       platform: "macOS",
       appVersion: "0.14.0",
       online: true,
-      openSession: { id: session.id, name: session.name },
+      openSession: {
+        id: session.id,
+        name: session.name,
+        projectId: suite.projectId,
+      },
       pushedRepos: [],
     });
     expect(byId.get(offline)).toMatchObject({

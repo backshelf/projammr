@@ -88,6 +88,9 @@ export const saves = pgTable(
     uniqueIndex("save_session_hash")
       .on(t.sessionId, t.hash)
       .where(sql`${t.hash} is not null`),
+    index("save_hash")
+      .on(t.hash)
+      .where(sql`${t.hash} is not null`),
   ]
 );
 

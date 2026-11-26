@@ -143,22 +143,6 @@ export async function getMainSessionForTrack(
 }
 
 /**
- * The project each of a set of session ids belongs to, in one statement. Ids
- * that name no session are absent from the map, so it can be smaller than the
- * input — the caller checks the ids it cares about separately.
- */
-export async function projectsBySessionId(
-  sessionIds: number[]
-): Promise<Map<number, number>> {
-  if (sessionIds.length === 0) return new Map();
-  const rows = await db
-    .select({ id: sessions.id, projectId: sessions.projectId })
-    .from(sessions)
-    .where(inArray(sessions.id, sessionIds));
-  return new Map(rows.map((row) => [row.id, row.projectId]));
-}
-
-/**
  * Whether a session whose body leaves `main` out becomes its track's main: it
  * is linked to a track, its project makes a new session the main, and it is
  * new — no session of the project is at its file already, which an upsert
@@ -505,9 +489,10 @@ export async function getSession(sessionId: number): Promise<SessionDetail> {
 }
 
 export async function bulkAttachToSessions(
-  pairs: { sessionId: number; assetId: number }[]
+  pairs: { sessionId: number; assetId: number }[],
+  executor: Pick<typeof db, "insert"> = db
 ): Promise<{ attached: number; skipped: number }> {
-  const result = await db
+  const result = await executor
     .insert(sessionAttachments)
     .values(pairs)
     .onConflictDoNothing()

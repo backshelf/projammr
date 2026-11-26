@@ -2,9 +2,10 @@ import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import {
-  linkTrackAudiosResultSchema,
+  enqueueLinkedAnalysis,
   getTrackAudios,
-  linkTrackAudios,
+  linkTrackAudiosResultSchema,
+  linkTrackAudiosWithin,
 } from "../../db/queries/track-audios.js";
 import { db } from "../../db/index.js";
 import { assets } from "../../db/schema/assets.js";
@@ -67,22 +68,25 @@ export async function acceptRender(
     }
   }
 
-  await bulkAttachToSessions([{ sessionId, assetId }]);
-  const linked = await linkTrackAudios(session.trackId, [assetId]);
-  await db
-    .update(trackAudios)
-    .set({ bouncedFromSaveId })
-    .where(
-      and(
-        eq(trackAudios.trackId, session.trackId),
-        eq(trackAudios.assetId, assetId)
-      )
-    );
+  const trackId = session.trackId;
+  const inserted = await db.transaction(async (tx) => {
+    await bulkAttachToSessions([{ sessionId, assetId }], tx);
+    const rows = await linkTrackAudiosWithin(tx, trackId, [assetId]);
+    await tx
+      .update(trackAudios)
+      .set({ bouncedFromSaveId })
+      .where(
+        and(eq(trackAudios.trackId, trackId), eq(trackAudios.assetId, assetId))
+      );
+    return rows;
+  });
+
+  const analysisJobIds = await enqueueLinkedAnalysis(trackId, inserted);
 
   return {
-    analysisJobIds: linked.analysisJobIds,
-    audios: await getTrackAudios(session.trackId),
-    trackId: session.trackId,
+    analysisJobIds,
+    audios: await getTrackAudios(trackId),
+    trackId,
     attached: true,
   };
 }

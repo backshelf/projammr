@@ -2,7 +2,12 @@ import { Hono } from "hono";
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { jsonErrorHandler } from "../lib/http.js";
 import { DEFAULT_INSTANCE_POLICY } from "../lib/instance-policy.js";
-import { rateLimit, takeToken } from "./rate-limit.js";
+import {
+  rateLimit,
+  spendToken,
+  sweepIdleBuckets,
+  takeToken,
+} from "./rate-limit.js";
 import { app } from "../app.js";
 import { authUrl, baseUrl } from "../test/fixtures.js";
 import {
@@ -171,6 +176,73 @@ describe("takeToken", () => {
     stubInstancePolicy({ rateLimits: { moves: { burst: 1, perMinute: 1 } } });
     now.mockReturnValue(7_001_000);
     expect(takeToken("moves", "slowed")).toBe(false);
+  });
+});
+
+describe("spendToken", () => {
+  it("returns 429 with a Retry-After header when the bucket is empty", async () => {
+    spyOn(Date, "now").mockReturnValue(8_000_000);
+    stubInstancePolicy({ rateLimits: { moves: { burst: 1, perMinute: 30 } } });
+
+    const testApp = new Hono();
+    testApp.post("/spend", (c) => {
+      spendToken("moves", "spend-caller");
+      return c.text("ok");
+    });
+    testApp.onError(jsonErrorHandler);
+
+    expect((await testApp.request("/spend", { method: "POST" })).status).toBe(
+      200
+    );
+    const refused = await testApp.request("/spend", { method: "POST" });
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("Retry-After")).toBe("2");
+    expect(await refused.json()).toMatchObject({ error: "Too many requests" });
+  });
+});
+
+describe("sweepIdleBuckets", () => {
+  it("evicts idle buckets whose effective tokens have refilled to full", () => {
+    const start = 100_000_000;
+    // Drain any stale buckets left by earlier tests in this file.
+    sweepIdleBuckets(start);
+
+    const now = spyOn(Date, "now").mockReturnValue(start);
+    stubInstancePolicy({ rateLimits: { moves: { burst: 5, perMinute: 10 } } });
+
+    expect(takeToken("moves", "idle-evict-caller")).toBe(true);
+
+    // Still inside the one-hour idle window: nothing evicted yet.
+    expect(sweepIdleBuckets(start + 30 * 60_000)).toBe(0);
+
+    // Past the one-hour idle window and refilled back to burst: evicted.
+    expect(sweepIdleBuckets(start + 61 * 60_000)).toBe(1);
+
+    // Sweeping again at the same timestamp finds no leftover bucket.
+    expect(sweepIdleBuckets(start + 61 * 60_000)).toBe(0);
+    now.mockRestore();
+  });
+
+  it("keeps idle buckets that still owe refill even past the idle window", () => {
+    const start = 200_000_000;
+    const now = spyOn(Date, "now").mockReturnValue(start);
+    // Burst of 100 at 1/min takes 100 minutes to refill from 0 to full.
+    stubInstancePolicy({ rateLimits: { moves: { burst: 100, perMinute: 1 } } });
+
+    for (let i = 0; i < 100; i += 1) {
+      expect(takeToken("moves", "slow-refill-caller")).toBe(true);
+    }
+    expect(takeToken("moves", "slow-refill-caller")).toBe(false);
+
+    // At 61 minutes the bucket only has 61 tokens (< 100), so it must NOT be
+    // evicted (which would hand back a full 100-token burst early).
+    sweepIdleBuckets(start + 61 * 60_000);
+    now.mockReturnValue(start + 61 * 60_000);
+    for (let i = 0; i < 61; i += 1) {
+      expect(takeToken("moves", "slow-refill-caller")).toBe(true);
+    }
+    expect(takeToken("moves", "slow-refill-caller")).toBe(false);
+    now.mockRestore();
   });
 });
 

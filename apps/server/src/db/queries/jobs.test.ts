@@ -17,6 +17,7 @@ import { subscribeProject } from "../../lib/job-events.js";
 import { mediaQueue } from "../../lib/jobs.js";
 import {
   MediaLimitError,
+  MediaTimeoutError,
   type decodeInto as DecodeInto,
 } from "../../lib/media.js";
 import { db } from "../index.js";
@@ -908,6 +909,29 @@ describe("retries", () => {
     expect(failed.error).toBe(
       "media_too_long: input declares 25000s, over the 21600s limit"
     );
+  });
+
+  it("retries and fails with the error message on MediaTimeoutError instead of cancelling", async () => {
+    let calls = 0;
+    registerJobHandler(
+      "convert",
+      async () => {
+        calls++;
+        throw new MediaTimeoutError(
+          "converting x.wav exceeded 60000ms deadline"
+        );
+      },
+      { label: "Converting", maxAttempts: 2 }
+    );
+
+    const job = await enqueueJob({ projectId, kind: "convert" });
+    await waitFor(() => expect(calls).toBe(2));
+    await mediaQueue.idle();
+
+    const failed = await getJob(job.id);
+    expect(failed.status).toBe("failed");
+    expect(failed.attempts).toBe(2);
+    expect(failed.error).toBe("converting x.wav exceeded 60000ms deadline");
   });
 
   it("resets a failed job to queued and runs it again", async () => {

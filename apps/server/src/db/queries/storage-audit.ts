@@ -1,4 +1,5 @@
 import { inArray, isNotNull } from "drizzle-orm";
+import { bindParamLimit, chunk } from "../../lib/chunk.js";
 import {
   imageKeyStem,
   readVariantKey,
@@ -25,7 +26,10 @@ import {
   registerJobHandler,
   startInstanceJobs,
 } from "./jobs.js";
-import { removeUnnamedObjectFiles } from "./objects.js";
+import {
+  OBJECT_LOCKS_PER_TRANSACTION,
+  removeUnnamedObjectFiles,
+} from "./objects.js";
 import { recomputeAllUsage, type UsageDrift } from "./storage-usage.js";
 
 const logger = log("storage-audit");
@@ -101,17 +105,6 @@ function isReferenced(
     : referenced.keys.has(key);
 }
 
-/**
- * Removes an orphan and answers whether its file is gone. An object's file goes only
- * while no row names it, checked under the object's lock, since a push may
- * have recorded the object since the audit read the rows.
- */
-async function removeOrphan(key: string): Promise<boolean> {
-  const hash = objectHashOf(key);
-  if (hash) return (await removeUnnamedObjectFiles([hash])).length > 0;
-  return removeStoredFile(key);
-}
-
 /** Whether a key is in a directory the storage layer owns and may delete from. */
 const isStorageKey = (key: string): boolean =>
   STORAGE_DIRS.some((dir) => key.startsWith(`${dir}/`));
@@ -151,17 +144,17 @@ async function reconcileVariantsReady(keys: string[]): Promise<number> {
     if (complete !== row.ready) (complete ? ready : notReady).push(row.id);
   }
 
-  if (ready.length > 0) {
+  for (const batch of chunk(ready, bindParamLimit())) {
     await db
       .update(images)
       .set({ variantsReady: true })
-      .where(inArray(images.id, ready));
+      .where(inArray(images.id, batch));
   }
-  if (notReady.length > 0) {
+  for (const batch of chunk(notReady, bindParamLimit())) {
     await db
       .update(images)
       .set({ variantsReady: false })
-      .where(inArray(images.id, notReady));
+      .where(inArray(images.id, batch));
   }
 
   return ready.length;
@@ -197,6 +190,17 @@ export async function auditStorage(): Promise<StorageAuditReport> {
     drift: [],
   };
 
+  const pendingObjects = new Map<string, number>();
+  const flushObjectOrphans = async () => {
+    if (pendingObjects.size === 0) return;
+    const removed = await removeUnnamedObjectFiles([...pendingObjects.keys()]);
+    for (const hash of removed) {
+      report.deleted++;
+      report.deletedBytes += pendingObjects.get(hash) ?? 0;
+    }
+    pendingObjects.clear();
+  };
+
   for (const key of keys) {
     if (!isStorageKey(key)) {
       report.foreign++;
@@ -215,10 +219,21 @@ export async function auditStorage(): Promise<StorageAuditReport> {
       continue;
     }
 
-    if (!(await removeOrphan(key))) continue;
+    const hash = objectHashOf(key);
+    if (hash) {
+      pendingObjects.set(hash, file.size);
+      if (pendingObjects.size >= OBJECT_LOCKS_PER_TRANSACTION) {
+        await flushObjectOrphans();
+      }
+      continue;
+    }
+
+    if (!(await removeStoredFile(key))) continue;
     report.deleted++;
     report.deletedBytes += file.size;
   }
+
+  await flushObjectOrphans();
 
   report.variantsReady = await reconcileVariantsReady(keys);
   report.drift = await recomputeAllUsage();

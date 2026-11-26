@@ -27,6 +27,7 @@ import {
   isAudioName,
   maxMediaSeconds,
   MediaLimitError,
+  MediaTimeoutError,
   mediaDeadlineMs,
   parseFfmpegDurationMs,
   probeMediaSeconds,
@@ -148,6 +149,18 @@ describe("ffmpegStderr", () => {
     stderr.push("second");
     expect(stderr.text()).toBe("first second");
   });
+
+  it("caps retained stderr at 16 KiB while preserving the tail and parsed duration", () => {
+    const stderr = ffmpegStderr();
+    stderr.push("  Duration: 00:01:00.00, start: 0.000000\n");
+    for (let i = 0; i < 40; i++) {
+      stderr.push("x".repeat(1024));
+    }
+    stderr.push("final-error-line");
+    expect(stderr.durationMs()).toBe(60_000);
+    expect(stderr.text().length).toBeLessThanOrEqual(16 * 1024);
+    expect(stderr.text().endsWith("final-error-line")).toBe(true);
+  });
 });
 
 describe("decodeInto", () => {
@@ -231,6 +244,20 @@ describe("decodeInto", () => {
       await expect(decoding).rejects.toThrow(
         expect.objectContaining({ name: "AbortError" })
       );
+    } finally {
+      session.free();
+    }
+  });
+
+  it("rejects with MediaTimeoutError (not AbortError) when the decode deadline expires", async () => {
+    const session = await newSession();
+    try {
+      await expect(
+        decodeInto(longTone, session, {
+          durationSeconds: 200,
+          deadlineMs: 25,
+        })
+      ).rejects.toBeInstanceOf(MediaTimeoutError);
     } finally {
       session.free();
     }
@@ -418,5 +445,15 @@ describe("convertAudio", () => {
       })
     ).rejects.toThrow(expect.objectContaining({ name: "AbortError" }));
     expect(existsSync(join(dir, "pre-aborted.mp3"))).toBe(false);
+  });
+
+  it("rejects with MediaTimeoutError (not AbortError) when the convert deadline expires", async () => {
+    const output = join(dir, "convert-timeout.mp3");
+    await expect(
+      convertAudio(longTone, output, ".mp3", 128, {
+        durationSeconds: 600,
+        deadlineMs: 25,
+      })
+    ).rejects.toBeInstanceOf(MediaTimeoutError);
   });
 });

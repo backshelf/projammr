@@ -8,6 +8,7 @@ import {
   getTrackAudioMeasure,
   setPrimaryTrackAudio,
   unlinkTrackAudio,
+  unpinPrimaryTrackAudio,
 } from "../db/queries/track-audios.js";
 import { queuedJobSchema } from "../db/schema/jobs.js";
 import { trackAudioDiffSchema } from "../db/schema/track-audio-analysis.js";
@@ -50,7 +51,7 @@ const measureResponseSchema = z.object({ value: measureValueSchema });
 app.patch(
   "/:id/primary",
   describe(
-    "Make this track audio the track's primary version",
+    "Make this track audio the track's primary version and pin it",
     { schema: messageSchema, description: "Primary set" },
     400,
     404
@@ -60,6 +61,22 @@ app.patch(
     const result = await setPrimaryTrackAudio(c.req.valid("param").id);
     if (!result) throw new HTTPException(404);
     return respondMessage(c, "Primary set");
+  }
+);
+
+app.delete(
+  "/:id/primary",
+  describe(
+    "Unpin the track's primary version so it resumes following the latest bounce",
+    { schema: messageSchema, description: "Primary unpinned" },
+    400,
+    404
+  ),
+  idParam(),
+  async (c) => {
+    const result = await unpinPrimaryTrackAudio(c.req.valid("param").id);
+    if (!result) throw new HTTPException(404);
+    return respondMessage(c, "Primary unpinned");
   }
 );
 

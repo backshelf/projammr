@@ -75,7 +75,7 @@ const OBJECT_LOCK_CLASS = 0x4f42;
  * across all of them, so a push or a removal over a thousand objects takes
  * their locks a group at a time rather than all at once.
  */
-const OBJECT_LOCKS_PER_TRANSACTION = 100;
+export const OBJECT_LOCKS_PER_TRANSACTION = 100;
 
 /** An object's lock key: the hash's first 32 bits, as the signed int Postgres takes. */
 const objectLockKey = (hash: string): number =>
@@ -89,22 +89,27 @@ const objectLockKey = (hash: string): number =>
  * done. Keyed by the hash's first 32 bits: two objects that share them only
  * queue behind each other.
  *
- * Every caller takes all of a transaction's locks in one statement, in
- * ascending key order, and takes no more after it, so no two callers can each
- * wait on a lock the other holds.
+ * Keys are sorted ascending and locked in bounded batches so callers never
+ * deadlock and never exceed Postgres's bind-parameter ceiling.
  */
 export async function lockObjects(tx: Tx, hashes: string[]): Promise<void> {
   const keys = [...new Set(hashes.map(objectLockKey))].sort((a, b) => a - b);
   if (keys.length === 0) return;
-  // `unnest` yields the array's elements in order, and each row's lock is
-  // taken as the scan reaches it.
-  await tx.execute(sql`
-    select pg_advisory_xact_lock(${OBJECT_LOCK_CLASS}, key)
-      from unnest(array[${sql.join(
-        keys.map((key) => sql`${key}`),
-        sql`, `
-      )}]::int[]) as key
-  `);
+  const maxKeys = Math.max(
+    1,
+    Math.min(OBJECT_LOCKS_PER_TRANSACTION, bindParamLimit() - 1)
+  );
+  // `unnest` yields each batch's elements in ascending order, and each row's
+  // lock is taken as the scan reaches it.
+  for (const batch of chunk(keys, maxKeys)) {
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(${OBJECT_LOCK_CLASS}, key)
+        from unnest(array[${sql.join(
+          batch.map((key) => sql`${key}`),
+          sql`, `
+        )}]::int[]) as key
+    `);
+  }
 }
 
 /**
@@ -122,16 +127,19 @@ export async function missingObjects(
   userId: string
 ): Promise<{ missing: string[]; claimed: string[] }> {
   const asked = [...new Set(hashes)];
-  const rows = await db
-    .select({ hash: repoObjects.objectHash })
-    .from(repoObjects)
-    .where(
-      and(
-        eq(repoObjects.repoId, repoId),
-        inArray(repoObjects.objectHash, asked)
-      )
-    );
-  const held = new Set(rows.map((row) => row.hash));
+  const held = new Set<string>();
+  for (const batch of chunk(asked, Math.max(1, bindParamLimit() - 1))) {
+    const rows = await db
+      .select({ hash: repoObjects.objectHash })
+      .from(repoObjects)
+      .where(
+        and(
+          eq(repoObjects.repoId, repoId),
+          inArray(repoObjects.objectHash, batch)
+        )
+      );
+    for (const row of rows) held.add(row.hash);
+  }
   const lacking = asked.filter((hash) => !held.has(hash));
 
   const claimed = new Set<string>();

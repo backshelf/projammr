@@ -189,6 +189,53 @@ describe("session renders", () => {
       bodyC.audios.find((r: { assetId: number }) => r.assetId === third.id)
         .isPrimary
     ).toBe(false);
+
+    // Unpinning clears primaryPinned, promotes the newest version, and lets
+    // subsequent accepted renders auto-promote again.
+    const unpin = await request(
+      "owner",
+      `/track-audios/${firstRow.id}/primary`,
+      {
+        method: "DELETE",
+      }
+    );
+    expect(unpin.status).toBe(200);
+
+    const afterUnpin = (
+      await (await request("owner", `/tracks/${trackId}`)).json()
+    ).audios;
+    expect(
+      afterUnpin.find((r: { assetId: number }) => r.assetId === first.id)
+    ).toMatchObject({ isPrimary: false, primaryPinned: false });
+    expect(
+      afterUnpin.find((r: { assetId: number }) => r.assetId === third.id)
+    ).toMatchObject({ isPrimary: true, primaryPinned: false });
+
+    const fourth = await uploadAsset("pin-fourth.wav");
+    const d = await accept(sessionId, {
+      assetId: fourth.id,
+      bouncedFromSaveId: null,
+    });
+    const bodyD = await d.json();
+    expect(
+      bodyD.audios.find((r: { assetId: number }) => r.assetId === fourth.id)
+    ).toMatchObject({ isPrimary: true, primaryPinned: false });
+  });
+
+  it("rejects non-integer or non-positive assetId and bouncedFromSaveId with 400", async () => {
+    requireProject();
+    const trackId = await mkTrack("Invalid Body Track");
+    const { sessionId } = await sessionWithSave("Invalid Body", trackId);
+    for (const bad of [
+      { assetId: 1.5, bouncedFromSaveId: null },
+      { assetId: 0, bouncedFromSaveId: null },
+      { assetId: -1, bouncedFromSaveId: null },
+      { assetId: 1, bouncedFromSaveId: 1.5 },
+      { assetId: 1, bouncedFromSaveId: 0 },
+    ]) {
+      const res = await accept(sessionId, bad);
+      expect(res.status).toBe(400);
+    }
   });
 });
 

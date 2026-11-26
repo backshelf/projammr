@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { setupSuite } from "../test/fixtures.js";
+import { eq } from "drizzle-orm";
+import { db } from "../db/index.js";
+import { users } from "../db/schema/auth.js";
+import { setupSuite, signUpAndSignIn } from "../test/fixtures.js";
 import { actorFrom, authInfoFor, loadActor } from "./actor.js";
 
 const { owner, requireProject } = setupSuite("MCP actor");
@@ -27,6 +30,18 @@ describe("loadActor", () => {
 
   it("throws 401 when the subject claim is missing", async () => {
     await expect(loadActor({})).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("throws 401 when the user account is disabled", async () => {
+    const disabled = await signUpAndSignIn("MCP disabled actor");
+    await db
+      .update(users)
+      .set({ disabledAt: new Date() })
+      .where(eq(users.id, disabled.userId));
+
+    await expect(
+      loadActor({ sub: disabled.userId, scope: "read write" })
+    ).rejects.toMatchObject({ status: 401 });
   });
 });
 

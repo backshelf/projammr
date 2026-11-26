@@ -1,13 +1,13 @@
-import { asc, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, or, sql, type SQL } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { db } from "../index.js";
 import { authSessions, users, type InstanceRole } from "../schema/auth.js";
 import { rawInstanceRoleEnum } from "../schema/enums.js";
+import { storageUsage } from "../schema/storage-usage.js";
 import { recordAdminAction } from "./admin-audit.js";
 import { revokeUserSessions } from "./auth-sessions.js";
 import { offsetOf, pageResponseSchema } from "./pagination.js";
-import { allUsageReports } from "./storage-usage.js";
 
 /**
  * An account as the instance administration surface reads it: the contact
@@ -74,12 +74,10 @@ const projectCount = sql<number>`(
 
 /**
  * The accounts matching `where`, oldest first — the order they claimed the
- * instance in, which puts whoever set it up at the top.
- *
- * Storage comes from one pass over the counters (`allUsageReports`) rather than
- * a per-row lookup or a join this query would own a copy of: the counter table
- * holds a row per scope, and the same function already answers what a scope is
- * using and what it is allowed.
+ * instance in, which puts whoever set it up at the top. Each row's storage
+ * counter is joined directly on `(scope_kind = 'user', scope_id = users.id)`
+ * so reading one page or one user never scans every project and account on the
+ * instance.
  */
 async function readInstanceUsers(
   database: Database,
@@ -96,22 +94,25 @@ async function readInstanceUsers(
       disabledAt: users.disabledAt,
       lastSeenAt,
       projectCount,
+      storageBytes: sql<number>`coalesce(${storageUsage.bytes}, 0)`.mapWith(
+        Number
+      ),
     })
     .from(users)
+    .leftJoin(
+      storageUsage,
+      and(
+        eq(storageUsage.scopeKind, "user"),
+        eq(storageUsage.scopeId, users.id)
+      )
+    )
     .where(where)
     .orderBy(asc(users.createdAt), asc(users.id))
     .$dynamic();
 
-  const [rows, reports] = await Promise.all([
-    limit ? page.limit(limit.pageSize).offset(limit.offset) : page,
-    allUsageReports(database),
-  ]);
-
-  const storage = new Map(
-    reports
-      .filter((report) => report.scopeKind === "user")
-      .map((report) => [report.scopeId, report.usedBytes])
-  );
+  const rows = await (limit
+    ? page.limit(limit.pageSize).offset(limit.offset)
+    : page);
 
   return rows.map((row) => ({
     id: row.id,
@@ -120,7 +121,7 @@ async function readInstanceUsers(
     instanceRole: row.instanceRole,
     createdAt: row.createdAt,
     lastSeenAt: row.lastSeenAt,
-    storageBytes: storage.get(row.id) ?? 0,
+    storageBytes: row.storageBytes,
     projectCount: row.projectCount,
     disabled: row.disabledAt != null,
   }));
@@ -145,12 +146,25 @@ export async function listInstanceUsers(
   return { rows, rowCount: total?.value ?? 0, page, pageSize };
 }
 
-/** One account by its Better Auth id, 404 when there is none — the admin surface's own lookup, reused by the reset-link route. */
+/** One account by its Better Auth id, 404 when there is none. */
 export async function getInstanceUser(
   userId: string,
   database: Database = db
 ): Promise<InstanceUser> {
   const [row] = await readInstanceUsers(database, eq(users.id, userId));
+  if (!row) throw new HTTPException(404, { message: "User not found" });
+  return row;
+}
+
+/** Lightweight account identity lookup for actions like issuing a password reset link. */
+export async function getAccountIdentity(
+  userId: string,
+  database: Database = db
+): Promise<{ id: string; email: string }> {
+  const [row] = await database
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(eq(users.id, userId));
   if (!row) throw new HTTPException(404, { message: "User not found" });
   return row;
 }
