@@ -261,7 +261,7 @@ describe("SamplesPage", () => {
     const { container } = await renderPage();
 
     expect(container.textContent).toContain(
-      "No set has reported its samples yet. Scan a project folder to fill this."
+      "No set has reported its samples yet. Track a project folder with dit to fill this."
     );
   });
 

@@ -252,11 +252,13 @@ export function relativeDateColumn<T extends RowData>(
     id: string;
     header: string;
     value: (row: T) => string | null | undefined;
+    size?: number;
   }
 ) {
   return helper.accessor((row) => config.value(row) ?? undefined, {
     id: config.id,
     header: config.header,
+    ...(config.size != null ? { size: config.size } : {}),
     cell: (info) => {
       const value = info.getValue();
       if (!value) return <span className="text-ink-soft">—</span>;

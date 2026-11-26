@@ -38,7 +38,7 @@ const WRITE = /serverApi\.(POST|PUT|PATCH|DELETE)\b|\bENTITY_API[.[]/;
  * top-level declaration at column 0, so the next `}` or `};` there ends one.
  */
 const functions = (source: string) => {
-  const lines = source.split("\n");
+  const lines = source.replaceAll("\r\n", "\n").split("\n");
   const found: { name: string; body: string }[] = [];
   for (let i = 0; i < lines.length; i += 1) {
     const declaration = lines[i]!.match(

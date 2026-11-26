@@ -6,7 +6,12 @@ import { hrefFromParsedRoute } from "@/lib/utils";
 import type { Repo } from "@workspace/api/api";
 import { useMemo } from "react";
 
-import { countColumn, textColumn, titleColumn } from "./columns";
+import {
+  countColumn,
+  relativeDateColumn,
+  textColumn,
+  titleColumn,
+} from "./columns";
 import { createAppColumnHelper } from "./data-table-hook";
 import { DataTable } from "./DataTable";
 
@@ -39,19 +44,11 @@ function getColumns(projectId: number, viewerId: string | null) {
       size: 112,
       hideSortIndicator: true,
     }),
-    textColumn(columnHelper, {
+    relativeDateColumn(columnHelper, {
       id: "lastPush",
       header: "Last Push",
       value: (row) => row.lastPushAt,
       size: 144,
-      display: (row, format) =>
-        row.lastPushAt == null ? (
-          <span className="text-ink-soft">—</span>
-        ) : (
-          <time title={format.dateTime(row.lastPushAt)}>
-            {format.relative(row.lastPushAt)}
-          </time>
-        ),
     }),
     textColumn(columnHelper, {
       id: "machine",

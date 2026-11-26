@@ -5,7 +5,6 @@ import { Button } from "@workspace/ui/components/button";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip";
 import { compareHref, type LogSave } from "@workspace/ui/lib/commit-log";
@@ -57,7 +56,7 @@ export function SaveRowActions({
 }) {
   const reason = unavailableReason(save.contentState, retentionDays);
   return (
-    <TooltipProvider>
+    <>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="ghost" size="xs" asChild>
@@ -85,20 +84,19 @@ export function SaveRowActions({
       ) : (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex">
-              <Button
-                variant="ghost"
-                size="xs"
-                disabled
-                aria-label="Download set, unavailable"
-              >
-                Download set
-              </Button>
-            </span>
+            <Button
+              variant="ghost"
+              size="xs"
+              aria-disabled="true"
+              aria-label="Download set, unavailable"
+              onClick={(e) => e.preventDefault()}
+            >
+              Download set
+            </Button>
           </TooltipTrigger>
           <TooltipContent>{reason}</TooltipContent>
         </Tooltip>
       )}
-    </TooltipProvider>
+    </>
   );
 }

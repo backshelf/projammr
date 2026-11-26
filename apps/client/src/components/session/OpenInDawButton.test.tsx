@@ -15,11 +15,12 @@ describe("OpenInDawButton", () => {
     expect(window.location.href).toContain("projammr://session/9");
   });
 
-  it("is disabled when no machine holds the set", () => {
+  it("is aria-disabled when no machine holds the set so keyboard focus reaches its tooltip", () => {
     render(<OpenInDawButton sessionId={9} holder={null} />);
     const button = screen.getByRole("button", {
       name: "Open in DAW",
     }) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute("aria-disabled")).toBe("true");
   });
 });

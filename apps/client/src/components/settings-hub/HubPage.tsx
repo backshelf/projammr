@@ -19,6 +19,7 @@ import {
 import { isActionError } from "@workspace/api/lib/action-result";
 import { PageHead } from "@workspace/ui/components/layout/page-head";
 import { ScrollRoot } from "@workspace/ui/components/layout/scroll-root";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import { PAGE } from "@workspace/ui/lib/shell";
 import {
   SETTINGS,
@@ -245,7 +246,7 @@ const SECTION_EXTRAS: Partial<Record<SettingSection, SectionExtras>> = {
   instance: {
     notes: {
       "instance-jobs.saveContentRetentionDays": (
-        <Suspense fallback={null}>
+        <Suspense fallback={<Skeleton className="h-3 w-56" aria-hidden />}>
           <SavePruneNote />
         </Suspense>
       ),
@@ -348,6 +349,26 @@ function PanePage({
   );
 }
 
+/** Quiet hairline-row placeholder while an async hub pane streams in. */
+function PaneSkeleton() {
+  return (
+    <div className="flex flex-col" aria-busy aria-label="Loading section">
+      {[0, 1, 2].map((row) => (
+        <div
+          key={row}
+          className="flex items-start justify-between gap-8 border-t border-rule px-2 py-4"
+        >
+          <div className="flex flex-1 flex-col gap-2">
+            <Skeleton className="h-3.5 w-32" />
+            <Skeleton className="h-3 w-full max-w-80" />
+          </div>
+          <Skeleton className="h-7 w-24" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PaneContent({
   pane,
   project,
@@ -360,7 +381,7 @@ function PaneContent({
   const registered = HUB_PANES.find(({ id }) => id === pane.id);
   if (!registered) return null;
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PaneSkeleton />}>
       <registered.Content project={project} searchParams={searchParams} />
     </Suspense>
   );

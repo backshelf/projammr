@@ -5,7 +5,7 @@ import { onInvalidated } from "@/lib/mutation";
 import type { MachineList, NotABounce } from "@workspace/api/api";
 import { Rows } from "@workspace/ui/components/layout/rows";
 import { SectionHead } from "@workspace/ui/components/layout/section-head";
-import { DIT_PAGE_URL } from "@workspace/ui/lib/site";
+import { DESKTOP_APP_DOWNLOAD_URL } from "@workspace/ui/lib/site";
 import { useEffect, useState } from "react";
 import { createMachinePoll } from "./machine-poll";
 import { MachineRow } from "./MachineRow";
@@ -115,7 +115,7 @@ function NoMachines() {
         Install dit on the Mac you make music on.
       </p>
       <a
-        href={DIT_PAGE_URL}
+        href={DESKTOP_APP_DOWNLOAD_URL}
         target="_blank"
         rel="noreferrer"
         className="text-small text-art underline-offset-4 hover:underline focus-visible:underline"

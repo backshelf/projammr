@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select";
 import { useParamWriter } from "@/hooks/use-param-writer";
+import { useId } from "react";
 
 /** A save, reduced to what a picker needs — never its parsed `meta`. */
 export type CompareOption = { id: number; label: string };
@@ -29,6 +30,8 @@ export function CompareControls({
   fromId?: number;
   toId?: number;
 }) {
+  const fromLabelId = useId();
+  const toLabelId = useId();
   const { write } = useParamWriter();
 
   const setTo = (value: string) => write({ to: value, from: null });
@@ -42,7 +45,9 @@ export function CompareControls({
   return (
     <div className="flex flex-wrap items-center gap-3 phone:flex-col phone:items-stretch">
       <div className="flex max-w-full min-w-0 items-center gap-1.5">
-        <span className="text-micro text-ink-soft">From</span>
+        <span id={fromLabelId} className="text-micro text-ink-soft">
+          From
+        </span>
         <Select
           value={fromId != null ? String(fromId) : undefined}
           onValueChange={setFrom}
@@ -53,6 +58,7 @@ export function CompareControls({
         >
           <SelectTrigger
             size="sm"
+            aria-labelledby={fromLabelId}
             className="max-w-full min-w-40 phone:min-w-0 phone:flex-1"
           >
             <SelectValue placeholder="Earlier save" />
@@ -67,7 +73,9 @@ export function CompareControls({
         </Select>
       </div>
       <div className="flex max-w-full min-w-0 items-center gap-1.5">
-        <span className="text-micro text-ink-soft">To</span>
+        <span id={toLabelId} className="text-micro text-ink-soft">
+          To
+        </span>
         <Select
           value={toId != null ? String(toId) : undefined}
           onValueChange={setTo}
@@ -78,6 +86,7 @@ export function CompareControls({
         >
           <SelectTrigger
             size="sm"
+            aria-labelledby={toLabelId}
             className="max-w-full min-w-40 phone:min-w-0 phone:flex-1"
           >
             <SelectValue placeholder="Later save" />

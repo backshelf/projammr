@@ -62,7 +62,7 @@ export default async function SamplesPage({
 
   const emptyLine =
     usage.length === 0
-      ? "No set has reported its samples yet. Scan a project folder to fill this."
+      ? "No set has reported its samples yet. Track a project folder with dit to fill this."
       : show === "missing"
         ? "Nothing missing."
         : "Every sample is in the Library. Turn Library on to see them.";

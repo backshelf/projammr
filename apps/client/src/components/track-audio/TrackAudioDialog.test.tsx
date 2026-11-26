@@ -6,6 +6,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { ProjectProvider } from "@/hooks/use-project-role";
 import { DEFAULT_POLICIES } from "@/lib/policies/policies";
 import { PoliciesProvider } from "@/lib/policies/provider";
 import type { CandidateAudio } from "@workspace/api/api";
@@ -34,6 +35,7 @@ mock.module("@/actions/track-audios", () => ({
   getCandidateAudios,
   linkTrackAudios: mock(),
   unlinkTrackAudio: mock(),
+  setPrimaryTrackAudio: mock(),
 }));
 
 mock.module("@/components/uploads/FileUploader", () => ({
@@ -128,5 +130,19 @@ describe("TrackAudioDialog delete", () => {
 
     expect(deleteAsset).toHaveBeenCalledWith(42);
     expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("renders nothing and skips loading candidates for viewers", async () => {
+    await act(async () => {
+      render(
+        <ProjectProvider project={{ id: 1, name: "Demo", role: "viewer" }}>
+          <TrackAudioDialog trackId={7} open onOpenChange={() => {}} />
+        </ProjectProvider>,
+        { wrapper: withAudioVersionConfirm(true) }
+      );
+    });
+
+    expect(screen.queryByText("Track audios")).toBeNull();
+    expect(getCandidateAudios).not.toHaveBeenCalled();
   });
 });

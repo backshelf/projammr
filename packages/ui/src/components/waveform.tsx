@@ -5,7 +5,7 @@ import { formatSeconds, formatTimecode } from "@workspace/ui/lib/format";
 import { AnimatePresence } from "@workspace/ui/lib/motion";
 import { cn } from "@workspace/ui/lib/utils";
 import { MAX_BARS, toBars } from "@workspace/ui/lib/waveform-bars";
-import { memo, useState, type ReactNode } from "react";
+import { memo, useEffect, useState, type ReactNode } from "react";
 
 export type CommentMark = {
   id: number;
@@ -57,6 +57,7 @@ export const playedBars = (fraction: number, count: number) =>
  *  keeps its colour under reduced motion and the hairline snaps. */
 const MARK = cn(
   "absolute top-0 grid size-[1.125rem] -translate-x-1/2 cursor-pointer place-items-center border-none bg-transparent p-0",
+  "coarse:after:absolute coarse:after:-inset-3.5 coarse:after:content-['']",
   "[&>i]:block [&>i]:size-2 [&>i]:rounded-full [&>i]:border-2 [&>i]:border-paper [&>i]:bg-art",
   "[&>i]:motion-press [&>i]:duration-(--dur-move)",
   "hover:[&>i]:scale-[1.45] aria-current:[&>i]:scale-[1.45]",
@@ -173,6 +174,15 @@ export const WaveMarks = memo(function WaveMarks({
     anchor: HTMLButtonElement;
   } | null>(null);
 
+  useEffect(() => {
+    if (!hovered) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHovered(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hovered]);
+
   if (!marks.length || duration <= 0) return null;
 
   return (
@@ -197,6 +207,9 @@ export const WaveMarks = memo(function WaveMarks({
             onPointerLeave={() => setHovered(null)}
             onFocus={(e) => setHovered({ mark, anchor: e.currentTarget })}
             onBlur={() => setHovered(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setHovered(null);
+            }}
             onClick={() => onMarkerClick?.([mark.id])}
           >
             <i />

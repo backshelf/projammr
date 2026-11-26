@@ -138,11 +138,11 @@ describe("public/sw.js", () => {
   const moduleSource = readFileSync(
     join(import.meta.dir, "sw-classify.ts"),
     "utf8"
-  );
+  ).replaceAll("\r\n", "\n");
   const workerSource = readFileSync(
     join(import.meta.dir, "../../public/sw.js"),
     "utf8"
-  );
+  ).replaceAll("\r\n", "\n");
 
   it("carries the same classify body", () => {
     const body = /\): Classified \{\n(.*?)\n\}\n/s.exec(moduleSource)?.[1];

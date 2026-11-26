@@ -11,11 +11,8 @@ export const SITE = {
   license: "AGPL-3.0",
 } as const;
 
-/** The site's page on dit: what it is, the download and the Gatekeeper steps. */
-export const DIT_PAGE_URL = `${SITE.url}/dit/`;
-
 /**
  * Where the dit desktop app is downloaded: the macOS build attached to the
- * latest release, the file the site's `/dit/` page links to.
+ * latest release.
  */
 export const DESKTOP_APP_DOWNLOAD_URL = `${SITE.repository}/releases/latest/download/dit-macos-arm64.dmg`;

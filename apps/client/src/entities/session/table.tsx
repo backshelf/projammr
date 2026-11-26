@@ -144,10 +144,7 @@ export const sessionTable = {
     );
 
     const initiallyHiddenColumns = useMemo(
-      () =>
-        embedded
-          ? ["localFilepath", "createdAt", "track", "collection"]
-          : ["localFilepath", "createdAt"],
+      () => (embedded ? ["createdAt", "track", "collection"] : ["createdAt"]),
       [embedded]
     );
 

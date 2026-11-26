@@ -48,7 +48,7 @@ import { PageSections } from "@/components/layout/PageSections";
 import { createBreadcrumbs, hrefFromParsedRoute } from "@/lib/utils";
 import { changedTrackCount, diffSave } from "@workspace/session-diff";
 import { dawCanReport, structureEmptyLabel } from "@/lib/daw";
-import { saveBefore } from "@/lib/save-before";
+import { latestSaveInfo } from "@/lib/save-before";
 import {
   SessionCommitLog,
   SessionSaveLog,
@@ -183,9 +183,9 @@ export default async function SessionPage({
 
   // A session is a file in a DAW, so the DAW is what identifies it; the
   // tempo and key say what is in the file without opening it.
-  // A set dit records has no local file time, so its newest save's time says
-  // when it was last saved.
-  const savedAt = session.localFileUpdatedAt ?? saves[0]?.fileUpdatedAt;
+  // A set dit records has no local file metadata, so its newest save supplies
+  // its timestamp, machine name, and baseline for the structure diff.
+  const { savedAt, machineName, previous } = latestSaveInfo(session, saves);
   const byline = [
     dawDisplayName,
     tempo,
@@ -216,7 +216,6 @@ export default async function SessionPage({
   // moved, where a recorded save keeps the reading it was first given. A
   // save with nothing recorded before it (or no metadata to compare) is a
   // first save.
-  const previous = saveBefore(saves, session.localFileUpdatedAt);
   const comparable = previous?.meta != null;
   const latestSave = diffSave(
     comparable ? previous.meta : null,
@@ -227,10 +226,16 @@ export default async function SessionPage({
   const latestSaves = {
     before: comparable ? stampOf(previous) : null,
     after: {
-      at: session.localFileUpdatedAt ?? session.updatedAt,
-      machine: session.localFileMachineName,
+      at: savedAt ?? session.updatedAt,
+      machine: machineName,
     },
   };
+  const uncommitted = uncommittedSaves({
+    commits,
+    saves,
+    capabilities: session.dawCapabilities,
+    format,
+  });
 
   return (
     <ArtProvider
@@ -270,7 +275,7 @@ export default async function SessionPage({
         byline={
           <>
             {byline.length > 0 && <span>{byline.join(" · ")}</span>}
-            <OpenInLiveFlag openOn={session.openOn} />
+            <OpenInLiveFlag openOn={session.openOn} dawName={session.dawName} />
             {session.archived && <ArchivedFlag />}
           </>
         }
@@ -319,7 +324,7 @@ export default async function SessionPage({
                         STRUCTURE
                       </SectionHead>
                       <SaveDiffControls
-                        key={`${previous?.id ?? "first"}:${session.localFileUpdatedAt ?? "none"}`}
+                        key={`${previous?.id ?? "first"}:${savedAt ?? "none"}`}
                         changes={changedTrackCount(latestSave.structure)}
                         defaultMode="whole"
                       >
@@ -378,7 +383,7 @@ export default async function SessionPage({
               history: (
                 <EmptySection
                   label={"HISTORY"}
-                  empty={session.saveCount === 0}
+                  empty={session.saveCount === 0 && commits.length === 0}
                   emptyLabel={"No saves yet"}
                 >
                   <section>
@@ -389,18 +394,18 @@ export default async function SessionPage({
                           : session.saveCount
                       }
                       action={
-                        (commits.length > 0
-                          ? session.history.commits > LOG_ROWS
-                          : session.saveCount > VISIBLE_SAVES) && (
-                          <AppLink
-                            href={historyHref}
-                            className="text-micro text-ink-soft hover:text-ink"
-                          >
-                            {commits.length > 0
-                              ? `All ${session.history.commits} commits`
-                              : `All ${session.saveCount} saves`}
-                          </AppLink>
-                        )
+                        <AppLink
+                          href={historyHref}
+                          className="text-micro text-ink-soft hover:text-ink"
+                        >
+                          {commits.length > 0 &&
+                          session.history.commits > LOG_ROWS
+                            ? `All ${session.history.commits} commits`
+                            : commits.length === 0 &&
+                                session.saveCount > VISIBLE_SAVES
+                              ? `All ${session.saveCount} saves`
+                              : "View full history"}
+                        </AppLink>
                       }
                     >
                       HISTORY
@@ -410,11 +415,13 @@ export default async function SessionPage({
                         entries={foldLog(
                           buildCommits({
                             commits,
+                            saves,
                             capabilities: session.dawCapabilities,
                             format,
                           }),
                           false
                         ).slice(0, LOG_ROWS)}
+                        uncommitted={uncommitted.slice(0, VISIBLE_SAVES)}
                         historyHref={historyHref}
                         canEdit={canEdit}
                         restoreOn={holder?.name ?? null}
@@ -423,12 +430,7 @@ export default async function SessionPage({
                       />
                     ) : (
                       <SessionSaveLog
-                        saves={uncommittedSaves({
-                          commits,
-                          saves,
-                          capabilities: session.dawCapabilities,
-                          format,
-                        }).slice(0, VISIBLE_SAVES)}
+                        saves={uncommitted.slice(0, VISIBLE_SAVES)}
                         historyHref={historyHref}
                         retentionDays={session.history.contentRetentionDays}
                         format={format}
@@ -508,14 +510,13 @@ export default async function SessionPage({
         <RailBlock grid>
           <div>
             <RailLabel>MACHINE</RailLabel>
-            <MetadataItem>{session.localFileMachineName}</MetadataItem>
+            <MetadataItem>{machineName}</MetadataItem>
           </div>
           <div>
-            <RailLabel>FILE MODIFIED</RailLabel>
-            <MetadataItem>
-              {session.localFileUpdatedAt &&
-                format.dateTime(session.localFileUpdatedAt)}
-            </MetadataItem>
+            <RailLabel>
+              {session.localFileUpdatedAt ? "FILE MODIFIED" : "LAST SAVED"}
+            </RailLabel>
+            <MetadataItem>{savedAt && format.dateTime(savedAt)}</MetadataItem>
           </div>
         </RailBlock>
         <RailBlock grid>

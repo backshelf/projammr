@@ -18,7 +18,7 @@ const iconButtonVariants = cva(
     "rounded-sm motion-press outline-none active:scale-[0.98]",
     "focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
     "coarse:after:absolute coarse:after:-inset-2 coarse:after:content-['']",
-    "disabled:pointer-events-none disabled:opacity-50"
+    "disabled:pointer-events-none disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:active:scale-100"
   ),
   {
     variants: {

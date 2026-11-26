@@ -1,7 +1,6 @@
 "use client";
 
-import { DeepLinkFallbackDialog } from "@/components/deep-link/DeepLinkFallbackDialog";
-import { useDeepLink } from "@/components/deep-link/use-deep-link";
+import { useOpenDeepLink } from "@/components/deep-link/DeepLinkProvider";
 import {
   type DitHolder,
   openInDawTarget,
@@ -12,7 +11,6 @@ import { IconButton } from "@workspace/ui/components/icon-button";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip";
 
@@ -25,44 +23,37 @@ export function OpenInDawButton({
   holder: DitHolder | null;
   compact?: boolean;
 }) {
-  const { open, fallbackOpen, setFallbackOpen } = useDeepLink();
+  const open = useOpenDeepLink();
   const { href, tooltip } = openInDawTarget(sessionId, holder);
   const disabled = href == null;
 
   const openInDaw = () => {
-    if (href != null) open(href);
+    if (!disabled) open(href);
   };
 
   const button = compact ? (
     <IconButton
-      disabled={disabled}
+      aria-disabled={disabled || undefined}
       onClick={openInDaw}
       aria-label="Open in DAW"
     >
       <IconExternalLink />
     </IconButton>
   ) : (
-    <Button variant="outline" disabled={disabled} onClick={openInDaw}>
+    <Button
+      variant="outline"
+      aria-disabled={disabled || undefined}
+      onClick={openInDaw}
+    >
       <IconExternalLink data-icon="inline-start" />
       Open in DAW
     </Button>
   );
 
   return (
-    <>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {disabled ? <span className="inline-flex">{button}</span> : button}
-          </TooltipTrigger>
-          <TooltipContent>{tooltip}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      <DeepLinkFallbackDialog
-        open={fallbackOpen}
-        onOpenChange={setFallbackOpen}
-      />
-    </>
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }

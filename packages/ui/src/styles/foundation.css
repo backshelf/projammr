@@ -350,18 +350,33 @@
    keeps its colon so it matches the property, not a value that names one of
    the tokens. */
 [style*="--art-fallback:"] {
-  --art-fallback-light: oklch(
-    from var(--art-fallback) 0.55 min(c * 1.3, 0.19) h
+  --art-fallback-light: var(--art-fallback);
+  --art-fallback-glow-light: color-mix(
+    in oklab,
+    var(--art-fallback) 70%,
+    white
   );
-  --art-fallback-glow-light: oklch(
-    from var(--art-fallback) 0.72 min(c, 0.14) h
-  );
-  --art-fallback-dark: oklch(
-    from var(--art-fallback) 0.78 min(c * 1.25, 0.17) h
-  );
-  --art-fallback-glow-dark: oklch(from var(--art-fallback) 0.45 min(c, 0.14) h);
+  --art-fallback-dark: var(--art-fallback);
+  --art-fallback-glow-dark: color-mix(in oklab, var(--art-fallback) 60%, black);
   --art: var(--art-fallback-light);
   --art-glow: var(--art-fallback-glow-light);
+}
+
+@supports (color: oklch(from white l c h)) {
+  [style*="--art-fallback:"] {
+    --art-fallback-light: oklch(
+      from var(--art-fallback) 0.55 min(c * 1.3, 0.19) h
+    );
+    --art-fallback-glow-light: oklch(
+      from var(--art-fallback) 0.72 min(c, 0.14) h
+    );
+    --art-fallback-dark: oklch(
+      from var(--art-fallback) 0.78 min(c * 1.25, 0.17) h
+    );
+    --art-fallback-glow-dark: oklch(
+      from var(--art-fallback) 0.45 min(c, 0.14) h
+    );
+  }
 }
 
 .dark[style*="--art-fallback:"],

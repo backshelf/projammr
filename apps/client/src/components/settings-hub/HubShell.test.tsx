@@ -106,4 +106,48 @@ describe("HubShell's anchor", () => {
       document.getElementById("machine-abc")
     );
   });
+
+  it("focuses and marks a machine row that streams in after mount", async () => {
+    happyDOM.setURL("http://localhost/settings/devices#machine-abc");
+
+    const { rerender } = mount(null);
+    expect(document.getElementById("machine-abc")).toBeNull();
+
+    rerender(
+      <HubShell sections={[]} place={PLACE} index={[]}>
+        {machineRow("abc")}
+      </HubShell>
+    );
+    await Promise.resolve();
+
+    const row = document.getElementById("machine-abc")!;
+    expect(document.activeElement).toBe(row);
+    expect(row.hasAttribute("data-target")).toBe(true);
+  });
+
+  it("moves focus and mark when hashchange targets another machine row", () => {
+    happyDOM.setURL("http://localhost/settings/devices#machine-abc");
+
+    mount(
+      <ul>
+        <li id="machine-abc" data-machine-row="" tabIndex={-1}>
+          Studio Mac
+        </li>
+        <li id="machine-xyz" data-machine-row="" tabIndex={-1}>
+          Laptop
+        </li>
+      </ul>
+    );
+
+    const first = document.getElementById("machine-abc")!;
+    const second = document.getElementById("machine-xyz")!;
+    expect(document.activeElement).toBe(first);
+
+    happyDOM.setURL("http://localhost/settings/devices#machine-xyz");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+
+    expect(document.activeElement).toBe(second);
+    expect(second.hasAttribute("data-target")).toBe(true);
+    expect(first.hasAttribute("data-target")).toBe(false);
+  });
 });

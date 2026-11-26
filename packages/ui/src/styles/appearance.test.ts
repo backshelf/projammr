@@ -362,7 +362,14 @@ describe("reduced motion", () => {
 describe("the accent fallback", () => {
   const foundation = files["foundation.css"]!;
   const carrier = `[style*="${ART_FALLBACK_PROPERTY}:"]`;
-  const derivation = foundation.find((b) => b.prelude === carrier)!;
+  const fallback = foundation.find(
+    (b) => b.prelude === carrier && b.context.length === 0
+  )!;
+  const derivation = foundation.find(
+    (b) =>
+      b.prelude === carrier &&
+      b.context.includes("@supports (color: oklch(from white l c h))")
+  )!;
   const TOKENS = {
     art: "--art-fallback-light",
     glow: "--art-fallback-glow-light",
@@ -371,7 +378,7 @@ describe("the accent fallback", () => {
   } as const;
 
   it.each(Object.entries(TOKENS) as [keyof typeof TOKENS, string][])(
-    "makes %s from the same lightness and chroma cap as a cover's accent",
+    "makes %s from the same lightness and chroma cap as a cover's accent inside @supports",
     (role, name) => {
       const match = derivation.declarations[name]?.match(
         /^oklch\( ?from var\(--art-fallback\) ([\d.]+) min\(c(?: \* ([\d.]+))?, ([\d.]+)\) h ?\)$/
@@ -387,8 +394,8 @@ describe("the accent fallback", () => {
   );
 
   it("replaces the grayscale accent on the element that carries it", () => {
-    expect(derivation.declarations["--art"]).toBe(`var(${TOKENS.art})`);
-    expect(derivation.declarations["--art-glow"]).toBe(`var(${TOKENS.glow})`);
+    expect(fallback.declarations["--art"]).toBe(`var(${TOKENS.art})`);
+    expect(fallback.declarations["--art-glow"]).toBe(`var(${TOKENS.glow})`);
     const dark = foundation.find((b) =>
       b.prelude.startsWith(`.dark${carrier}`)
     )!;

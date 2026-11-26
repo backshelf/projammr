@@ -4,6 +4,7 @@ import { setPrimaryTrackAudio } from "@/actions/track-audios";
 import { BottomSheet, SHEET_ROW } from "@/components/dock/BottomSheet";
 import { DuplicateFlag } from "@/components/track-audio/DuplicateFlag";
 import { VersionBadge } from "@/components/track-audio/VersionBadge";
+import { useProjectRole } from "@/hooks/use-project-role";
 import {
   byNewest,
   duplicateOfVersion,
@@ -52,6 +53,9 @@ function VersionRowBody({
   const name = (
     <>
       <VersionBadge version={audio.version} active={selected} />
+      {audio.isPrimary && audio.primaryPinned && (
+        <span className="shrink-0 text-micro text-ink-faint">Pinned</span>
+      )}
       {duplicateVersion != null && (
         <DuplicateFlag version={duplicateVersion} className="flex-none" />
       )}
@@ -119,6 +123,7 @@ type VersionShellProps = {
   selectedAudioId: number;
   onSelect: (audioId: number) => void;
   onManage?: () => void;
+  canEdit: boolean;
   promoting: number | null;
   promote: (audioId: number) => void;
   /** What opens the list, from the caller. */
@@ -126,12 +131,14 @@ type VersionShellProps = {
 };
 
 /** Matches the comments popover: mono, accent-marked selection, hairline
- *  rules. The star is a mark inside the row a pointer already hovers. */
+ *  rules. The star sits beside the version item as its own menu item for
+ *  editors, avoiding nested interactive elements inside `role="menuitem"`. */
 function VersionMenu({
   versions,
   selectedAudioId,
   onSelect,
   onManage,
+  canEdit,
   promoting,
   promote,
   trigger,
@@ -144,48 +151,70 @@ function VersionMenu({
         className="w-[min(24rem,calc(100vw-3rem))] p-0 font-mono"
       >
         <div className="max-h-80 overflow-y-auto py-1">
-          {versions.map((audio) => (
-            <DropdownMenuItem
-              key={audio.id}
-              onSelect={() => onSelect(audio.id)}
-              aria-current={audio.id === selectedAudioId}
-              className={cn(
-                "flex items-center gap-2.5 rounded-none border-l-2 border-transparent",
-                "px-2 py-[0.4375rem] pl-2.5 text-micro text-ink-soft",
-                audio.id === selectedAudioId && "border-l-art text-ink"
-              )}
-            >
-              <VersionRowBody
-                audio={audio}
-                selected={audio.id === selectedAudioId}
-                duplicateVersion={duplicateOfVersion(
-                  audio.duplicateOfId,
-                  versions
-                )}
-              />
-              <button
-                type="button"
-                {...starProps(audio, promoting)}
+          {versions.map((audio) => {
+            const selected = audio.id === selectedAudioId;
+            return (
+              <div
+                key={audio.id}
                 className={cn(
-                  "relative grid shrink-0 cursor-pointer place-items-center rounded-sm border-none",
-                  "bg-transparent p-[0.1875rem] text-ink-soft motion-ink",
-                  // The star stays a 20px mark; a finger gets the reach.
-                  "coarse:after:absolute coarse:after:-inset-2 coarse:after:content-['']",
-                  "not-disabled:hover:text-art",
-                  audio.isPrimary && "text-art"
+                  "flex items-center border-l-2 border-transparent",
+                  selected && "border-l-art"
                 )}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (!audio.isPrimary) promote(audio.id);
-                }}
               >
-                <StarMark isPrimary={audio.isPrimary} className="size-3.5" />
-              </button>
-            </DropdownMenuItem>
-          ))}
+                <DropdownMenuItem
+                  onSelect={() => onSelect(audio.id)}
+                  aria-current={selected}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center gap-2.5 rounded-none",
+                    "py-[0.4375rem] pr-2 pl-2.5 text-micro text-ink-soft",
+                    selected && "text-ink"
+                  )}
+                >
+                  <VersionRowBody
+                    audio={audio}
+                    selected={selected}
+                    duplicateVersion={duplicateOfVersion(
+                      audio.duplicateOfId,
+                      versions
+                    )}
+                  />
+                  {!canEdit && audio.isPrimary && (
+                    <StarMark
+                      isPrimary
+                      className="size-3.5 shrink-0 text-art"
+                    />
+                  )}
+                </DropdownMenuItem>
+                {canEdit && (
+                  <DropdownMenuItem
+                    aria-label={primaryStarLabel(
+                      audio.version,
+                      audio.isPrimary
+                    )}
+                    disabled={audio.isPrimary || promoting !== null}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      if (!audio.isPrimary) promote(audio.id);
+                    }}
+                    className={cn(
+                      "relative mr-1 grid shrink-0 place-items-center rounded-sm",
+                      "p-[0.3125rem] text-ink-soft motion-ink",
+                      "coarse:after:absolute coarse:after:-inset-2 coarse:after:content-['']",
+                      "not-data-disabled:hover:text-art",
+                      audio.isPrimary && "text-art opacity-100"
+                    )}
+                  >
+                    <StarMark
+                      isPrimary={audio.isPrimary}
+                      className="size-3.5"
+                    />
+                  </DropdownMenuItem>
+                )}
+              </div>
+            );
+          })}
         </div>
-        {onManage && (
+        {canEdit && onManage && (
           <>
             <DropdownMenuSeparator className="my-0" />
             <DropdownMenuItem
@@ -212,6 +241,7 @@ function VersionSheet({
   selectedAudioId,
   onSelect,
   onManage,
+  canEdit,
   promoting,
   promote,
   trigger,
@@ -241,18 +271,22 @@ function VersionSheet({
                 stacked
               />
             </SheetClose>
-            <IconButton
-              size="touch"
-              {...starProps(audio, promoting)}
-              className={audio.isPrimary ? "text-art" : undefined}
-              onClick={() => promote(audio.id)}
-            >
-              <StarMark isPrimary={audio.isPrimary} />
-            </IconButton>
+            {canEdit ? (
+              <IconButton
+                size="touch"
+                {...starProps(audio, promoting)}
+                className={audio.isPrimary ? "text-art" : undefined}
+                onClick={() => promote(audio.id)}
+              >
+                <StarMark isPrimary={audio.isPrimary} />
+              </IconButton>
+            ) : audio.isPrimary ? (
+              <StarMark isPrimary className="mx-3 size-4 shrink-0 text-art" />
+            ) : null}
           </div>
         );
       })}
-      {onManage && (
+      {canEdit && onManage && (
         <SheetClose
           className={cn(SHEET_ROW, "border-t border-rule text-ink-soft")}
           onClick={onManage}
@@ -282,6 +316,7 @@ export function TrackAudioDropdown({
   onManage?: () => void;
   children: React.ReactNode;
 }) {
+  const canEdit = useProjectRole()?.can("editor") ?? false;
   const [promoting, setPromoting] = useState<number | null>(null);
   const isPhone = useIsMobile();
 
@@ -301,6 +336,7 @@ export function TrackAudioDropdown({
     selectedAudioId,
     onSelect,
     onManage,
+    canEdit,
     promoting,
     promote,
     trigger: children,

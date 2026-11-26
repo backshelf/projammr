@@ -9,6 +9,7 @@ import {
 import { FileUploader } from "@/components/uploads/FileUploader";
 import { VersionBadge } from "@/components/track-audio/VersionBadge";
 import { useDeleteGate } from "@/hooks/use-delete-gate";
+import { useProjectRole } from "@/hooks/use-project-role";
 import { useFormat } from "@workspace/ui/components/format-provider";
 import {
   IconSquare,
@@ -50,6 +51,8 @@ export function TrackAudioDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const projectRole = useProjectRole();
+  const canEdit = projectRole ? projectRole.can("editor") : true;
   const format = useFormat();
   const [candidates, setCandidates] = useState<CandidateAudio[]>([]);
   const [checked, setChecked] = useState<Set<number>>(() => new Set());
@@ -79,8 +82,8 @@ export function TrackAudioDialog({
     // Opening the dialog starts the fetch; the synchronous part is the loading
     // flag the dialog renders while it is in flight.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (open) load();
-  }, [open, load]);
+    if (open && canEdit) load();
+  }, [open, canEdit, load]);
 
   const visible = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -147,6 +150,7 @@ export function TrackAudioDialog({
   };
 
   const linkedCount = checked.size;
+  if (!canEdit) return null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

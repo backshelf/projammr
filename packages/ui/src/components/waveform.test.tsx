@@ -1,7 +1,14 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { MotionProvider } from "./motion-provider";
 import { playedBars, WaveMarks, Waveform } from "./waveform";
 
 afterEach(cleanup);
@@ -196,6 +203,27 @@ describe("WaveMarks", () => {
 
     expect(screen.getByText("Kick is loud")).toBeTruthy();
     expect(screen.queryByText(/Resolved/)).toBeNull();
+  });
+
+  it("dismisses an open comment note on Escape and provides a coarse touch hit halo", async () => {
+    render(
+      <WaveMarks
+        marks={[{ id: 1, positionMs: 30_000, excerpt: "Kick is loud" }]}
+        duration={120}
+      />,
+      { wrapper: MotionProvider }
+    );
+
+    const pin = screen.getByRole("button");
+    expect(pin.className).toContain("coarse:after:");
+
+    fireEvent.focus(pin);
+    expect(screen.getByText("Kick is loud")).toBeTruthy();
+
+    fireEvent.keyDown(pin, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByText("Kick is loud")).toBeNull();
+    });
   });
 });
 

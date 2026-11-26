@@ -4,6 +4,7 @@ import {
   Activity,
   useDeferredValue,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -51,28 +52,80 @@ export function HubShell({
   const deferred = useDeferredValue(query);
   const searching = deferred.trim() !== "";
 
+  const contentRef = useRef<HTMLDivElement>(null);
   const { entry } = place;
   useEffect(() => {
-    const key = rowKeyOf(window.location.hash);
-    const row = key === "" ? null : document.getElementById(key);
-    const machine = row?.hasAttribute("data-machine-row") ?? false;
-    if (row && (machine || row.hasAttribute("data-setting-row"))) {
-      row.scrollIntoView({ block: "center" });
-      // Focus lets a keyboard or screen reader user land on the machine
-      // rather than at the top of the page.
-      if (machine) row.focus({ preventScroll: true });
-      row.setAttribute("data-target", "");
-      const timer = setTimeout(
-        () => row.removeAttribute("data-target"),
-        TARGET_MARK_MS
-      );
-      return () => clearTimeout(timer);
-    }
-    if (entry !== undefined) {
-      document.getElementById(groupAnchor(entry))?.scrollIntoView({
-        block: "start",
-      });
-    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let markedRow: HTMLElement | null = null;
+    let observer: MutationObserver | null = null;
+
+    const clearMark = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      if (markedRow) {
+        markedRow.removeAttribute("data-target");
+        markedRow = null;
+      }
+    };
+
+    const stopObserving = () => {
+      observer?.disconnect();
+      observer = null;
+    };
+
+    const focusHashTarget = (): boolean => {
+      const key = rowKeyOf(window.location.hash);
+      const row = key === "" ? null : document.getElementById(key);
+      const machine = row?.hasAttribute("data-machine-row") ?? false;
+      if (row && (machine || row.hasAttribute("data-setting-row"))) {
+        clearMark();
+        row.scrollIntoView({ block: "center" });
+        // Focus lets a keyboard or screen reader user land on the machine
+        // rather than at the top of the page.
+        if (machine) row.focus({ preventScroll: true });
+        row.setAttribute("data-target", "");
+        markedRow = row;
+        timer = setTimeout(() => {
+          row.removeAttribute("data-target");
+          if (markedRow === row) markedRow = null;
+          timer = undefined;
+        }, TARGET_MARK_MS);
+        return true;
+      }
+      return false;
+    };
+
+    const applyHash = (allowGroupFallback: boolean) => {
+      stopObserving();
+      const key = rowKeyOf(window.location.hash);
+      if (key !== "") {
+        if (focusHashTarget()) return;
+        const root = contentRef.current;
+        if (root) {
+          observer = new MutationObserver(() => {
+            if (focusHashTarget()) stopObserving();
+          });
+          observer.observe(root, { childList: true, subtree: true });
+        }
+        return;
+      }
+      if (allowGroupFallback && entry !== undefined) {
+        document.getElementById(groupAnchor(entry))?.scrollIntoView({
+          block: "start",
+        });
+      }
+    };
+
+    applyHash(true);
+    const onHashChange = () => applyHash(false);
+    window.addEventListener("hashchange", onHashChange);
+    return () => {
+      window.removeEventListener("hashchange", onHashChange);
+      stopObserving();
+      clearMark();
+    };
   }, [entry]);
 
   return (
@@ -81,7 +134,7 @@ export function HubShell({
         <HubSearchField value={query} onChange={setQuery} />
         <HubNav sections={sections} place={place} />
       </aside>
-      <div className="flex min-w-0 flex-col gap-11 pb-11">
+      <div ref={contentRef} className="flex min-w-0 flex-col gap-11 pb-11">
         <Activity mode={searching ? "hidden" : "visible"}>{children}</Activity>
         {searching && (
           <HubSearchResults

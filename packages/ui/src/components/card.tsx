@@ -42,7 +42,7 @@ function CardTitle({
   return (
     <Comp
       data-slot="card-title"
-      className={cn("font-heading text-sm font-medium", className)}
+      className={cn("text-sm font-medium", className)}
       {...props}
     />
   );

@@ -84,12 +84,13 @@ describe("CommitRowActions", () => {
     ).toBe("/api/commits/14/set");
   });
 
-  it("offers Restore to an editor, disabled with its reason as the tooltip's text", () => {
+  it("offers Restore to an editor, aria-disabled so keyboard focus still reaches its tooltip", () => {
     renderCommit(true);
     const restore = screen.getByRole("button", {
       name: "Restore on this computer",
     }) as HTMLButtonElement;
-    expect(restore.disabled).toBe(true);
+    expect(restore.disabled).toBe(false);
+    expect(restore.getAttribute("aria-disabled")).toBe("true");
     expect(RESTORE_UNAVAILABLE).toBe("Needs dit on this computer.");
   });
 
@@ -183,7 +184,7 @@ describe("SaveRowActions", () => {
     ).toBe(`${HISTORY}?from=5&to=7`);
   });
 
-  it("disables the download of a pruned save yet keeps it comparable", () => {
+  it("disables the download of a pruned save yet keeps it focusable and comparable", () => {
     render(
       <SaveRowActions
         save={save("pruned")}
@@ -191,13 +192,11 @@ describe("SaveRowActions", () => {
         retentionDays={90}
       />
     );
-    expect(
-      (
-        screen.getByRole("button", {
-          name: "Download set, unavailable",
-        }) as HTMLButtonElement
-      ).disabled
-    ).toBe(true);
+    const button = screen.getByRole("button", {
+      name: "Download set, unavailable",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute("aria-disabled")).toBe("true");
     expect(screen.getByRole("link", { name: "Compare" })).toBeTruthy();
   });
 

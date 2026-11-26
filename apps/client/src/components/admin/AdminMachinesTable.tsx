@@ -7,6 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableScroll,
 } from "@workspace/ui/components/table";
 import type { Formatters } from "@workspace/ui/lib/formatters";
 
@@ -38,28 +39,30 @@ export function AdminMachinesTable({
 
   return (
     <>
-      <Table variant="entity">
-        <TableHeader>
-          <TableRow>
-            <TableHead>Owner</TableHead>
-            <TableHead>Machine</TableHead>
-            <TableHead>Platform</TableHead>
-            <TableHead>Version</TableHead>
-            <TableHead>Last seen</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((machine) => (
-            <TableRow key={machine.id}>
-              <TableCell>{machine.owner.name}</TableCell>
-              <TableCell>{machine.name}</TableCell>
-              <TableCell>{machine.platform}</TableCell>
-              <TableCell>{machine.appVersion}</TableCell>
-              <TableCell>{format.relative(machine.lastSeenAt)}</TableCell>
+      <TableScroll>
+        <Table variant="entity">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Owner</TableHead>
+              <TableHead>Machine</TableHead>
+              <TableHead>Platform</TableHead>
+              <TableHead>Version</TableHead>
+              <TableHead>Last seen</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {items.map((machine) => (
+              <TableRow key={machine.id}>
+                <TableCell>{machine.owner.name}</TableCell>
+                <TableCell>{machine.name}</TableCell>
+                <TableCell>{machine.platform}</TableCell>
+                <TableCell>{machine.appVersion}</TableCell>
+                <TableCell>{format.relative(machine.lastSeenAt)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableScroll>
 
       <PageLinks page={page} pageSize={pageSize} rowCount={total} />
     </>

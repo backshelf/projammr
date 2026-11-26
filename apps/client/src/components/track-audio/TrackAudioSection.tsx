@@ -37,7 +37,9 @@ import {
   VERSION_CHEVRON,
   VERSION_TRIGGER,
 } from "@/components/track-audio/audio-ui";
+import { useProjectRole } from "@/hooks/use-project-role";
 import { IconChevronRight } from "@tabler/icons-react";
+import { StatusChip } from "@workspace/ui/components/status-chip";
 import { useArrival } from "@workspace/ui/components/motion/arrival";
 import { m } from "@workspace/ui/lib/motion";
 import { cn } from "@workspace/ui/lib/utils";
@@ -57,8 +59,9 @@ export function TrackAudioSection({
   title: string;
   artists: string[];
 }) {
+  const canEdit = useProjectRole()?.can("editor") ?? false;
   const [manageOpen, setManageOpen] = useState(false);
-  useEntityKey("upload", () => setManageOpen(true));
+  useEntityKey("upload", () => setManageOpen(true), canEdit);
 
   const store = useMusicPlayerStore();
   const { playAt, endCompare } = usePlayerActions();
@@ -266,7 +269,7 @@ export function TrackAudioSection({
               audios={audios}
               selectedAudioId={selected.id}
               onSelect={handleSelect}
-              onManage={() => setManageOpen(true)}
+              onManage={canEdit ? () => setManageOpen(true) : undefined}
             >
               <button
                 type="button"
@@ -281,6 +284,17 @@ export function TrackAudioSection({
                 </span>
               </button>
             </TrackAudioDropdown>
+
+            {selected.isPrimary && selected.primaryPinned && (
+              <StatusChip
+                flag
+                colour="var(--ink-soft)"
+                title="Pinned as primary — newer bounces will not replace it"
+                className="flex-none"
+              >
+                Pinned
+              </StatusChip>
+            )}
 
             {duplicateVersion != null && (
               <DuplicateFlag version={duplicateVersion} className="flex-none" />
@@ -317,7 +331,7 @@ export function TrackAudioSection({
             </div>
           </div>
         </>
-      ) : (
+      ) : canEdit ? (
         <button
           type="button"
           className={AUDIO_PILL}
@@ -325,13 +339,15 @@ export function TrackAudioSection({
         >
           Add a track audio
         </button>
-      )}
+      ) : null}
 
-      <TrackAudioDialog
-        trackId={trackId}
-        open={manageOpen}
-        onOpenChange={setManageOpen}
-      />
+      {canEdit && (
+        <TrackAudioDialog
+          trackId={trackId}
+          open={manageOpen}
+          onOpenChange={setManageOpen}
+        />
+      )}
     </m.div>
   );
 }

@@ -7,7 +7,6 @@ import { Button } from "@workspace/ui/components/button";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip";
 import {
@@ -16,8 +15,7 @@ import {
   type LogCommit,
 } from "@workspace/ui/lib/commit-log";
 import { offersSamplesZip, samplesIncluded } from "@/lib/sample-state";
-import { DeepLinkFallbackDialog } from "@/components/deep-link/DeepLinkFallbackDialog";
-import { useDeepLink } from "@/components/deep-link/use-deep-link";
+import { useOpenDeepLink } from "@/components/deep-link/DeepLinkProvider";
 import { restoreHref } from "@/components/session/open-in-daw";
 
 /** What Restore says: it is disabled until a dit on this user's machines can answer that one is online. */
@@ -52,11 +50,14 @@ function RestoreButton() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex">
-          <Button variant="ghost" size="xs" disabled>
-            Restore on this computer
-          </Button>
-        </span>
+        <Button
+          variant="ghost"
+          size="xs"
+          aria-disabled="true"
+          onClick={(e) => e.preventDefault()}
+        >
+          Restore on this computer
+        </Button>
       </TooltipTrigger>
       <TooltipContent>{RESTORE_UNAVAILABLE}</TooltipContent>
     </Tooltip>
@@ -71,27 +72,21 @@ function RestoreOnButton({
   commit: LogCommit;
   machine: string;
 }) {
-  const { open, fallbackOpen, setFallbackOpen } = useDeepLink();
+  const open = useOpenDeepLink();
 
   return (
-    <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => open(restoreHref(commit.id))}
-          >
-            Restore on this computer
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{`Restores on ${machine}`}</TooltipContent>
-      </Tooltip>
-      <DeepLinkFallbackDialog
-        open={fallbackOpen}
-        onOpenChange={setFallbackOpen}
-      />
-    </>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => open(restoreHref(commit.id))}
+        >
+          Restore on this computer
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{`Restores on ${machine}`}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -143,7 +138,7 @@ export function CommitRowActions({
   restoreOn: string | null;
 }) {
   return (
-    <TooltipProvider>
+    <>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="ghost" size="xs" asChild>
@@ -201,6 +196,6 @@ export function CommitRowActions({
           <RestoreButton />
         ))}
       <CopyCommandButton commit={commit} />
-    </TooltipProvider>
+    </>
   );
 }

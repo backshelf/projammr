@@ -12,7 +12,9 @@ type Props = {
 
 const routeFrom = async (params: Props["params"]) => {
   const { projectId, route } = await params;
-  return { ...parseRoute(route), projectId: Number(projectId) };
+  const id = parseId(projectId);
+  if (id === null) return null;
+  return { ...parseRoute(route), projectId: id };
 };
 
 /**
@@ -28,6 +30,7 @@ function hubHref(projectId: string, segments: string[]): string | null {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const route = await routeFrom(params);
+  if (route === null) return {};
   const entry = routeModuleFor(route.kind);
 
   const title = entry?.title ?? (await entry?.loadTitle?.(route));
@@ -41,6 +44,7 @@ export default async function ProjectRouter({ params, searchParams }: Props) {
   if (hub !== null) redirect(hub);
 
   const route = await routeFrom(params);
+  if (route === null) return notFound();
   const entry = routeModuleFor(route.kind);
 
   if (!entry) {

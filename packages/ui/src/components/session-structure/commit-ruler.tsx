@@ -1,5 +1,6 @@
 "use client";
 
+import { useCoarsePointer } from "@workspace/ui/hooks/use-coarse-pointer";
 import {
   brushed,
   type Compare,
@@ -66,6 +67,19 @@ function Mark({
   inert: boolean;
 }) {
   const kind = state.kind === "save" ? "save" : state.kind;
+  if (inert) {
+    return (
+      <span
+        aria-hidden="true"
+        data-state={state.key}
+        data-kind={kind}
+        className="pointer-events-none absolute top-1/2 z-0 flex size-3 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+        style={{ left: `${left}%` }}
+      >
+        <span className="block h-2 w-px bg-ink/30" />
+      </span>
+    );
+  }
   return (
     <button
       ref={(node) => register(state.key, node)}
@@ -89,8 +103,7 @@ function Mark({
           ? "z-20"
           : state.kind === "checkpoint"
             ? "z-10"
-            : "z-0",
-        inert && "pointer-events-none"
+            : "z-0"
       )}
       style={{ left: `${left}%` }}
     >
@@ -151,6 +164,8 @@ export function CommitRuler({
 }) {
   const formats = format ?? defaultFormatters();
   const helpId = useId();
+  const coarse = useCoarsePointer();
+  const lastPointerTypeRef = useRef<string | null>(null);
 
   const states = useMemo(
     () =>
@@ -211,16 +226,27 @@ export function CommitRuler({
     onCompare(result);
   };
 
-  /** A press on a mark: a plain one names it in the log and anchors a compare, shift (or the second Enter) closes it. */
+  /** A press on a mark: on desktop, a plain click reveals the row and anchors
+   *  a compare while shift-click closes it; on touch/coarse pointers, tapping
+   *  a first mark anchors it and tapping a second mark compares the pair. */
   const choose = (state: RulerState, extend: boolean) => {
     setActiveKey(state.key);
-    if (extend && anchor && anchor.key !== state.key) {
+    const isTouch = coarse || lastPointerTypeRef.current === "touch";
+    lastPointerTypeRef.current = null;
+    if ((extend || isTouch) && anchor && anchor.key !== state.key) {
       compare(anchor, state);
+      return;
+    }
+    if (isTouch && anchor && anchor.key === state.key) {
+      setAnchor(null);
+      setAnnounced("Selection cleared");
       return;
     }
     setAnchor(state);
     setAnnounced(
-      `From ${state.title}. Shift-click or press Enter on another to compare.`
+      isTouch
+        ? `From ${state.title}. Tap another mark to compare.`
+        : `From ${state.title}. Shift-click or press Enter on another to compare.`
     );
     onReveal(state.rowId);
   };
@@ -273,6 +299,7 @@ export function CommitRuler({
   };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    lastPointerTypeRef.current = event.pointerType;
     if (event.button !== 0) return;
     dragRef.current = {
       x: event.clientX,

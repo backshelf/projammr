@@ -106,8 +106,14 @@ export default async function SessionHistoryPage({
   const collection = collectionResult ? loaded(collectionResult) : undefined;
 
   const track = session.track ?? undefined;
+  const savesError = isActionError(savesResult) ? savesResult.error : null;
+  const commitsError = isActionError(commitsResult)
+    ? commitsResult.error
+    : null;
+  const historyError = commitsError ?? savesError;
   const saves: SessionSave[] = isActionError(savesResult) ? [] : savesResult;
   const commits = isActionError(commitsResult) ? [] : commitsResult;
+  const renderedAt = new Date().toISOString();
   const holder = holderOfSession(presenceResult);
   const canEdit = roleSatisfies(project.role, "editor");
 
@@ -256,6 +262,7 @@ export default async function SessionHistoryPage({
             }))}
             marked={marked}
             historyHref={shownHref}
+            now={renderedAt}
           />
         </div>
       )}
@@ -294,10 +301,14 @@ export default async function SessionHistoryPage({
           </SaveDiffControls>
         </div>
       )}
-      {history.saves > 0 && (
+      {(history.saves > 0 || historyError != null) && (
         <section>
           <SectionHead>LOG</SectionHead>
-          {commits.length === 0 ? (
+          {historyError != null ? (
+            <p role="alert" className="text-small text-danger">
+              Couldn&apos;t load session history: {historyError}
+            </p>
+          ) : commits.length === 0 ? (
             <>
               <p className="mb-3 text-small text-ink-soft">
                 Every save is here. Name one with dit to make it a commit.

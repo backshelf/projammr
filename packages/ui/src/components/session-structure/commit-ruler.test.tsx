@@ -81,6 +81,10 @@ describe("CommitRuler", () => {
     expect(mark("commit:10").dataset.kind).toBe("commit");
     expect(mark("commit:12").dataset.kind).toBe("checkpoint");
     expect(mark("save:3").dataset.kind).toBe("save");
+    // Non-interactive save ticks under commits render as decorative spans, not buttons.
+    expect(mark("save:3").tagName).toBe("SPAN");
+    expect(mark("save:3").getAttribute("aria-hidden")).toBe("true");
+    expect(screen.getAllByRole("button")).toHaveLength(COMMITS.length);
   });
 
   it("names a mark on hover with its message, author, machine and time", () => {
@@ -101,6 +105,17 @@ describe("CommitRuler", () => {
     const { mark, log } = setup();
     fireEvent.click(mark("commit:12"));
     fireEvent.click(mark("commit:10"), { shiftKey: true });
+    expect(log.compares).toEqual([{ fromId: 1, toId: 4 }]);
+  });
+
+  it("supports mobile tap-to-compare without requiring Shift", () => {
+    const { mark, log } = setup();
+    fireEvent.pointerDown(mark("commit:12"), { pointerType: "touch" });
+    fireEvent.click(mark("commit:12"));
+    expect(log.compares).toEqual([]);
+
+    fireEvent.pointerDown(mark("commit:10"), { pointerType: "touch" });
+    fireEvent.click(mark("commit:10"));
     expect(log.compares).toEqual([{ fromId: 1, toId: 4 }]);
   });
 

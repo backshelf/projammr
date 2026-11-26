@@ -137,9 +137,9 @@ let webglSupport: boolean | undefined;
 function hasWebGL(): boolean {
   if (webglSupport === undefined) {
     const canvas = document.createElement("canvas");
-    webglSupport = Boolean(
-      canvas.getContext("webgl2") ?? canvas.getContext("webgl")
-    );
+    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    webglSupport = Boolean(gl);
+    gl?.getExtension?.("WEBGL_lose_context")?.loseContext();
   }
   return webglSupport;
 }

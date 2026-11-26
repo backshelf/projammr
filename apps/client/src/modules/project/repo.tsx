@@ -70,14 +70,12 @@ export default async function RepoPage({
           </>
         }
         action={
-          repo.sets.length > 0 ? (
-            <RepoPushSamples
-              repoId={repo.id}
-              pushSamples={repo.pushSamples}
-              forced={repo.pushSamplesForced}
-              canEdit={roleSatisfies(project.role, "editor")}
-            />
-          ) : undefined
+          <RepoPushSamples
+            repoId={repo.id}
+            pushSamples={repo.pushSamples}
+            forced={repo.pushSamplesForced}
+            canEdit={roleSatisfies(project.role, "editor")}
+          />
         }
       />
       {repo.sets.length > 0 && (

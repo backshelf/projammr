@@ -117,6 +117,7 @@ export default async function Image({ params }: Props) {
     >
       {cover ? (
         <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- Satori requires raw <img> elements */}
           <img
             src={cover}
             alt=""
@@ -148,6 +149,7 @@ export default async function Image({ params }: Props) {
         }}
       >
         {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element -- Satori requires raw <img> elements
           <img
             src={cover}
             alt=""
@@ -200,8 +202,10 @@ export default async function Image({ params }: Props) {
             }}
           >
             {mark ? (
+              // eslint-disable-next-line @next/next/no-img-element -- Satori requires raw <img> elements
               <img
                 src={mark}
+                alt=""
                 width={40}
                 height={40}
                 style={{ objectFit: "contain" }}

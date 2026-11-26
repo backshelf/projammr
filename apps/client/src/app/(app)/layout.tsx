@@ -3,6 +3,7 @@ import { CommandPaletteMount } from "@/components/command-palette/CommandPalette
 import { CommandPaletteRecents } from "@/components/command-palette/CommandPaletteRecents";
 import { CommandPaletteProvider } from "@/components/command-palette/command-palette-context";
 import { CopyTextProvider } from "@/components/copy-text/CopyTextProvider";
+import { DeepLinkProvider } from "@/components/deep-link/DeepLinkProvider";
 import { CommandProvider } from "@/components/commands/provider";
 import { Dock } from "@/components/dock/Dock";
 import { JobsProvider } from "@/components/jobs/JobsProvider";
@@ -48,47 +49,49 @@ export default async function AppLayout({
 
   return (
     <CopyTextProvider>
-      <PoliciesProvider policies={policies}>
-        <MusicPlayerProvider initial={playerInitial(policies)}>
-          <JobsProvider>
-            <CommandPaletteProvider>
-              <AppSidebarProvider
-                defaultOpen={
-                  cookieStore.get("sidebar_state")?.value !== "false"
-                }
-                // The wrapper is the body's flex item; its own `min-h-svh`
-                // would overrun the body when something sits above it.
-                className={"min-h-0 flex-1"}
-              >
-                <CommandProvider>
-                  <ShortcutsOverlay />
-                  <AppSidebar />
-                  <MusicPlayer />
-                  <Dock
-                    currentProjectId={
-                      Number(cookieStore.get("currentProject")?.value) || null
-                    }
-                  />
-                  <Suspense fallback={<CommandPaletteMount />}>
-                    <CommandPaletteRecents />
-                  </Suspense>
-                  <main
-                    className={
-                      "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-                    }
-                  >
-                    <ClientCommandBar edge="top" />
-                    <div className={"min-h-0 flex-1 overflow-hidden"}>
-                      {children}
-                    </div>
-                    <ClientCommandBar edge="bottom" />
-                  </main>
-                </CommandProvider>
-              </AppSidebarProvider>
-            </CommandPaletteProvider>
-          </JobsProvider>
-        </MusicPlayerProvider>
-      </PoliciesProvider>
+      <DeepLinkProvider>
+        <PoliciesProvider policies={policies}>
+          <MusicPlayerProvider initial={playerInitial(policies)}>
+            <JobsProvider>
+              <CommandPaletteProvider>
+                <AppSidebarProvider
+                  defaultOpen={
+                    cookieStore.get("sidebar_state")?.value !== "false"
+                  }
+                  // The wrapper is the body's flex item; its own `min-h-svh`
+                  // would overrun the body when something sits above it.
+                  className={"min-h-0 flex-1"}
+                >
+                  <CommandProvider>
+                    <ShortcutsOverlay />
+                    <AppSidebar />
+                    <MusicPlayer />
+                    <Dock
+                      currentProjectId={
+                        Number(cookieStore.get("currentProject")?.value) || null
+                      }
+                    />
+                    <Suspense fallback={<CommandPaletteMount />}>
+                      <CommandPaletteRecents />
+                    </Suspense>
+                    <main
+                      className={
+                        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                      }
+                    >
+                      <ClientCommandBar edge="top" />
+                      <div className={"min-h-0 flex-1 overflow-hidden"}>
+                        {children}
+                      </div>
+                      <ClientCommandBar edge="bottom" />
+                    </main>
+                  </CommandProvider>
+                </AppSidebarProvider>
+              </CommandPaletteProvider>
+            </JobsProvider>
+          </MusicPlayerProvider>
+        </PoliciesProvider>
+      </DeepLinkProvider>
     </CopyTextProvider>
   );
 }

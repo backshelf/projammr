@@ -130,7 +130,7 @@ function combosOfCell(cell: string): string[] {
 
 /** The keys each `###` section of the guide's shortcuts lists, by heading. */
 function guideKeys(guide: string): Map<string, Set<string>> {
-  const lines = guide.split("\n");
+  const lines = guide.replaceAll("\r\n", "\n").split("\n");
   const start = lines.indexOf(`## ${SECTION}`);
   if (start === -1) throw new Error(`The guide has no "${SECTION}" section`);
   const sections = new Map<string, Set<string>>();

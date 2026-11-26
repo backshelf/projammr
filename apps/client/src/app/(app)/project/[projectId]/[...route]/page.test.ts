@@ -18,13 +18,17 @@ mock.module("next/navigation", () => ({
   },
 }));
 
+const loadTitle = mock(async () => "Loaded Title");
+
 // Every route kind renders its own page; only which kind is asked for matters here.
 mock.module("@/modules/routes", () => ({
   routeModuleFor: (kind: string) =>
-    kind === "not-found" ? undefined : { Page: () => `page:${kind}` },
+    kind === "not-found"
+      ? undefined
+      : { Page: () => `page:${kind}`, loadTitle },
 }));
 
-const ProjectRouter = (await import("./page")).default;
+const { default: ProjectRouter, generateMetadata } = await import("./page");
 
 const request = (projectId: string, route: string[]) => ({
   params: Promise.resolve({ projectId, route }),
@@ -71,5 +75,16 @@ describe("a project's settings URL", () => {
     expect(await ProjectRouter(request("7", ["track", "3"]))).toBe(
       "page:track"
     );
+  });
+});
+
+describe("generateMetadata", () => {
+  it("returns empty metadata without calling loadTitle for non-numeric projectId", async () => {
+    loadTitle.mockClear();
+
+    expect(
+      await generateMetadata(request("not-a-number", ["track", "3"]))
+    ).toEqual({});
+    expect(loadTitle).not.toHaveBeenCalled();
   });
 });

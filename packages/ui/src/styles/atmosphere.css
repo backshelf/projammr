@@ -105,13 +105,9 @@
 .wash {
   --wash-l: 0.8;
   --wash-c-max: 0.15;
-  --wash-core: oklch(from var(--art) var(--wash-l) min(c, var(--wash-c-max)) h);
-  --wash-deep: oklch(
-    from var(--art) calc(var(--wash-l) - 0.12) min(c, var(--wash-c-max)) h
-  );
-  --wash-lift: oklch(
-    from var(--art) calc(var(--wash-l) + 0.08) min(c, var(--wash-c-max)) h
-  );
+  --wash-core: var(--art-glow);
+  --wash-deep: var(--art);
+  --wash-lift: var(--art-glow);
   --key-a: 0.58;
   --lobe-a: 0.3;
 
@@ -122,26 +118,18 @@
   contain: strict;
   pointer-events: none;
 
-  /* The key light, drawn on the container itself. Two ellipses off the top
-     edge: the core, wide and low over where the title sits, and a smaller,
-     paler one at the top right that runs under the rail. Both fall off
-     through a bell-shaped run of stops — a straight ramp to transparent ends
-     on a visible rim and reads as a disc rather than as light. */
+  /* Clean fallback for browsers without CSS relative colour syntax. */
   background:
     radial-gradient(
       ellipse 82vw 66vh at 31vw 6vh,
-      oklch(from var(--wash-core) l c h / var(--key-a)) 0%,
-      oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.7)) 26%,
-      oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.36)) 52%,
-      oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.1)) 78%,
+      color-mix(in oklab, var(--wash-core) 36%, transparent) 0%,
+      color-mix(in oklab, var(--wash-core) 18%, transparent) 44%,
       transparent 100%
     ),
     radial-gradient(
       ellipse 58vw 54vh at 88vw -2vh,
-      oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.72)) 0%,
-      oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.46)) 30%,
-      oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.18)) 60%,
-      oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.04)) 84%,
+      color-mix(in oklab, var(--wash-lift) 24%, transparent) 0%,
+      color-mix(in oklab, var(--wash-lift) 10%, transparent) 52%,
       transparent 100%
     );
 
@@ -175,12 +163,57 @@
   transform: rotate(var(--lobe-tilt));
   background: radial-gradient(
     closest-side,
-    oklch(from var(--lobe-colour) l c h / var(--lobe-a)) 0%,
-    oklch(from var(--lobe-colour) l c h / calc(var(--lobe-a) * 0.72)) 28%,
-    oklch(from var(--lobe-colour) l c h / calc(var(--lobe-a) * 0.34)) 54%,
-    oklch(from var(--lobe-colour) l c h / calc(var(--lobe-a) * 0.09)) 78%,
+    color-mix(in oklab, var(--lobe-colour) 22%, transparent) 0%,
+    color-mix(in oklab, var(--lobe-colour) 10%, transparent) 48%,
     transparent 100%
   );
+}
+
+@supports (color: oklch(from white l c h)) {
+  .wash {
+    --wash-core: oklch(
+      from var(--art) var(--wash-l) min(c, var(--wash-c-max)) h
+    );
+    --wash-deep: oklch(
+      from var(--art) calc(var(--wash-l) - 0.12) min(c, var(--wash-c-max)) h
+    );
+    --wash-lift: oklch(
+      from var(--art) calc(var(--wash-l) + 0.08) min(c, var(--wash-c-max)) h
+    );
+    /* The key light, drawn on the container itself. Two ellipses off the top
+       edge: the core, wide and low over where the title sits, and a smaller,
+       paler one at the top right that runs under the rail. Both fall off
+       through a bell-shaped run of stops — a straight ramp to transparent ends
+       on a visible rim and reads as a disc rather than as light. */
+    background:
+      radial-gradient(
+        ellipse 82vw 66vh at 31vw 6vh,
+        oklch(from var(--wash-core) l c h / var(--key-a)) 0%,
+        oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.7)) 26%,
+        oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.36)) 52%,
+        oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.1)) 78%,
+        transparent 100%
+      ),
+      radial-gradient(
+        ellipse 58vw 54vh at 88vw -2vh,
+        oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.72)) 0%,
+        oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.46)) 30%,
+        oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.18)) 60%,
+        oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.04)) 84%,
+        transparent 100%
+      );
+  }
+
+  .wash__lobe {
+    background: radial-gradient(
+      closest-side,
+      oklch(from var(--lobe-colour) l c h / var(--lobe-a)) 0%,
+      oklch(from var(--lobe-colour) l c h / calc(var(--lobe-a) * 0.72)) 28%,
+      oklch(from var(--lobe-colour) l c h / calc(var(--lobe-a) * 0.34)) 54%,
+      oklch(from var(--lobe-colour) l c h / calc(var(--lobe-a) * 0.09)) 78%,
+      transparent 100%
+    );
+  }
 }
 
 .wash__lobe--deep {

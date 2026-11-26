@@ -57,7 +57,7 @@ mock.module("next/link", () => ({
   useLinkStatus: () => ({ pending: false }),
 }));
 
-const { DIT_PAGE_URL } = await import("@workspace/ui/lib/site");
+const { DESKTOP_APP_DOWNLOAD_URL } = await import("@workspace/ui/lib/site");
 const { MachinesSection } = await import("./MachinesSection");
 const { MACHINE_POLL_MS } = await import("./machine-poll");
 
@@ -152,7 +152,8 @@ describe("MachinesSection with no machine", () => {
       screen.getByText("Install dit on the Mac you make music on.")
     ).toBeTruthy();
     const link = screen.getByRole("link", { name: /Download dit for Mac/ });
-    expect(link.getAttribute("href")).toBe(DIT_PAGE_URL);
+    expect(link.getAttribute("href")).toBe(DESKTOP_APP_DOWNLOAD_URL);
+    expect(link.getAttribute("href")).not.toContain(".example");
     expect(screen.queryByRole("listitem")).toBeNull();
   });
 

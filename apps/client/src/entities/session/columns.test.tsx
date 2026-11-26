@@ -24,12 +24,21 @@ const renderOpenCell = (repoId: number | null) => {
 
 describe("session table Open in DAW", () => {
   it("enables a row whose repo a machine tracks, pushed or not", () => {
-    expect(renderOpenCell(3).disabled).toBe(false);
+    expect(renderOpenCell(3).getAttribute("aria-disabled")).toBeNull();
   });
 
-  it("disables a row whose repo no machine tracks, or that has none", () => {
-    expect(renderOpenCell(4).disabled).toBe(true);
+  it("marks a row aria-disabled when no machine tracks its repo or it has none", () => {
+    expect(renderOpenCell(4).getAttribute("aria-disabled")).toBe("true");
     cleanup();
-    expect(renderOpenCell(null).disabled).toBe(true);
+    expect(renderOpenCell(null).getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("omits legacy scanner-only columns", () => {
+    const ids = sessionColumns(1, [], undefined, machines).map((c) => c.id);
+    expect(ids).not.toContain("machine");
+    expect(ids).not.toContain("localFilepath");
+    expect(ids).not.toContain("localFileUpdatedAt");
+    expect(ids).not.toContain("localFileCreatedAt");
+    expect(ids).toContain("inDit");
   });
 });

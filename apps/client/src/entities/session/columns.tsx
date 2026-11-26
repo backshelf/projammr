@@ -5,7 +5,6 @@ import { OpenInDawButton } from "@/components/session/OpenInDawButton";
 import { holderOfRepo } from "@/components/session/open-in-daw";
 import {
   countColumn,
-  dateTimeColumn,
   idColumn,
   labelsColumn,
   priorityColumn,
@@ -179,30 +178,9 @@ export function sessionColumns(
       value: (row) => row.scenesCount,
     }),
     textColumn(columnHelper, {
-      id: "machine",
-      header: "Machine",
-      value: (row) => row.localFileMachineName,
-    }),
-    textColumn(columnHelper, {
       id: "inDit",
       header: "In dit",
       value: (row) => inDitLabel(row.inDit),
-    }),
-    textColumn(columnHelper, {
-      id: "localFilepath",
-      header: "Local Filepath",
-      sortable: false,
-      value: (row) => (row.localFilepath ?? "").split("/").pop() ?? "",
-    }),
-    dateTimeColumn(columnHelper, {
-      id: "localFileUpdatedAt",
-      header: "Local File Last Updated",
-      value: (row) => row.localFileUpdatedAt,
-    }),
-    dateTimeColumn(columnHelper, {
-      id: "localFileCreatedAt",
-      header: "Local File Created At",
-      value: (row) => row.localFileCreatedAt,
     }),
     relativeDateColumn(columnHelper, {
       id: "lastSaveAt",
