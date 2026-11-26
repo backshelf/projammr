@@ -26,12 +26,36 @@ fn preferences(home: &Path) -> PathBuf {
     home.join("Library/Preferences/Ableton")
 }
 
-/// The numbers in `Live 12.4.6`, to compare versions as numbers.
-fn version_of(name: &str) -> Option<Vec<u32>> {
-    name.strip_prefix("Live ")?
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Release {
+    Beta(u32),
+    Final,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Version {
+    numbers: Vec<u32>,
+    release: Release,
+}
+
+/// The version in `Live 12.4.6` or `Live 13.0b26`, to compare versions numerically with betas before their release.
+fn version_of(name: &str) -> Option<Version> {
+    let rest = name.strip_prefix("Live ")?;
+    let (core, release) = match rest.split_once('b') {
+        Some((core, beta)) => (core, Release::Beta(beta.parse().ok()?)),
+        None => (rest, Release::Final),
+    };
+    let mut numbers: Vec<u32> = core
         .split('.')
         .map(|part| part.parse().ok())
-        .collect()
+        .collect::<Option<_>>()?;
+    if numbers.is_empty() {
+        return None;
+    }
+    while numbers.len() > 1 && numbers.last() == Some(&0) {
+        numbers.pop();
+    }
+    Some(Version { numbers, release })
 }
 
 /// The newest `Live <version>` preferences folder under `home`, if Live has ever run there.
@@ -374,6 +398,10 @@ mod tests {
             user_library(home.path()),
             PathBuf::from("/Volumes/Samples/Ableton/User Library")
         );
+
+        let beta = home.path().join("Library/Preferences/Ableton/Live 13.0b26");
+        std::fs::create_dir_all(&beta).unwrap();
+        assert_eq!(live_folder(home.path()), Some(beta));
     }
 
     #[test]
@@ -393,7 +421,16 @@ mod tests {
     fn versions_compare_as_numbers() {
         assert!(version_of("Live 12.4.6") > version_of("Live 9.7.7"));
         assert!(version_of("Live 12.10.0") > version_of("Live 12.9.9"));
+        assert!(version_of("Live 13.0b26") > version_of("Live 12.4.6"));
+        assert!(version_of("Live 13.0b26") > version_of("Live 13.0b2"));
+        assert!(version_of("Live 13.0") > version_of("Live 13.0b26"));
+        assert!(version_of("Live 13.0.0") > version_of("Live 13.0b26"));
+        assert!(version_of("Live 13.0.1b1") > version_of("Live 13.0.0"));
+        assert!(version_of("Live 13.0.1") > version_of("Live 13.0.1b1"));
         assert_eq!(version_of("Crash"), None);
+        assert_eq!(version_of("Live 13.0b"), None);
+        assert_eq!(version_of("Live 13.0b1.2"), None);
+        assert_eq!(version_of("Live 13.b1"), None);
     }
 
     #[test]
