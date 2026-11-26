@@ -1,15 +1,11 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { createRequire } from "node:module";
-import { dirname } from "node:path";
+import path, { dirname } from "node:path";
 import { stubGlobal, unstubAllGlobals } from "@workspace/test/globals";
 import type { Flac } from "libflacjs";
 import { Decoder } from "libflacjs/lib/decoder";
-import {
-  encodeFlac24,
-  estimateFlacBytes,
-  FLAC_SIZE_RATIO,
-  whenFlacReady,
-} from "./flac-encode";
+import { encodeFlac24, whenFlacReady } from "./flac-encode";
+import { estimateFlacBytes, FLAC_SIZE_RATIO } from "./flac-size";
 
 /**
  * The same WebAssembly build the worker loads, read from disk. Under Bun the
@@ -58,9 +54,9 @@ beforeAll(async () => {
 });
 
 describe("encodeFlac24", () => {
-  it("writes a fLaC stream whose STREAMINFO names 24-bit, the rate, the channels and the length", async () => {
+  it("writes a fLaC stream whose STREAMINFO names 24-bit, the rate, the channels and the length", () => {
     const frames = 70000; // past one encode chunk, so the chunks join up
-    const bytes = await encodeFlac24(
+    const bytes = encodeFlac24(
       flac,
       [new Float32Array(frames), new Float32Array(frames)],
       48000
@@ -75,7 +71,7 @@ describe("encodeFlac24", () => {
     expect(metadata.md5sum).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  it("round-trips every sample losslessly, with -1, 0 and 1 at the 24-bit extremes and zero", async () => {
+  it("round-trips every sample losslessly, with -1, 0 and 1 at the 24-bit extremes and zero", () => {
     const frames = 70000;
     const left = Float32Array.from({ length: frames }, (_, i) =>
       Math.sin(i / 30)
@@ -86,10 +82,7 @@ describe("encodeFlac24", () => {
       (_, i) => Math.cos(i / 17) * 0.25
     );
 
-    const { channels } = decode(
-      flac,
-      await encodeFlac24(flac, [left, right], 48000)
-    );
+    const { channels } = decode(flac, encodeFlac24(flac, [left, right], 48000));
 
     expect([...channels[0]!.subarray(0, 3)]).toEqual([-0x800000, 0, 0x7fffff]);
     const expected = (sample: number) =>
@@ -98,16 +91,16 @@ describe("encodeFlac24", () => {
     expect(channels[1]).toEqual(Int32Array.from(right, expected));
   });
 
-  it("clamps a sample past full scale rather than wrapping it", async () => {
+  it("clamps a sample past full scale rather than wrapping it", () => {
     const { channels } = decode(
       flac,
-      await encodeFlac24(flac, [new Float32Array([1.5, -1.5])], 44100)
+      encodeFlac24(flac, [new Float32Array([1.5, -1.5])], 44100)
     );
 
     expect([...channels[0]!]).toEqual([0x7fffff, -0x800000]);
   });
 
-  it("takes about half a 24-bit WAV's bytes for tonal audio", async () => {
+  it("takes about half a 24-bit WAV's bytes for tonal audio", () => {
     const frames = 48000 * 5;
     const tone = Float32Array.from(
       { length: frames },
@@ -116,7 +109,7 @@ describe("encodeFlac24", () => {
         0.2 * Math.sin((2 * Math.PI * 1370 * i) / 48000)
     );
 
-    const bytes = await encodeFlac24(flac, [tone, tone.slice()], 48000);
+    const bytes = encodeFlac24(flac, [tone, tone.slice()], 48000);
 
     expect(bytes.byteLength).toBeLessThan(frames * 2 * 3 * 0.5);
   });
@@ -139,5 +132,38 @@ describe("estimateFlacBytes", () => {
 
     expect(frames * 2 * 3).toBeGreaterThan(cap);
     expect(estimateFlacBytes(frames, 2)).toBeLessThan(cap);
+  });
+});
+
+describe("libflacjs bundler boundary", () => {
+  const clientSrc = path.resolve(import.meta.dir, "../..");
+
+  // `libflacjs/lib/*.js` are UMD wrappers that shadow `require` as a factory
+  // parameter, which Turbopack cannot statically resolve — crashing SSR with
+  // `MODULE_NOT_FOUND` on `./utils/data-utils` and browsers/workers with
+  // `Unexpected use of runtime require`.
+  it("never imports libflacjs/lib UMD helpers from production client source", async () => {
+    const offenders: string[] = [];
+    const glob = new Bun.Glob("**/*.{ts,tsx}");
+    let scanned = 0;
+    for await (const file of glob.scan({ cwd: clientSrc, absolute: true })) {
+      if (file.endsWith(".test.ts") || file.endsWith(".test.tsx")) continue;
+      scanned += 1;
+      const text = await Bun.file(file).text();
+      if (/from\s+["']libflacjs\/lib\//.test(text)) {
+        offenders.push(path.relative(clientSrc, file));
+      }
+    }
+    expect(scanned).toBeGreaterThan(0);
+    expect(offenders).toEqual([]);
+  });
+
+  // `bounce.ts` is reachable from the app shell (`MusicPlayer`); keeping it off
+  // `flac-encode.ts` ensures the encoder stays in the worker chunk only.
+  it("keeps bounce.ts independent of flac-encode.ts", async () => {
+    const bounceSource = await Bun.file(
+      path.join(import.meta.dir, "bounce.ts")
+    ).text();
+    expect(bounceSource).not.toMatch(/from\s+["'][^"']*flac-encode["']/);
   });
 });

@@ -50,7 +50,7 @@ const reply = (response: FlacEncodeResponse, transfer: Transferable[] = []) =>
 self.onmessage = async (event: MessageEvent<FlacEncodeRequest>) => {
   const { sampleRate, channels } = event.data;
   try {
-    const bytes = await encodeFlac24(await loadFlac(), channels, sampleRate);
+    const bytes = encodeFlac24(await loadFlac(), channels, sampleRate);
     reply({ ok: true, flac: bytes.buffer }, [bytes.buffer]);
   } catch (error) {
     reply({

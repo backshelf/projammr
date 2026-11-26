@@ -26,7 +26,7 @@ import {
   uploadAsset,
   uploadLimit,
 } from "@/components/uploads/upload-client";
-import { estimateFlacBytes } from "@/lib/dsp/flac-encode";
+import { estimateFlacBytes } from "@/lib/dsp/flac-size";
 import type {
   FlacEncodeRequest,
   FlacEncodeResponse,
