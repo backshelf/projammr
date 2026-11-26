@@ -9,7 +9,7 @@ publish = false
 dit-core = { path = "../dit-core" }
 getrandom.workspace = true
 lofty = "0.25.4"
-notify = "8.2.0"
+notify = "9.0.0"
 sha2.workspace = true
 strsim = "0.11"
 serde.workspace = true
