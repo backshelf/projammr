@@ -1,0 +1,125 @@
+---
+/* A product screenshot from the capture pipeline
+   (`apps/web/scripts/screenshots/`), which writes each shot as
+   `src/assets/screenshots/<id>.<light|dark>.<desktop|phone>.webp`. Both
+   themes are rendered and the page's theme shows one, so a reader in dark
+   mode sees the app in dark mode. A shot not captured yet renders as a
+   labelled placeholder; `test/screenshots.test.ts` fails the gates on any
+   that are still missing. `adaptive` shows a desktop shot's phone capture
+   on a phone, where there is one, since a desktop window squeezed into a
+   phone's width is too small to read. `wide` is a desktop shot that runs
+   the page's full width (a stacked hunk's proof) rather than a column's, so
+   the browser picks a source that is not stretched to fill it. */
+import type { ImageMetadata } from "astro";
+import { getImage, Image } from "astro:assets";
+
+import { LABEL } from "@workspace/ui/lib/shell";
+
+type Props = {
+  id: string;
+  alt: string;
+  viewport?: "desktop" | "phone";
+  caption?: string;
+  adaptive?: boolean;
+  wide?: boolean;
+};
+
+const {
+  id,
+  alt,
+  viewport = "desktop",
+  caption,
+  adaptive = false,
+  wide = false,
+} = Astro.props;
+
+type Theme = "light" | "dark";
+
+const shots = import.meta.glob<{ default: ImageMetadata }>(
+  "/src/assets/screenshots/*.webp",
+  { eager: true }
+);
+const shot = (theme: Theme, of: "desktop" | "phone" = viewport) =>
+  shots[`/src/assets/screenshots/${id}.${theme}.${of}.webp`]?.default;
+
+const light = shot("light");
+const dark = shot("dark");
+const widths = viewport === "phone" ? [390, 780] : [720, 1440, 2160];
+// The desktop widths are site.css's `--page` for a wide shot and the proof
+// column of a split hunk otherwise.
+const sizes =
+  viewport === "phone"
+    ? "(min-width: 768px) 390px, 100vw"
+    : wide
+      ? "(min-width: 1180px) 76rem, 100vw"
+      : "(min-width: 1180px) 45rem, 100vw";
+
+/** The phone capture a phone is shown in place of this desktop shot, as a
+ * `<source>`'s attributes, or null where there is none to show. */
+const phoneSource = async (theme: Theme) => {
+  const src = adaptive && viewport === "desktop" && shot(theme, "phone");
+  if (!src) return null;
+  const image = await getImage({ src, widths: [390, 780] });
+  return {
+    srcset: image.srcSet.attribute,
+    width: src.width,
+    height: src.height,
+  };
+};
+const phone = {
+  light: await phoneSource("light"),
+  dark: await phoneSource("dark"),
+};
+---
+
+<figure
+  class:list={[
+    "not-content my-8 flex flex-col gap-3",
+    viewport === "phone" && "items-center",
+  ]}
+>
+  {light && dark ? (
+    <>
+      <picture class="contents">
+        {phone.light && (
+          <source media="(width < 768px)" sizes="100vw" {...phone.light} />
+        )}
+        <Image
+          src={light}
+          alt={alt}
+          widths={widths}
+          sizes={sizes}
+          class="block rounded-lg border border-rule dark:hidden"
+        />
+      </picture>
+      <picture class="contents">
+        {phone.dark && (
+          <source media="(width < 768px)" sizes="100vw" {...phone.dark} />
+        )}
+        <Image
+          src={dark}
+          alt={alt}
+          widths={widths}
+          sizes={sizes}
+          class="hidden rounded-lg border border-rule dark:block"
+        />
+      </picture>
+    </>
+  ) : (
+    <div
+      role="img"
+      aria-label={alt}
+      class:list={[
+        "flex items-center justify-center rounded-lg border border-dashed border-rule-strong bg-paper-sunk",
+        viewport === "phone"
+          ? "aspect-[390/844] w-60"
+          : "aspect-[16/10] w-full",
+      ]}
+    >
+      <span class:list={[LABEL, "text-ink-faint"]}>Screenshot · {id}</span>
+    </div>
+  )}
+  {caption && (
+    <figcaption class="text-small text-ink-faint">{caption}</figcaption>
+  )}
+</figure>

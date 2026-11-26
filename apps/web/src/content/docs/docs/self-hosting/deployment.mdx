@@ -1,0 +1,57 @@
+---
+title: Deployment shapes
+description: What the stack is built for, one machine on your own network under one name, and the choices within it.
+sidebar:
+  order: 50
+---
+
+The stack runs on one machine, for devices on the same network, under one name. This page covers the choices within
+that shape: the name, the certificate and the proxy.
+
+## One machine, one name
+
+Compose runs every service on the machine you start it on, and the database and the uploads live in volumes on that
+machine's disk. The proxy serves the site under exactly one name, `PUBLIC_HOST`: its certificate is issued for that
+name, and a request that uses any other name for the machine does not reach the app.
+
+Pick a name every device you use can reach the machine by:
+
+- **An mDNS name**, like `studio.local`, which keeps working when the machine's address on the network changes, on
+  devices that resolve mDNS names.
+- **The machine's address on your network**, like `192.168.1.10`, which any device can use for as long as the
+  address stays the same.
+- **A domain you control**, pointed at the machine's address on your network.
+- **A Tailscale name**, `<name>.<tailnet>.ts.net`, when [the stack serves itself through
+  Tailscale](/docs/self-hosting/tailscale/). Devices on your tailnet reach it wherever they are, and through Funnel
+  so does the internet.
+
+Changing `PUBLIC_HOST` later means recreating the services (`docker compose up -d`); nothing is rebuilt. Your
+devices do not have to trust anything new: the CA stays the same, and the proxy signs a certificate for the new name
+with it.
+
+## Certificates come from the local CA
+
+The proxy signs its certificate with Caddy's own local CA, and it has no other mode, so only devices that trust your
+CA can open your instance. Leave `TLS_MODE` at its default, `internal`.
+
+Served through Tailscale, the certificate is one Tailscale issues, which every device already trusts, and the
+Tailscale override sets `TLS_MODE` to `acme` itself.
+
+## The proxy in front of the API
+
+The API limits how often a caller can try to sign in, sign up, join a share page as a guest or register an OAuth
+client, and it tells callers apart by their network address. Behind the proxy, the address it sees is the proxy's
+own, so it reads the caller's from the `X-Forwarded-For` header instead, trusting exactly `TRUSTED_PROXY_HOPS`
+entries from the right.
+
+In the stack that is 1, for the one proxy, and it should stay 1. Caddy writes the address it actually received the
+connection from and ignores whatever a caller put in the header itself, so that one entry can be trusted:
+
+- **Higher than the number of proxies** lets a caller pick the address they are limited under.
+- **0** ignores the header, so every caller shares the proxy's address, and with it one limit.
+
+A Tailscale node in Caddy's place is that one proxy too, and 1 stays right. It replaces the header with the address
+the connection came from, for callers arriving through Funnel as well as from your tailnet.
+
+Putting another proxy in front of Caddy is not something the stack is set up for. The `Caddyfile` does not trust any
+proxy before it, so Caddy would drop that proxy's header and every caller would arrive as that proxy's address.

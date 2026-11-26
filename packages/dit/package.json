@@ -1,0 +1,24 @@
+{
+  "name": "@workspace/dit",
+  "version": "0.9.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "bun scripts/build-wasm.ts",
+    "typecheck": "bun check",
+    "lint": "bun scripts/lint.ts",
+    "test": "cargo test --workspace && bun test --timeout=30000",
+    "format": "bun --bun prettier --write \"**/*.ts\" eslint.config.js && cargo fmt"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "eslint": "^10.14.0",
+    "typescript": "^7.1.0-dev.20261010.1"
+  }
+}

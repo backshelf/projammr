@@ -1,0 +1,15 @@
+---
+/* A bare icon mark, per DESIGN.md's icon buttons: no fill, no border, ink-soft
+   to ink on hover. ThemeScript handles the press. */
+import { IconMoon, IconSun } from "@tabler/icons-react";
+---
+
+<button
+  type="button"
+  data-theme-toggle
+  aria-label="Switch between light and dark"
+  class="relative inline-flex size-7 items-center justify-center rounded-sm text-ink-soft motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none coarse:after:absolute coarse:after:-inset-2"
+>
+  <IconSun className="hidden size-4 dark:block" aria-hidden="true" />
+  <IconMoon className="block size-4 dark:hidden" aria-hidden="true" />
+</button>

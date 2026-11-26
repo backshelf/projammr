@@ -1,0 +1,97 @@
+---
+title: Quickstart
+description: Clone Projammr, set its two secrets, start the stack with Docker Compose and create your instance's first account.
+sidebar:
+  order: 10
+---
+
+import { Code, Steps } from "@astrojs/starlight/components";
+
+import { SITE } from "@/site";
+
+export const clone = `git clone ${SITE.repository}.git\ncd ${SITE.repository.split("/").at(-1)}`;
+
+This gets your instance running on one machine and signs you in as its admin. You need a clone of the repository, a
+`.env` file with two secrets and a name for the machine, and one `docker compose` command.
+
+<Steps>
+
+1. Clone the repository and move into it.
+
+   <Code code={clone} lang="sh" />
+
+2. Copy the example environment file. Compose reads `.env` from the root of the repository.
+
+   ```sh
+   cp .env.example .env
+   ```
+
+3. Generate the two secrets, one command each, and paste each value into `.env`.
+
+   ```sh
+   openssl rand -base64 32   # BETTER_AUTH_SECRET
+   openssl rand -base64 32   # NOTES_MASTER_KEY
+   ```
+
+   `BETTER_AUTH_SECRET` signs sign-in sessions, and both the API and the web app read it. `NOTES_MASTER_KEY` is the
+   root key your instance encrypts notes under. Keep a copy of it somewhere safe: losing it makes every note
+   unreadable. Compose refuses to start until both are set.
+
+4. Set `PUBLIC_HOST` to the name your devices will open the app by: the machine's mDNS name, its address on your
+   network, or a domain that points at it. Lowercase, with no scheme and no port.
+
+   ```sh title=".env"
+   PUBLIC_HOST=studio.local
+   ```
+
+   The default, `localhost`, only works from the machine itself. Every URL the services need is derived from this
+   one value when the services start, so changing it later only means recreating them.
+
+5. Start the stack.
+
+   ```sh
+   docker compose up -d
+   ```
+
+   Compose pulls the published `ghcr.io/backshelf/projammr-api` and `ghcr.io/backshelf/projammr-web` images
+   (`latest`, unless you set `PROJAMMR_VERSION` in `.env`, for example `PROJAMMR_VERSION=1.2.0`, to pin a release).
+   The services then start in order, each waiting until the one before it reports healthy: the database, the API (which applies
+   the database migrations first), the web app, and last the proxy. `docker compose ps` shows how far it has got.
+
+   To build the images from source instead, start with the build override. The first build compiles the API, the web
+   app and the audio analysis module, so it takes a while.
+
+   ```sh
+   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+   ```
+
+6. Trust your instance's certificate on the device you are using, then open `https://<PUBLIC_HOST>`. The proxy
+   signs the site with its own local certificate authority, which your devices do not know yet;
+   [HTTPS and your devices](/docs/self-hosting/https/) walks through each platform.
+
+7. Create the first account. On a new instance the sign-in page reads **Create the first account**. The account you
+   create there administers the instance, and registration closes behind it: after that, a new account needs an
+   invite, [unless an admin opens registration](/docs/admin/registration/).
+
+</Steps>
+
+## Check that it is healthy
+
+The API reports on itself at `https://<PUBLIC_HOST>/api/health`:
+
+```json
+{ "status": "ok", "db": true, "media": { "ffmpeg": true }, "queue": 0 }
+```
+
+`db` is whether the API can reach the database, `media.ffmpeg` whether it can find ffmpeg, and `status` is `ok` when
+both are true and `degraded` otherwise. `queue` is the length of the audio and image analysis queue. When
+something is wrong, the logs say why:
+
+```sh
+docker compose logs -f api
+```
+
+## Next
+
+- [Configuration](/docs/self-hosting/configuration/): every variable in `.env`.
+- [Backups and restore](/docs/self-hosting/backups/): take your first backup once you have uploaded something.

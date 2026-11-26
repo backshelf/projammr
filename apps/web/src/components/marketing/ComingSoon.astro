@@ -1,0 +1,12 @@
+---
+/* The mark on anything the site names that does not exist yet: the hosted
+   plans, and an installer before its build is published. A label, never a
+   badge: it states a fact about availability and asks for nothing. */
+import { LABEL } from "@workspace/ui/lib/shell";
+
+type Props = { text?: string };
+
+const { text = "Coming soon" } = Astro.props;
+---
+
+<span class:list={[LABEL, "text-ink-faint"]}>{text}</span>

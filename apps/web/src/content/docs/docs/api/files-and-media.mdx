@@ -1,0 +1,170 @@
+---
+title: Files and media
+description: Upload bounces and artwork, turn audio into track versions, and fetch the stored files back.
+sidebar:
+  order: 4
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Every file in Projammr, whether a bounce, a stem, a PDF of lyrics or a piece of artwork, is uploaded once as a file
+of its own, then put to use: linked to a track as an audio version, attached to a project, collection, track or
+session, or set as artwork. The API keeps the upload and the use as two steps, so one file can serve several
+purposes without being uploaded twice.
+
+## Upload a file
+
+`POST /api/assets/upload` takes `multipart/form-data` with two required fields:
+
+| Field       | What it is                                  |
+| ----------- | ------------------------------------------- |
+| `file`      | The file itself                             |
+| `projectId` | The project the file belongs to             |
+
+```bash
+curl -s -X POST https://music.example.com/api/assets/upload \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN" \
+  -F 'file=@"Track 3 v2.wav";type=audio/wav' \
+  -F projectId=1
+```
+
+It answers `201` with the new asset:
+
+```json
+{
+  "id": 12,
+  "name": "Track 3 v2.wav",
+  "type": "audio/wav",
+  "size": 264678,
+  "assetPath": "assets/17ecc3f3-d2b8-4835-8f01-93959eb29863.wav",
+  "projectId": 1,
+  "createdByUser": "LGIJ4XCmTnDj0u3m2BKRiOIyQn0RACFJ",
+  "createdAt": "2026-09-23T00:05:36.595Z",
+  "updatedAt": "2026-09-23T00:05:36.595Z",
+  "localFilepath": null,
+  "localFileCreatedAt": null,
+  "localFileUpdatedAt": null,
+  "localFileMachineName": null,
+  "fingerprint": null
+}
+```
+
+- `name` keeps the file's own name; the stored copy gets a random one, which is what `assetPath` names.
+- `type` is the content type you declared for the part (`;type=audio/wav` in curl), so declare it.
+- The `local…` fields and `fingerprint` are optional form fields the scanner fills in to tie a file to where it came
+  from on disk. A script can leave them out.
+
+Uploading needs the editor role in the project.
+
+### Size limits
+
+Each instance sets the largest file it accepts with [its upload limit](/docs/self-hosting/configuration/#the-upload-limit), 128 MB unless its administrator
+changes it. Ask the instance rather than assuming:
+
+```bash
+curl -s https://music.example.com/api/uploads/limits \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN"
+# {"maxBytes":134217728}
+```
+
+A file over the limit answers `400` with a validation error whose `code` is `too_big`. The API reads a request body
+only up to the limit plus a mebibyte for the rest of the form, so a request far over it is turned away before it is
+read, with a bare `413` and no body. Check the size before sending: some HTTP clients see that answer only after
+they have sent the whole body.
+
+<Aside>
+  The endpoint reference on this site shows a 128 MB maximum on the upload routes: that is the default the reference
+  was built with. Your instance's own limit is whatever `GET /api/uploads/limits` says.
+</Aside>
+
+### Storage caps
+
+An instance can also [cap how much one project](/docs/admin/storage/#storage-limits), and one account across all its projects, may store in total. When an
+upload (or a conversion) would take a project or an account past its cap, the API refuses it with `413`, a stable
+`code` and the numbers behind it:
+
+```json
+{
+  "error": "…",
+  "code": "storage_limit",
+  "details": { "scopeKind": "project", "usedBytes": …, "limitBytes": … },
+  "requestId": "…"
+}
+```
+
+`GET /api/projects/{id}/storage` reports a project's usage and its cap (`limitBytes` is `null` when there is none).
+
+## Make it a version of a track
+
+An audio file becomes a version of a track when you link it:
+
+```bash
+curl -s -X POST https://music.example.com/api/tracks/7/audios \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"assetIds":[12]}'
+```
+
+- `assetIds` can name several files at once; files that are not audio are skipped. The audio types are `.wav`,
+  `.mp3`, `.aiff`, `.aif`, `.flac`, `.m4a`, `.aac` and `.ogg`.
+- Versions are numbered by when each file was made, oldest first: the `localFileCreatedAt` the scanner records, or
+  the upload time for a file uploaded without one. Linking renumbers the track's versions to keep that order.
+- Add `"primaryAssetId": 12` to make that file the track's primary version. Without it, a track that had no primary
+  version gets its newest one.
+- Linking a file that is already a version of the track changes nothing, so the call is safe to repeat.
+
+The answer is `{ "audios": [ … ], "analysisJobIds": [ … ] }`: every version of the track, and the ids of the jobs
+that measure the newly linked ones (duration, waveform, loudness, spectrum, tempo and key). Until a job finishes,
+those fields on the version are `null`. [Jobs and event streams](/docs/api/jobs/) covers following them.
+
+`GET /api/tracks/{id}/audios` lists a track's versions with their measurements and the asset behind each.
+
+## Attach a file
+
+Any file can also be attached to a project, collection, track or session, where it appears among that item's files:
+
+```bash
+curl -s -X POST https://music.example.com/api/sessions/3/attachments \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"assetId":12}'
+```
+
+Attaching the same file twice answers `409`.
+
+## Artwork
+
+Images have their own upload, `POST /api/images/upload`, which takes a `file` (WebP, JPEG, PNG or GIF) and a
+`projectId`. Then set it on a project, collection or track by id:
+
+```bash
+curl -s -X PUT https://music.example.com/api/images/parent/track/7 \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"imageId":5}'
+```
+
+An image uploaded without a `projectId` is an account avatar rather than project artwork.
+
+## Fetch a file back
+
+A stored file is served from your instance's `/media/` path, followed by the row's `assetPath` (or an image's
+path):
+
+```bash
+curl -s -o "Track 3 v2.wav" \
+  https://music.example.com/media/assets/17ecc3f3-d2b8-4835-8f01-93959eb29863.wav \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN"
+```
+
+`/media/` is the name the Docker Compose proxy gives the API's own `/static/` route, so on an instance you run the
+API of directly (a development setup, or behind a proxy of your own), the same file is at `/static/assets/…`.
+
+- Fetching a file needs a session, like the rest of the API: a project's files are readable by any member of the
+  project, and an avatar by anyone signed in. A file that does not exist answers `404`; one that does answers `401`
+  when you are signed out and `403` when it belongs to a project you are not a member of.
+- `Range` requests work, so audio can be streamed and seeked.
+- Audio and images are served inline with their stored content type; anything else downloads. Add `?download` to
+  download any file under its own name.
+- For an image, `?w=64`, `?w=256` or `?w=1024` serves a resized WebP copy. Any other width answers `400`.
+- Responses carry an `ETag` and honour `If-None-Match`, so a client that caches files can revalidate them for free.

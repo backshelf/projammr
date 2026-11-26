@@ -1,0 +1,26 @@
+{
+  "name": "@workspace/test",
+  "version": "0.9.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "format": "bun --bun prettier --write \"**/*.ts\"",
+    "typecheck": "bun check",
+    "lint": "bun --bun eslint ."
+  },
+  "dependencies": {
+    "@happy-dom/global-registrator": "^21.0.4",
+    "motion": "^14.11.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "eslint": "^10.14.0",
+    "typescript": "^7.1.0-dev.20261010.1"
+  }
+}

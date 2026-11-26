@@ -1,0 +1,99 @@
+---
+title: Serving it through Tailscale
+description: Put your instance on your tailnet under a certificate every device already trusts, and on the internet through Funnel, in place of the Caddy proxy.
+sidebar:
+  order: 25
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+The stack can serve itself from a [Tailscale](https://tailscale.com/) node instead of the Caddy proxy. The node
+joins your tailnet under its own name, `<name>.<tailnet>.ts.net`, and serves your instance over HTTPS under a
+certificate Tailscale issues. Browsers already trust that certificate, so there is no CA to install on any device,
+and nothing is published on the host's ports. Through
+[Funnel](https://tailscale.com/kb/1223/funnel), the same address also answers the internet, so a share link works
+for someone who is not on your tailnet.
+
+`docker-compose.tailscale.yml` is the override that does it. It adds a `tailscale` service, leaves the Caddy
+`proxy` service stopped, and routes the node's requests the way the `Caddyfile` does: `/api` and `/media` to the
+API, and everything else to the web app. `tailscale-serve.json` holds those routes.
+
+## What your tailnet needs
+
+In the [Tailscale admin console](https://login.tailscale.com/admin):
+
+- **MagicDNS** and **HTTPS certificates** are turned on, on the DNS page. The DNS page also shows your tailnet's
+  name, the `<tailnet>.ts.net` part of every node's address.
+- **Funnel** is allowed for the node. The default access policy allows it for the members of your tailnet, which
+  covers a node that logs in with your own auth key.
+
+## Switch the stack over
+
+<Steps>
+
+1. Create an auth key on the admin console's **Settings → Keys** page. The node uses it once, the first time it
+   starts, and keeps its login in the `tailscale-state` volume after that, so a single-use key is enough.
+
+2. Add the override and the key to `.env`, and set `PUBLIC_HOST` to the name the node will have. The node takes
+   its name from the first part of `PUBLIC_HOST`, so here it joins your tailnet as `projammr`:
+
+   ```sh title=".env"
+   COMPOSE_FILE=docker-compose.yml:docker-compose.tailscale.yml
+   PUBLIC_HOST=projammr.example-tailnet.ts.net
+   TS_AUTHKEY=tskey-auth-…
+   ```
+
+   With `COMPOSE_FILE` set, every `docker compose` command in these docs uses both files, so none of them change.
+   If you build from source, list the build override too:
+   `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml:docker-compose.tailscale.yml`.
+
+3. If the Caddy stack is running, take it down first. Its volumes, your database and your uploads among them, stay
+   where they are.
+
+   ```sh
+   docker compose down
+   ```
+
+4. Start the stack. Compose recreates the services with the new `PUBLIC_HOST`.
+
+   ```sh
+   docker compose up -d
+   ```
+
+   The `tailscale` service starts last, once the web app is healthy. `docker compose logs tailscale` shows it
+   logging in and applying its routes.
+
+5. Open `https://<PUBLIC_HOST>` from any device on your tailnet, or from anywhere with Funnel on.
+
+</Steps>
+
+<Aside type="caution" title="Create the first account before you open it up">
+  Funnel puts your sign-in page on the internet, and certificates are published in public logs, so your address can
+  be found. On a new instance the first account created becomes its admin. Create yours as soon as the stack is up,
+  or turn Funnel off until you have.
+</Aside>
+
+## Keeping it on your tailnet
+
+To serve your instance to your tailnet only, delete the `AllowFunnel` entry from `tailscale-serve.json`, then
+restart the node:
+
+```sh
+docker compose restart tailscale
+```
+
+Share links then only open for people on your tailnet.
+
+## Things to know
+
+- **The name has to match.** If your tailnet already has a device with the name the node asks for, Tailscale gives
+  the node a different one, like `projammr-1`, and the address it serves no longer matches `PUBLIC_HOST`. Remove or
+  rename the old device in the admin console, then rename the node there to the first part of `PUBLIC_HOST`.
+- **Keep the `tailscale-state` volume.** Without it the node has to log in again with a new auth key, and it joins
+  your tailnet as a new device.
+- **Funnel is slower for big uploads.** Traffic from the internet reaches the node through Tailscale's relays, which
+  limit its bandwidth. Devices on your tailnet reach the node over the tailnet instead.
+- **The scanner connects the same way a browser does.** Point it at `https://<PUBLIC_HOST>`. It needs nothing
+  installed, since the certificate is publicly trusted.
+- **HSTS is on.** The override sets `TLS_MODE=acme`, so the API tells browsers to use only HTTPS for this address.
+  That is safe here because the certificate is one every browser trusts.

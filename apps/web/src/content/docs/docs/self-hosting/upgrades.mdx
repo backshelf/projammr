@@ -1,0 +1,83 @@
+---
+title: Upgrades and migrations
+description: Pull a new version of the images, restart the stack, and what happens to the database when the API starts.
+sidebar:
+  order: 70
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+An upgrade pulls the new images and restarts the stack. The API brings the database up to date by itself when it
+starts, and dumps it first.
+
+<Steps>
+
+1. Take a backup. The API's own pre-migrate dump covers only the database; a manual backup covers the media too.
+
+   ```sh
+   docker compose --profile backup run --rm backup
+   ```
+
+2. Choose the version. Set `PROJAMMR_VERSION` in `.env` to the release you want, for example
+   `PROJAMMR_VERSION=1.3.0`; unset, it means `latest`. The compose files and `.env.example` come from your clone, so
+   run `git pull` when a release changes them.
+
+3. Pull the new images and restart the services that changed.
+
+   ```sh
+   docker compose pull
+   docker compose up -d
+   ```
+
+   Built from source? `git pull` brings the new code, and `docker compose -f docker-compose.yml -f
+   docker-compose.build.yml up -d --build` rebuilds and restarts.
+
+4. Watch the API migrate the database and start.
+
+   ```sh
+   docker compose logs -f api
+   ```
+
+</Steps>
+
+## How migrations run
+
+The API container applies migrations before the API listens: its log shows `[api] applying migrations`, then
+`[api] starting on :8080`. The migrator:
+
+1. takes a PostgreSQL advisory lock, so two API containers starting at once cannot both migrate;
+2. compares the migrations built into the image with the ones the database has recorded;
+3. if any are pending, takes the [pre-migrate dump](/docs/self-hosting/backups/#the-pre-migrate-dump), unless
+   `MIGRATE_BACKUP=0`;
+4. applies the pending migrations in order.
+
+With nothing pending, it takes no dump and the API starts straight away.
+
+If the dump or a migration fails, the API exits without listening, and Docker restarts it, which tries the migration
+again. `docker compose logs api` shows why it failed.
+
+## Rolling back
+
+The pre-migrate dump is the database as it was before the upgrade touched it. To go back to the old version:
+
+<Steps>
+
+1. Restore the pre-migrate dump from this upgrade, following
+   [Restore the database](/docs/self-hosting/backups/#restore-the-database) up to, but not including, starting
+   everything again.
+
+2. Set `PROJAMMR_VERSION` in `.env` back to the release you ran before. Built from source, check out that version
+   instead; straight after a `git pull`, git keeps it as `ORIG_HEAD` (`git checkout ORIG_HEAD`).
+
+3. Pull and start that version.
+
+   ```sh
+   docker compose pull
+   docker compose up -d
+   ```
+
+   Built from source, add the override and `--build`, as in the upgrade above.
+
+</Steps>
+
+Starting the new version on the restored dump instead would apply the same migrations again.

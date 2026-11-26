@@ -1,0 +1,16 @@
+# Builds the api and web images from this checkout in place of pulling the
+# published ones. Layered over docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# or by naming both in .env (`COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml`).
+services:
+  api:
+    build:
+      context: .
+      target: api
+
+  web:
+    build:
+      context: .
+      target: web

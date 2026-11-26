@@ -1,0 +1,25 @@
+{
+  "name": "@workspace/dsp",
+  "version": "0.9.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "params": "bun scripts/params.ts",
+    "typecheck": "bun check",
+    "lint": "cd rust && cargo clippy --target wasm32-unknown-unknown --all-targets -- -D warnings && cd .. && bun --bun eslint .",
+    "test": "cd rust && cargo test && cd .. && bun test --parallel --timeout=30000",
+    "format": "bun --bun prettier --write \"**/*.ts\" && cd rust && cargo fmt"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "eslint": "^10.14.0",
+    "typescript": "^7.1.0-dev.20261010.1"
+  }
+}

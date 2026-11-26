@@ -1,0 +1,1 @@
+ALTER TABLE "track_audios" ADD COLUMN "analysis_version" integer;

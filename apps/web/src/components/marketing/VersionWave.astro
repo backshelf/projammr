@@ -1,0 +1,90 @@
+---
+/* One version of a track as the app shows it: the waveform, the comment pins
+   above it at their moments, and each pinned comment written out under it.
+   The wave is `@workspace/ui`'s own `Waveform`, rendered as HTML only. Its
+   pins are buttons that open a note on hover, which a static page cannot
+   honour, so the pins here are drawn marks (the shape of `MARK` in
+   `waveform.tsx`) and the comments they point at are printed in full. */
+import { Waveform } from "@workspace/ui/components/waveform";
+import { formatTimecode } from "@workspace/ui/lib/format";
+import { LABEL } from "@workspace/ui/lib/shell";
+import { MAX_BARS } from "@workspace/ui/lib/waveform-bars";
+
+import type { KindlingVersion } from "@/data/kindling";
+
+type Props = {
+  version: KindlingVersion;
+  durationMs: number;
+  /** The ceiling every wave in the comparison is drawn against. */
+  scale: number;
+  /** Another version drawn behind this one, as the A/B comparison does. */
+  compare?: KindlingVersion;
+  /** How far through the playhead is, from 0 to 1. */
+  progress?: number;
+};
+
+const { version, durationMs, scale, compare, progress } = Astro.props;
+
+const at = (ms: number) => `${Math.min(100, (ms / durationMs) * 100)}%`;
+const label = `Waveform of ${version.name}${compare ? `, with ${compare.name} behind it` : ""}`;
+
+/* The app sizes a wave's bar count to its width (`barCountFor`), which a
+   page with no script cannot measure, so the wave is drawn at the two counts
+   a desktop and a phone column hold and the other is hidden. Halving the
+   160 bars' buckets gives the same bars the app draws at 80. */
+const WAVES = [
+  { count: MAX_BARS, className: "phone:hidden" },
+  { count: MAX_BARS / 2, className: "hidden phone:block" },
+];
+---
+
+<div class="flex min-w-0 flex-col gap-2">
+  <p class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <span class="flex items-baseline gap-2 text-small text-ink">
+      <span class:list={[LABEL, "text-ink-soft"]}>v{version.version}</span>
+      <span>{version.name}</span>
+    </span>
+    {compare && (
+      <span class:list={[LABEL, "text-ink-soft"]}>
+        v{compare.version} drawn behind
+      </span>
+    )}
+  </p>
+  <div>
+    <div class="relative h-[1.125rem]" aria-hidden="true">
+      {version.pins.map((pin) => (
+        <span
+          class="absolute top-0 grid size-[1.125rem] -translate-x-1/2 place-items-center after:absolute after:top-3.5 after:left-1/2 after:h-2 after:w-px after:bg-art/55 after:content-['']"
+          style={`left: ${at(pin.positionMs)}`}
+        >
+          <i class="block size-2 rounded-full border-2 border-paper bg-art" />
+        </span>
+      ))}
+    </div>
+    {WAVES.map(({ count, className }) => (
+      <Waveform
+        peaks={version.bars}
+        comparePeaks={compare?.bars}
+        scale={scale}
+        progress={progress}
+        count={count}
+        size="lg"
+        label={label}
+        className={className}
+      />
+    ))}
+  </div>
+  <ol class="flex flex-col">
+    {version.pins.map((pin) => (
+      <li class="grid grid-cols-[3rem_minmax(0,1fr)] gap-x-3 border-t border-rule py-2.5">
+        <span class="text-micro text-ink-soft tabular-nums">
+          {formatTimecode(pin.positionMs)}
+        </span>
+        <span class="flex flex-col gap-0.5">
+          <span class="text-small text-ink">{pin.author}</span>
+          <span class="text-small text-pretty text-ink-soft">{pin.text}</span>
+        </span>
+      </li>
+    ))}
+  </ol>
+</div>

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "lint": {
+      "env": [
+        "CI",
+        "E2E_BASE_URL",
+        "E2E_EXPECT_VERSION",
+        "E2E_CA_FILE",
+        "E2E_HTTP_PORT",
+        "E2E_HTTPS_PORT",
+        "PROJAMMR_VERSION"
+      ]
+    }
+  }
+}

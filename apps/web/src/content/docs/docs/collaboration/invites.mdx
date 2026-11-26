@@ -1,0 +1,80 @@
+---
+title: Invites
+description: Invite someone into a project by email, pass on the invite link yourself, and accept an invite you were sent.
+sidebar:
+  order: 62
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+An invite brings someone into a project with the role you choose. Admins and the owner can send one; the person
+accepts it with an existing Projammr account or a new one.
+
+## Invite someone
+
+<Steps>
+
+1. Open **Settings** from the sidebar and choose **Project**, then **Members**.
+
+2. Under **Invite by email**, enter their email address and choose their role. The form starts on **editor**;
+   choose **viewer** for someone who should only listen and read, or **admin** for someone who should manage
+   the members with you.
+
+3. Choose **Invite**.
+
+</Steps>
+
+You can invite someone with a role up to your own, and not someone who is already a member.
+
+The invite appears under **Pending invites** with its role, who sent it and when it expires. It lasts **seven
+days**.
+
+### Getting the invite to them
+
+If your instance is set up to send email, Projammr emails the invite to the address you entered. If it is not,
+or the email does not arrive, choose **Copy link** on the pending invite and send the link yourself.
+
+<Aside type="caution">
+  Anyone who opens an invite link and accepts it joins the project as whichever
+  account they are signed in with, so send the link only to the person it is
+  for.
+</Aside>
+
+### Cancel an invite
+
+Choose the bin icon on a pending invite to revoke it. The link stops working at once, and anyone who opens it is
+told it is not valid.
+
+## Accept an invite
+
+Opening an invite link shows a **Join** page for the project, naming who invited you and the role you are
+invited as.
+
+<Steps>
+
+1. If you have no account on the instance, create one on that page; if you have one, sign in.
+
+2. Choose **Accept invite**. You join the project and it opens.
+
+</Steps>
+
+<Screenshot
+  id="invite-accept"
+  alt="The Join page for an invite, naming the project, who sent the invite and the role, with the Accept invite button"
+/>
+
+<Aside type="note">
+  If the instance's registration is closed, you can still create an account from
+  an invite, as long as you use the email address the invite was sent to.
+</Aside>
+
+## When an invite does not work
+
+The invite page tells you what went wrong:
+
+- **"This invite link isn't valid"**: it was revoked, or the link was cut short when it was copied.
+- **"This invite has already been used"**: someone accepted it already.
+- **"This invite has expired"**: it is more than seven days old.
+
+In each case, ask whoever invited you to send a new one.

@@ -1,0 +1,144 @@
+---
+title: Statuses, labels and priority
+description: Track where every song stands with statuses, tag work with labels, and flag what matters with priority.
+sidebar:
+  order: 20
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Three things describe where a piece of work stands. A **status** says how far along it is, a **label** groups it
+with other work, and a **priority** says how much it matters right now.
+
+|          | Tracks | Collections | Sessions |
+| -------- | ------ | ----------- | -------- |
+| Status   | Yes    | Yes         | No       |
+| Labels   | Yes    | Yes         | Yes      |
+| Priority | Yes    | Yes         | Yes      |
+
+Projects have none of the three. Changing any of them needs an editor, admin or owner.
+
+## Statuses
+
+A status has a name, a colour and a **completion** percentage from 0 to 100: how complete a track is when it has
+that status. The percentage fills the status's progress ring and adds up into a collection's progress.
+
+Every project starts with three statuses:
+
+| Status      | Completion |
+| ----------- | ---------- |
+| To Do       | 0%         |
+| In Progress | 50%        |
+| Complete    | 100%       |
+
+These three are shared by every project on the instance, and only an instance admin can change them. Add your own
+beside them for the stages your songs actually go through, such as writing, tracking, mixing and mastering.
+
+Statuses always list in order of completion, lowest first: in the status menu, in the project's settings, and as the
+columns of a [board](/docs/guide/tables/#boards).
+
+### Adding and changing statuses
+
+<Screenshot id="statuses" alt="A project's statuses in settings, each with its colour and completion percentage" />
+
+<Steps>
+
+1. Open **Settings** from the sidebar, then **Project**, then **Statuses**.
+
+2. Select the **+** beside the **Statuses** heading. A one-line form opens at the top of the list.
+
+3. Give it a **Name**, an optional **Description**, a **Colour**, and its **Completion** from 0 to 100.
+
+4. Select **Save**. It is available on every track and collection in the project straight away.
+
+</Steps>
+
+Each status is a row filled with its own colour. To change one, use its pencil button: the row turns into the same
+one-line form, and **Save** keeps your edit while **Cancel** or Escape drops it. Editors and owners see the **+**, the
+pencil and the bin; viewers see the list only.
+
+<Aside type="caution" title="Deleting a status">
+  The bin button deletes one of your project's own statuses immediately, without asking. Every track and
+  collection that had it goes back to "To Do". The three shared statuses cannot be deleted from a project.
+</Aside>
+
+### Setting a status
+
+- On a track or collection page, pick it from the **Status** menu in the rail.
+- In a table, change the **Status** cell, or select several rows and use the bulk bar. See
+  [Selecting and editing in tables](/docs/guide/editing-in-tables/).
+- On a track page, open the [command palette](/docs/guide/search-and-shortcuts/) and type `status` and a space,
+  then the status's name.
+
+A new track needs a status when you create it; a new collection does not.
+
+### How far along a collection is
+
+A collection's rail has a **Complete** block with two readings:
+
+- **"6 of 9"**: how many of its tracks have a status at 100%. Any status at 100% counts, whatever it is called.
+- **The bar**: the average completion of all its tracks. Hover it for "Average completion across 9 tracks".
+
+So a collection with one finished track and eight at 50% reads "1 of 9", with the bar a little over half full.
+
+## Labels
+
+Labels are tags you make up as you go: "single", "needs vocals", "sync pitch". They belong to the project, so once
+you have made one it is there to add to any track, collection or session in it.
+
+To add labels, open the **Labels** cell of a row in a table, or the **Labels** block in a track's rail. A small
+menu opens with "Filter or create…" at the top:
+
+- Select an existing label to add it, and select it again to take it off.
+- Type a new name and press <kbd>Enter</kbd>, or select **Create "…"**, to make the label and add it in one go.
+
+To rename, recolour or delete a label, open **Settings → Project → Labels** (for editors and up, the menu has a
+**Manage labels** link to it). Editors and up get a pencil and a bin on each label; everyone else sees the list. Deleting asks first, and the label comes off
+every track, collection and session it is on. A name another label already has is refused.
+
+On the tracks table, **Label** is a filter and a way to group rows. Select several rows and the bulk bar offers
+**Add label…** and **Remove label…**. On a track page, the command palette's `label` and `unlabel` commands do the
+same for that track.
+
+## Priority
+
+Each project has its own priority scale: an ordered list of levels, each with a name and a colour, one of them the
+default that new tracks, collections and sessions start at. A new project's scale starts with five levels, lowest
+first: **None** (the default), **Low**, **Medium**, **High** and **Urgent**, in greys. Every level shows as a quiet
+chip in its own colour, None included.
+
+Set it in the **Priority** column of any table, in the **Priority** control of a track's rail, or for many rows
+at once from the bulk bar. On a track page, the [command palette](/docs/guide/search-and-shortcuts/)'s `priority`
+command sets it by the level's name. Every table can filter and group its rows by priority, and sorting by priority
+follows the scale's order.
+
+Moving a track, collection or session to another project keeps its priority when the destination's scale has a
+level of the same name. When it has none, the row takes the destination's default, and the message after the move
+says which levels changed, such as "High became None on 3 rows".
+
+### Changing the scale
+
+<Steps>
+
+1. Open **Settings** from the sidebar, then **Project**, then **Priorities**.
+
+2. Select the **+** beside the **Priorities** heading to add a level, or a level's pencil to rename or recolour it.
+   A one-line form opens with its **Name** and its **Colour**; **Save** keeps the change, **Cancel** or Escape drops
+   it. A name another level already has is refused.
+
+3. Drag a level's handle, or use its up and down arrows, to move it in the scale. The list waits for one move to
+   finish before it takes another.
+
+4. Select **Make default** on a level to make it the one new tracks, collections and sessions start at. Only one
+   level is the default at a time.
+
+5. Select a level's bin to delete it. A dialog says how many tracks, collections and sessions hold it and asks which
+   level takes them, the default preselected; with only one other level, that level is named instead of picked. The
+   default cannot be deleted while it is the default — its bin is disabled with a hint to make another level the
+   default first.
+
+</Steps>
+
+Editors, admins and owners see the **+**, the pencil, the handles, the arrows and the bins; viewers see the scale
+read only.

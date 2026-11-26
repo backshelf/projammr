@@ -1,0 +1,61 @@
+/* The four faces of the design language, self-hosted. The Next.js client
+   declares the same files through `next/font/local`, which fingerprints and
+   preloads them itself; this file is for the Electron renderer, where reaching
+   for a font over the network is not an option. The `url()`s name the package
+   rather than a relative path because Tailwind flattens this file into
+   whichever stylesheet imports it, which would strand a relative path. */
+
+@font-face {
+  font-family: "Redaction 35";
+  src: url("@workspace/ui/fonts/Redaction35.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Redaction";
+  src: url("@workspace/ui/fonts/Redaction.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Departure Mono";
+  src: url("@workspace/ui/fonts/DepartureMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Spline Sans Mono";
+  src: url("@workspace/ui/fonts/SplineSansMono.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Spline Sans Mono";
+  src: url("@workspace/ui/fonts/SplineSansMono-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Spline Sans Mono";
+  src: url("@workspace/ui/fonts/SplineSansMono-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-heading: "Redaction 35", serif;
+  --font-display-clean: "Redaction", serif;
+  --font-sub: "Departure Mono", monospace;
+  --font-mono: "Spline Sans Mono", ui-monospace, monospace;
+}

@@ -1,0 +1,103 @@
+---
+title: Relations, attachments and links
+description: Connect a remix to its original, keep stems and references with the work they belong to, and link a project to the rest of the web.
+sidebar:
+  order: 21
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+## Relations between tracks
+
+A relation says one track is a version of another: a remix, a live version, an instrumental. It shows on both
+tracks, so either one leads you to the other.
+
+Each project keeps its own list of relation types. A new project starts with **remix**, **remaster**, **rework**,
+**edit**, **live version**, **cover**, **instrumental** and **acoustic**. To add, rename, reorder or delete one, open
+**Settings → Project → Relation types** (editors and up; everyone else sees the list). A type that relations still
+use shows how many, and cannot be deleted until none do.
+
+<Steps>
+
+1. Open the track that is the new version, such as the remix.
+
+2. In its **Relations** section, select **+ Relation**. With no relations yet, the link is in the "Add to this
+   track" line near the foot of the page.
+
+3. In "Add a relation", finish the sentence "This track is a … of…": pick the kind, then search for the other
+   track in the project and pick it.
+
+</Steps>
+
+Each track words the relation from its own side. If the track called "Coast Road (Night Edit)" is an edit of
+"Coast Road":
+
+- "Coast Road (Night Edit)" lists **edit of** Coast Road.
+- "Coast Road" lists **edited by** Coast Road (Night Edit).
+
+The other side's verbs are *remixed by*, *remastered by*, *reworked by*, *edited by*, *performed live by*,
+*covered by*, *instrumental by* and *acoustic by*. A type you add yourself reads **has** from the other side: if
+"Coast Road (Choir)" is a *choir version* of "Coast Road", then "Coast Road" lists **has choir version** Coast Road
+(Choir).
+
+When both tracks of a relation move to another project together, the relation keeps its type there: the new
+project's type of the same name, or, if it has none, a new one added to the end of its list. A relation whose other
+track stays behind is removed.
+
+To remove a relation, use the **×** on its row. It disappears from both tracks. Adding and removing relations needs
+an editor, admin or owner.
+
+On the tracks table, the **Relation** filter shows tracks with any relation, or with one kind.
+
+## Attachments
+
+Attach any file to the project, a collection, a track or a session: stems, a reference mix, lyric sheets, artwork
+proofs, a tracklist. Each page has an **Attachments** section with a drop zone, and each suggests what goes there:
+
+| On a       | The drop zone says                               |
+| ---------- | ------------------------------------------------ |
+| Project    | "Drop files here"                                |
+| Collection | "Drop artwork proofs, masters or a tracklist"    |
+| Track      | "Drop a bounce, stems or a reference"            |
+| Session    | "Drop a bounce or an export from this session"   |
+
+Drop files onto it, or click it to browse. Any kind of file is welcome, up to the size limit your instance sets
+per file: 10 MB unless whoever runs it has changed it. A file named like audio (`.wav`, `.mp3` and so on) has to
+really be audio, or the upload is refused. If your instance sets a [storage limit](/docs/admin/storage/#storage-limits) for the project or for your
+account, uploads stop once it is reached.
+
+Attaching files needs an editor, admin or owner.
+
+### What you can do with an attachment
+
+- **Audio files** play in place: **Play**, **Play next** or **Add to queue**. On a track or a session, **Add as
+  track audio** makes the file one of the track's [versions](/docs/guide/audio-versions/).
+- **Download** gives you the file. For audio, you can have a copy converted to another format instead.
+- **Delete** removes the file at once, without asking.
+
+<Aside type="caution">
+  Deleting an attachment deletes the file itself, and there is no undo. Download anything you might need again
+  first.
+</Aside>
+
+### Every file in the project
+
+**Settings** → **Project** → **Assets** shows the project's storage (how much it uses, and of how much when there is a limit), a
+drop zone that uploads straight to the project, and a table of every file in it: **Name**, **Format**, **Size**,
+**Attached To**, **Uploaded By** and **Uploaded**. A file that is on no page any more shows as "Unattached". The
+table searches, sorts and deletes in bulk like [every other table](/docs/guide/tables/).
+
+## Links
+
+A project can link to anywhere it lives online: a website, a streaming profile, a Bandcamp page. They show in the
+**Links** section of the project page, each with its name and address, and open in a new tab.
+
+Add them when you [create the project](/docs/guide/getting-started/#creating-a-project), or later with the add
+button in the project page's **Links** section: give each a **Name** and a **URL**. Projammr adds `https://` if you
+leave it off.
+
+To change a link, hover its row (or tab to it) and use the pencil to edit its name or URL, then **Save**. The bin
+beside it removes the link straight away, with no confirmation. Only people who can edit the project see these
+buttons; everyone else just sees the list.
+
+Links belong to projects only; collections, tracks and sessions do not have them.

@@ -1,0 +1,10 @@
+.env
+/packages/src/api/v1.d.ts
+
+# Built by `bun run build:worklet` (which `dev` and `build` both run first)
+# from src/lib/dsp/processor.worklet.ts.
+/public/dsp-processor.js
+
+# `next dev` scaffolds this when no CLAUDE.md exists here; CLAUDE.md is
+# committed and already carries the managed nextjs-agent-rules block.
+AGENTS.md

@@ -1,0 +1,172 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "agentGuidance": false,
+  "ui": "tui",
+  "globalEnv": [
+    "API_URL",
+    "BASE_URL",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "CLIENT_URL",
+    "DATABASE_URL",
+    "DB_POOL_MAX",
+    "FFMPEG_PATH",
+    "INTERNAL_API_URL",
+    "JOB_RETRY_DELAY_MS",
+    "LOG_FORMAT",
+    "LOG_LEVEL",
+    "MAIL_FROM",
+    "MAX_UPLOAD_MB",
+    "MCP_DISABLED",
+    "MEDIA_CONCURRENCY",
+    "MIGRATE_BACKUP",
+    "NODE_ENV",
+    "NOTES_MASTER_KEY",
+    "NOTES_MASTER_KEY_PREVIOUS",
+    "NOTES_KEY_VERSION",
+    "PORT",
+    "SMTP_URL",
+    "TLS_MODE",
+    "TRUSTED_ORIGINS",
+    "TRUSTED_PROXY_HOPS",
+    "WEB_PORT"
+  ],
+  "globalPassThroughEnv": [
+    "PATH",
+    "TZ"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build",
+        "server#typegen"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "!.next/dev/**"
+      ]
+    },
+    "web#build": {
+      "dependsOn": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/ui/package.json",
+        "$TURBO_ROOT$/packages/ui/src/**",
+        "!$TURBO_ROOT$/packages/ui/src/**/*.test.{ts,tsx}",
+        "$TURBO_ROOT$/.env.example",
+        "$TURBO_ROOT$/docker-compose.yml",
+        "$TURBO_ROOT$/docker-compose.tailscale.yml"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "web#typegen": {
+      "cache": false,
+      "outputs": [
+        "openapi/**"
+      ]
+    },
+    "@workspace/dsp#build": {
+      "inputs": [
+        "package.json",
+        "scripts/build.ts",
+        "rust/**",
+        "!rust/target/**"
+      ],
+      "outputs": [
+        "pkg/**"
+      ]
+    },
+    "@workspace/dit#build": {
+      "inputs": [
+        "package.json",
+        "scripts/build-wasm.ts",
+        "rust-toolchain.toml",
+        "Cargo.toml",
+        "Cargo.lock",
+        "crates/**",
+        "!target/**"
+      ],
+      "outputs": [
+        "pkg/**"
+      ]
+    },
+    "lint": {
+      "dependsOn": [
+        "^lint"
+      ]
+    },
+    "format": {
+      "dependsOn": [
+        "^format"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": [
+        "^typecheck",
+        "server#typegen"
+      ]
+    },
+    "typegen": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "../../packages/settings/package.json",
+        "../../packages/settings/src/**",
+        "!../../packages/settings/src/**/*.test.ts"
+      ],
+      "outputs": [
+        "../../packages/api/src/v1.d.ts",
+        "../../packages/api/src/enums.ts"
+      ]
+    },
+    "test": {
+      "cache": false,
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "web#test": {
+      "cache": false,
+      "dependsOn": [
+        "^build",
+        "build"
+      ]
+    },
+    "@workspace/dsp#test": {
+      "cache": false,
+      "dependsOn": [
+        "build"
+      ]
+    },
+    "@workspace/dit#test": {
+      "cache": false,
+      "dependsOn": [
+        "build"
+      ]
+    },
+    "@workspace/demo#build": {
+      "dependsOn": []
+    },
+    "@workspace/demo#test": {
+      "cache": false,
+      "dependsOn": []
+    },
+    "@workspace/demo#dev": {
+      "cache": false,
+      "dependsOn": []
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": [
+        "^build"
+      ]
+    }
+  }
+}

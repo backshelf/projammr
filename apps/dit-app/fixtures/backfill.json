@@ -1,0 +1,233 @@
+{
+  "step": "bring-in",
+  "host": "projammr.example",
+  "roots": ["/Users/me/Music/Ableton"],
+  "searching": false,
+  "folders": [
+    {
+      "path": "/Users/me/Music/Ableton/science Project",
+      "name": "science Project",
+      "title": "science",
+      "sets": 3,
+      "bytes": 2469606195,
+      "newest": 1710201600000,
+      "already": false,
+      "state": { "state": "committing", "done": 1, "of": 3 },
+      "doubt": { "unreadable": 1, "unrecorded": 0, "syncedBy": "iCloud Drive" }
+    },
+    {
+      "path": "/Users/me/Music/Ableton/halogen Project",
+      "name": "halogen Project",
+      "title": "halogen",
+      "sets": 1,
+      "bytes": 83886080,
+      "newest": 1700000000000,
+      "already": false,
+      "state": { "state": "uploading", "sent": 3328599654, "of": 9019431321 },
+      "doubt": null
+    },
+    {
+      "path": "/Users/me/Music/Ableton/canopy Project",
+      "name": "canopy Project",
+      "title": "canopy",
+      "sets": 12,
+      "bytes": 1073741824,
+      "newest": 1690000000000,
+      "already": false,
+      "state": { "state": "waiting-for-hub" },
+      "doubt": null
+    },
+    {
+      "path": "/Users/me/Music/Ableton/orbit Project",
+      "name": "orbit Project",
+      "title": "orbit",
+      "sets": 5,
+      "bytes": 524288000,
+      "newest": 1680000000000,
+      "already": false,
+      "state": { "state": "done" },
+      "doubt": null
+    },
+    {
+      "path": "/Users/me/Music/Ableton/drift Project",
+      "name": "drift Project",
+      "title": "drift",
+      "sets": 2,
+      "bytes": 1048576,
+      "newest": 1670000000000,
+      "already": false,
+      "state": {
+        "state": "failed",
+        "reason": "projammr.example refused the push: Storage is full."
+      },
+      "doubt": { "unreadable": 0, "unrecorded": 1, "syncedBy": null }
+    },
+    {
+      "path": "/Users/me/Music/Ableton/lumen Project",
+      "name": "lumen Project",
+      "title": "lumen",
+      "sets": 4,
+      "bytes": 4194304,
+      "newest": 1660000000000,
+      "already": false,
+      "state": { "state": "paused" },
+      "doubt": null
+    },
+    {
+      "path": "/Users/me/Music/Ableton/vesper Project",
+      "name": "vesper Project",
+      "title": "vesper",
+      "sets": 2,
+      "bytes": 2097152,
+      "newest": null,
+      "already": false,
+      "state": { "state": "waiting" },
+      "doubt": null
+    },
+    {
+      "path": "/Users/me/Music/Ableton/tide Project",
+      "name": "tide Project",
+      "title": "tide",
+      "sets": 8,
+      "bytes": 8388608,
+      "newest": 1650000000000,
+      "already": false,
+      "state": { "state": "reading", "read": 3, "of": 8 },
+      "doubt": null
+    },
+    {
+      "path": "/Users/me/Music/Ableton/ember Project",
+      "name": "ember Project",
+      "title": "ember",
+      "sets": 6,
+      "bytes": 6291456,
+      "newest": 1640000000000,
+      "already": false,
+      "state": { "state": "checked" },
+      "doubt": null
+    },
+    {
+      "path": "/Users/me/Music/Ableton/old Project",
+      "name": "old Project",
+      "title": "old",
+      "sets": 9,
+      "bytes": 9437184,
+      "newest": 1630000000000,
+      "already": true,
+      "state": { "state": "idle" },
+      "doubt": null
+    }
+  ],
+  "chosen": {
+    "folder": "/Users/me/Music/Ableton/science Project",
+    "name": "science Project",
+    "project": 4,
+    "tracks": [
+      { "id": 11, "title": "Science" },
+      { "id": 12, "title": "Halogen" }
+    ],
+    "sessions": [
+      {
+        "id": 812,
+        "name": "science123",
+        "trackId": 11,
+        "trackTitle": "Science",
+        "takenBy": "/Users/me/Music/Ableton/science Project/science123.als"
+      },
+      {
+        "id": 813,
+        "name": "science old mix",
+        "trackId": null,
+        "trackTitle": null,
+        "takenBy": null
+      }
+    ],
+    "newTrack": "science",
+    "sets": [
+      {
+        "file": "/Users/me/Music/Ableton/science Project/science123.als",
+        "name": "science123",
+        "setId": "9f3a0c1d",
+        "copies": 4,
+        "saves": 5,
+        "doubt": null,
+        "target": { "kind": "session", "id": 812 },
+        "matched": {
+          "sessionId": 812,
+          "name": "science123",
+          "trackId": 11,
+          "trackTitle": "Science"
+        }
+      },
+      {
+        "file": "/Users/me/Music/Ableton/science Project/science v2.als",
+        "name": "science v2",
+        "setId": "b21e77aa",
+        "copies": 9,
+        "saves": 10,
+        "doubt": { "kind": "unreadable", "message": null },
+        "target": { "kind": "track", "id": 11 },
+        "matched": null
+      },
+      {
+        "file": "/Users/me/Music/Ableton/science Project/science alt.als",
+        "name": "science alt",
+        "setId": null,
+        "copies": 2,
+        "saves": null,
+        "doubt": {
+          "kind": "unrecorded",
+          "message": "science alt.als changed while it was read."
+        },
+        "target": null,
+        "matched": null
+      },
+      {
+        "file": "/Users/me/Music/Ableton/science Project/science new.als",
+        "name": "science new",
+        "setId": "c0ffee11",
+        "copies": 0,
+        "saves": 1,
+        "doubt": null,
+        "target": { "kind": "new-track", "name": "science" },
+        "matched": null
+      }
+    ]
+  },
+  "projects": [
+    { "id": 4, "name": "Alex" },
+    { "id": 9, "name": "Collabs" }
+  ],
+  "storage": { "bytes": 9019431321, "remaining": 33285996544 },
+  "hubError": "Can't reach projammr.example to check your sessions.",
+  "canStart": false,
+  "run": {
+    "running": true,
+    "paused": false,
+    "folders": [
+      {
+        "path": "/Users/me/Music/Ableton/science Project",
+        "state": { "state": "committing", "done": 1, "of": 3 },
+        "totals": null
+      },
+      {
+        "path": "/Users/me/Music/Ableton/orbit Project",
+        "state": { "state": "done" },
+        "totals": {
+          "firstSave": 1552348800000,
+          "saves": 37,
+          "sets": 5,
+          "bytes": 2469606195
+        }
+      }
+    ]
+  },
+  "summary": {
+    "firstSave": 1552348800000,
+    "saves": 37,
+    "sets": 5,
+    "projects": 1
+  },
+  "sessionsPath": "/project/4/session/all?inDit=false",
+  "error": "A backfill is running on this machine already. Wait for it, or pause it first."
+}

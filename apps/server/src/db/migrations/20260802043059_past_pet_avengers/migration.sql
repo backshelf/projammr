@@ -1,0 +1,1 @@
+ALTER TABLE "statuses" RENAME COLUMN "status_percentage" TO "percentage";

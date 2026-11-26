@@ -1,0 +1,108 @@
+---
+title: How the catalogue works
+description: Projects, collections, tracks and sessions, what each one holds, and how their pages are laid out.
+sidebar:
+  order: 10
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Projammr organises your music in four layers: **projects** hold **collections** and **tracks**, and tracks have
+**sessions** behind them. This page explains what each one is and how they fit together, so you can decide where
+things go.
+
+## Projects
+
+A project is an artist or a band: the home for its collections, tracks and sessions. It has a name, a description
+and links to anywhere the project lives online. It is also the unit you share with people: members join a
+project, and their role in it decides what they can change.
+
+Everything else lives inside exactly one project.
+
+## Collections
+
+A collection is anything a set of tracks ships as: an album, an EP, a single, or a pile of loose ends you want to
+keep together. A collection has a title, notes, a status, a release date and a UPC. Projammr does not ask whether
+it is an album or an EP; call it what you like.
+
+A collection keeps its tracks in a **running order**. The number is part of the collection, not the track, so the
+same song can be track 2 on the EP and track 7 on the album.
+
+## Tracks
+
+A track is a song, with its own sessions, audio and notes. It carries a title, its artists, a status, a priority,
+an explicit flag, its ISRC and ISWC, notes, labels, and its lyrics.
+
+- **A track can be on several collections at once**, like a single that also appears on the album.
+- **A track does not need a collection.** Make one straight in the project for a song that is not heading
+  anywhere yet.
+
+A track's audio lives in its **versions**: every bounce you upload is one, and one is the primary. See
+[Versions and uploads](/docs/guide/audio-versions/).
+
+## Sessions
+
+A session is the DAW project file behind a track: an Ableton set, for instance. When the scanner reads a set on
+your computer, its session in Projammr carries what the set says about itself: tempo, key, time signature, the
+tracks and devices inside it, its samples, and a history of every save. See [Sessions](/docs/guide/sessions/).
+
+- **A session does not need a track.** The scanner can find a set before you have decided which song it
+  belongs to, and you can assign it later.
+- **One session per track can be its main session**: the one that carries the track's work. A track shows the
+  key and BPM its main session reports.
+
+You can also add a session by hand, with just a name, notes and the DAW it lives in. A session made that way has
+no file behind it, so it never shows tempo, structure or history.
+
+## How the pages are laid out
+
+Every project, collection, track and session has its own page, and all four are built the same way.
+
+<Screenshot
+  id="track"
+  alt="A track page: the cover-lit masthead with the title and player, the details rail on the right, and the page's sections below"
+/>
+
+- **The masthead** across the top shows where you are (the crumbs back up to the project), what kind of page it
+  is, the title, and a line of the key facts. It is lit by the page's [artwork](/docs/guide/artwork/). On a
+  track, the masthead also holds the player and the version picker, and on a collection a play button for the
+  whole running order.
+- **The body** runs down the page in sections: notes and artwork first, then the page's own main table or
+  content, then relations, attachments, comments and activity.
+- **The rail** on the right holds the details: status, progress, dates, and the properties you can change in
+  place. On a narrow window it moves between the masthead and the body.
+
+When you open a track from a collection, the masthead reads "Track 3 of 9" or similar, with arrows to step to the
+previous and next track in that collection's running order.
+
+### What each page shows
+
+| Page       | Main sections                                                                                                                      | In the rail                                                                                                               |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Project    | Description, artwork, collections, plugins, the work heatmap, links, attachments, comments, activity                             | Collection count, links, members, created and updated dates                                                               |
+| Collection | Notes, artwork, tracks in running order, attachments, comments, activity                                                          | Status and progress, loudness, spectrum, tempo and keys across the tracks, release date, UPC, sharing, runtime            |
+| Track      | Notes, artwork, lyrics, sessions, relations, attachments, comments, activity                                                      | Key and BPM, loudness and spectrum, the "Worked on" heatmap, sharing, ISRC and ISWC, status, priority, explicit, collections, labels |
+| Session    | Notes, structure, attachments, samples, history, comments                                                                          | Local file path and dates, the main-session star, machine, and what the DAW reported: tempo, time signature, key, tracks, scenes, version |
+
+<Screenshot
+  id="collection"
+  alt="A collection page: the running order in the body, and completion, loudness, spectrum and tempo summaries in the rail"
+/>
+
+<Aside>
+  A section with nothing in it yet folds away. Near the foot of the page, a line such as "Add to this track"
+  collects them as links like **+ Notes** and **+ Relation**, so you can start any of them.
+</Aside>
+
+## Who can change what
+
+[Your role in a project](/docs/collaboration/members-and-roles/#the-roles) decides what you can do in it. Viewers can open and play everything. Editors, admins and
+owners can also create, change and delete collections, tracks and sessions, upload artwork and files, and manage
+statuses and labels. Admins manage members; only the owner can delete the project.
+
+## Where to next
+
+- [Creating, editing and deleting](/docs/guide/creating-and-editing/) walks through each change.
+- [Artwork and colour](/docs/guide/artwork/) explains how a page takes its colour from its cover.
+- [Tables and views](/docs/guide/tables/) covers the lists of every collection, track and session.

@@ -1,0 +1,103 @@
+---
+title: HTTPS and your devices
+description: Why your instance is HTTPS-only, and how to trust its local certificate authority on macOS, Windows, iOS, Android and Linux.
+sidebar:
+  order: 20
+---
+
+import { Aside, TabItem, Tabs } from "@astrojs/starlight/components";
+
+Your instance is served over HTTPS only, under a certificate the proxy signs with its own local certificate authority
+(CA). Each device that opens it, including the computer that runs the scanner, trusts that CA once. After that, your
+instance behaves like any other secure site.
+
+<Aside>
+  With a Tailscale account, you can skip the CA altogether: [served through
+  Tailscale](/docs/self-hosting/tailscale/), your instance has a certificate every device already trusts.
+</Aside>
+
+## Why HTTPS, even at home
+
+- Browsers keep some features for secure contexts: pages served over HTTPS, or from `localhost`. Projammr's live
+  loudness meter runs in an AudioWorklet, and copying to the clipboard needs a secure context too. Opened over plain
+  HTTP from another device, both are switched off.
+- The session cookie carries the `__Secure-` prefix, which browsers only accept over HTTPS.
+
+So every address the stack derives from `PUBLIC_HOST` starts with `https://`. On plain HTTP, port 80, the proxy
+serves the CA's certificate and redirects everything else to HTTPS.
+
+## Get the CA certificate
+
+Caddy creates the CA the first time the proxy starts and keeps it in the `caddy-data` volume. Its root certificate
+is served over plain HTTP, so a device that does not trust it yet can still fetch it:
+
+```text
+http://<PUBLIC_HOST>/ca.crt
+```
+
+It downloads as `projammr-ca.crt`. On the machine running Docker, you can also copy it out of the proxy container:
+
+```sh
+docker compose cp proxy:/data/caddy/pki/authorities/local/root.crt projammr-ca.crt
+```
+
+<Aside type="caution">
+  Keep the `caddy-data` volume. If it is deleted, Caddy creates a new CA the next time it starts, and every device
+  has to trust the new one.
+</Aside>
+
+## Trust it on each device
+
+<Tabs syncKey="platform">
+  <TabItem label="macOS">
+    Open the downloaded file, and Keychain Access adds it to the login keychain. Double-click the entry whose name
+    starts with **Caddy Local Authority**, expand **Trust**, and set it to **Always Trust**.
+  </TabItem>
+  <TabItem label="Windows">
+    Open the downloaded file, click **Install Certificate**, and place it in **Trusted Root Certification
+    Authorities**.
+  </TabItem>
+  <TabItem label="iPhone and iPad">
+    Open `http://<PUBLIC_HOST>/ca.crt` in Safari and allow the profile to download. Go to **Settings → Profile
+    Downloaded** and install it, then turn on full trust for it under **Settings → General → About → Certificate
+    Trust Settings**.
+  </TabItem>
+  <TabItem label="Android">
+    Open the downloaded file, or go to **Settings → Security → Encryption & credentials → Install a certificate → CA
+    certificate** and pick it.
+  </TabItem>
+  <TabItem label="Linux">
+    On Fedora and other distributions that use p11-kit:
+
+    ```sh
+    sudo trust anchor --store projammr-ca.crt
+    ```
+
+    On Debian and Ubuntu, copy it into the system store and update it:
+
+    ```sh
+    sudo cp projammr-ca.crt /usr/local/share/ca-certificates/
+    sudo update-ca-certificates
+    ```
+
+    Chrome on Linux reads its own store, so add it there as well:
+
+    ```sh
+    certutil -d sql:$HOME/.pki/nssdb -A -t C,, -n projammr -i projammr-ca.crt
+    ```
+
+  </TabItem>
+</Tabs>
+
+## The scanner
+
+The scanner trusts what Chrome on the same computer would trust, so the steps above for that platform cover it; on
+Linux, that includes the `certutil` step. If it meets a certificate the computer does not trust, it [offers to pin
+that exact certificate](/dit/) instead. A pin trusts only that one certificate, and Caddy replaces its certificates as they
+near expiry, so trusting the CA is the arrangement that lasts.
+
+## The home-screen icon on iPhone and iPad
+
+Added to the home screen of an iPhone or iPad, your instance shows iOS's plain monogram tile instead of Projammr's
+icon. iOS fetches home-screen icons outside Safari and does not honour a CA you installed yourself, so it cannot load
+the icon from your instance. The app itself works as normal; only the icon is affected.

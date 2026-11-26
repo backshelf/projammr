@@ -1,0 +1,347 @@
+/* --- Notes: BlockNote output as a document -------------------------------
+   `.doc` is the wrapper every surface puts around the editor — the page's
+   `Description` and the form's blocknote field — so this block is the only
+   place the editor's own tree is styled; it renders elements no component here
+   writes a className onto. A page adds `.doc-surface` for the reading box it
+   sits in; a form field already has one.
+
+   BlockNote ships a stylesheet that hard-codes the face, size, leading and
+   colour on `.bn-default-styles` and `.bn-editor`, and sizes the checklist
+   control from `.bn-block-content[data-content-type=…]`. Those selectors
+   outweigh anything led by `.doc`, so the `!important` declarations below are
+   what it takes to reach the elements at all; everything the wrapper can
+   simply pass down is inherited rather than restated. */
+
+.doc {
+  color: var(--ink-soft);
+  line-height: 1.75;
+}
+
+/* The page's own reading surface: capped to the measure, bled into the gutter
+   so the type lines up with the prose around it, and lit on hover to read as
+   editable. */
+.doc-surface {
+  max-width: var(--measure);
+  border-radius: var(--radius-md);
+  margin-inline: -0.625rem;
+  padding: 0.375rem 0.625rem;
+  transition: background 0.12s ease;
+}
+
+.doc-surface:hover {
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+}
+
+/* The editor root sits transparent on the wrapper so the hover surface reads
+   through it, and takes its colour and leading from the wrapper. */
+.doc :is(.bn-editor, .bn-root.bn-shadcn > [contenteditable]) {
+  padding: 0 !important;
+  background-color: transparent !important;
+  font-size: var(--t-body) !important;
+  line-height: inherit !important;
+  color: inherit !important;
+}
+
+.doc .bn-root.bn-shadcn {
+  display: grid !important;
+  padding: 0 !important;
+}
+
+/* Safari zooms the page when a field it focuses sets text under 16px, and the
+   editor is a field the whole width of a phone. Below the phone tier the
+   document takes at least the browser default instead (a larger text size
+   keeps its own), and the compact body size returns above it. Headings and
+   lyric section labels are caret positions too, so the floor has to reach the
+   sizes set on them further down. */
+@media (width < 768px) {
+  .doc :is(.bn-editor, .bn-root.bn-shadcn > [contenteditable]),
+  .doc :is(h1, h2, h3, h4, h5, h6),
+  .doc :is([data-content-type="heading"], [data-content-type="section"]) {
+    font-size: max(1rem, var(--t-body)) !important;
+  }
+}
+
+.doc :is(.bn-default-styles, .bn-default-styles :is(p, li)) {
+  font-family: var(--font-body) !important;
+}
+
+/* Editor typography: `reading` (`data-editor` on <html>) sets notes and
+   lyrics a step up the scale on longer leading, for writing at length. The
+   measure box keeps its width, so a line holds fewer, larger characters. It
+   never drops under the 16px Safari's focus zoom starts below. */
+:root[data-editor="reading"] .doc {
+  line-height: 1.85;
+}
+
+:root[data-editor="reading"]
+  .doc
+  :is(.bn-editor, .bn-root.bn-shadcn > [contenteditable]) {
+  font-size: max(1rem, var(--t-lead)) !important;
+}
+
+.doc :is(h1, h2, h3, h4, h5, h6),
+.doc [data-content-type="heading"],
+.doc [data-content-type="section"] {
+  font-family: var(--font-sub) !important;
+  font-size: var(--t-small) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.doc :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 1.5em;
+}
+
+.doc blockquote {
+  border-left: 2px solid var(--art);
+  padding-left: 0.875rem;
+  margin-left: 0;
+  color: var(--ink-soft);
+}
+
+.doc code {
+  font-family: var(--font-mono) !important;
+  font-size: 0.875em;
+  background: var(--paper-sunk);
+  padding: 0.0625rem 0.3125rem;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+}
+
+.doc li::marker {
+  color: var(--ink-faint);
+}
+
+/* Checklist boxes: a small square outline that fills with the artwork accent
+   when ticked. The default control is replaced outright so the box reads at
+   the same weight as the surrounding hairlines. */
+.doc
+  .bn-block-content[data-content-type="checkListItem"]
+  > div
+  > input[type="checkbox"] {
+  appearance: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  align-self: center;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.doc
+  .bn-block-content[data-content-type="checkListItem"]
+  > div
+  > input[type="checkbox"]:checked {
+  background: var(--art);
+  border-color: var(--art);
+}
+
+/* The tick is drawn rather than glyph-set so it stays crisp at 14px. */
+.doc
+  .bn-block-content[data-content-type="checkListItem"]
+  > div
+  > input[type="checkbox"]:checked::after {
+  content: "";
+  width: 0.5rem;
+  height: 0.25rem;
+  border-left: 1.5px solid var(--paper);
+  border-bottom: 1.5px solid var(--paper);
+  transform: rotate(-45deg) translate(0.5px, -1px);
+}
+
+.doc
+  .bn-block-content[data-content-type="checkListItem"]
+  > div
+  > input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--art);
+  outline-offset: 2px;
+}
+
+/* --- Lyrics ---------------------------------------------------------------
+   The syllable count and rhyme letter sit at each line's right edge, painted
+   from decoration attributes so the editor never re-renders for them.
+
+   They are two fixed columns rather than one string, and both hang off the
+   line itself rather than off the attributes they print: `attr()` on a
+   missing attribute is the empty string, so a line with no rhyme letter — or
+   no count yet, while the dictionary is still answering — holds its columns
+   open and every figure on the page stacks in the same place. Reserving them
+   only when the count is there would hand the width back to the text on the
+   keystroke that made the word unknown, and the line would reflow into the
+   gutter and back out again. The widths carry the gaps — `margin-left: auto`
+   cannot also hold a minimum one open. */
+
+.doc[data-variant="lyrics"]
+  .bn-block-content[data-content-type="paragraph"]::before,
+.doc[data-variant="lyrics"]
+  .bn-block-content[data-content-type="paragraph"]::after {
+  align-self: baseline;
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  text-align: right;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.doc[data-variant="lyrics"]
+  .bn-block-content[data-content-type="paragraph"]::before {
+  content: attr(data-syllables);
+  order: 1;
+  margin-left: auto;
+  width: 5ch;
+}
+
+.doc[data-variant="lyrics"]
+  .bn-block-content[data-content-type="paragraph"]::after {
+  content: attr(data-rhyme);
+  order: 2;
+  width: 2.5ch;
+}
+
+.doc[data-variant="lyrics"]
+  .bn-block-content[data-syllables-estimated="true"]::before {
+  content: "~"attr(data-syllables);
+}
+
+/* BlockNote prints its placeholder into the same `::after` the rhyme letter
+   owns, from a stylesheet it injects into the head when the editor mounts —
+   after this file, so the rhyme column has to outrank it rather than sit
+   later in the cascade. A blank line between verses is part of the shape of a
+   lyric, not a gap waiting to be filled, so it gets no invite. */
+.doc[data-variant="lyrics"]
+  .bn-block-content[data-content-type="paragraph"]:not(
+    [data-is-only-empty-block]
+  )::after {
+  content: attr(data-rhyme) !important;
+}
+
+/* `editor.syllableCounts` / `editor.rhymeLetters` off: the gutter column
+   still reserves its width (the rules above), but prints nothing. */
+html[data-lyrics-syllables="off"]
+  .doc[data-variant="lyrics"]
+  .bn-block-content[data-content-type="paragraph"]::before {
+  content: "";
+}
+
+html[data-lyrics-rhymes="off"]
+  .doc[data-variant="lyrics"]
+  .bn-block-content[data-content-type="paragraph"]:not(
+    [data-is-only-empty-block]
+  )::after {
+  content: none !important;
+}
+
+/* A document that is nothing but one empty line is the one place the invite
+   belongs, and that line has no count, no letter and no text to hold a column
+   open for — so it hands the gutter back and the placeholder reads as prose,
+   where the typing will start. */
+.doc[data-variant="lyrics"]
+  .bn-block-content[data-content-type="paragraph"][data-is-only-empty-block]::after {
+  order: 0;
+  width: auto;
+  font-size: inherit;
+  letter-spacing: normal;
+  text-align: left;
+}
+
+/* Rhyme groups rotate the artwork hue; the chroma floor keeps groups
+   distinguishable on a page with no artwork, where --art is grey. The step is
+   small enough that the first few groups stay analogous to the artwork
+   instead of jumping across the wheel.
+
+   The gutter is chrome rather than prose, so the reading measure belongs to
+   the lyric text inside it and the editor itself fills its panel. */
+.doc-surface[data-variant="lyrics"] {
+  max-width: none;
+}
+
+.doc[data-variant="lyrics"] {
+  --rhyme-l: 0.55;
+  --rhyme-step: 40;
+}
+
+.dark .doc[data-variant="lyrics"] {
+  --rhyme-l: 0.76;
+}
+
+/* Relative colour substitutes `h` as a plain number of degrees, so the
+   rotation is a number too — adding an angle to it voids the whole colour and
+   the rhymes fall back to the ink. */
+.doc[data-variant="lyrics"] [style*="--rhyme-index"] {
+  --rhyme: oklch(
+    from var(--art) var(--rhyme-l) max(c, 0.14)
+      calc(h + var(--rhyme-index) * var(--rhyme-step))
+  );
+}
+
+.doc[data-variant="lyrics"] .bn-block-content[data-rhyme]::after {
+  color: var(--rhyme);
+}
+
+.doc[data-variant="lyrics"] .lyric-rhyme {
+  text-decoration: underline;
+  text-decoration-color: var(--rhyme);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+
+/* A slant rhyme is a weaker relation than a perfect one, and reads as a
+   weaker line. */
+.doc[data-variant="lyrics"] .lyric-rhyme-slant {
+  text-decoration-style: dashed;
+}
+
+/* Section labels take the heading treatment above and carry their stats. The
+   space belongs between a section and the lines before it, so the first
+   section in the document does without it. */
+.doc[data-variant="lyrics"] .bn-block-content[data-content-type="section"] {
+  margin-top: 1.5em;
+}
+
+.doc[data-variant="lyrics"]
+  .bn-block-outer:first-child
+  .bn-block-content[data-content-type="section"] {
+  margin-top: 0;
+}
+
+/* The section is a React block spec, so ProseMirror hangs its node decoration
+   on the renderer's wrapper rather than on `.bn-block-content` inside it —
+   the stats are read off whichever element carries the attribute, and the
+   wrapper stacks its children in a column, so the stats are lifted out of the
+   flow and pinned to the label's own line. */
+.doc[data-variant="lyrics"] [data-section-lines] {
+  position: relative;
+}
+
+.doc[data-variant="lyrics"] [data-section-lines]::after {
+  content: attr(data-section-lines) " lines · " attr(data-section-average)
+    " avg";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.doc[data-variant="lyrics"]
+  [data-section-lines]:not([data-section-average])::after {
+  content: attr(data-section-lines) " lines";
+}

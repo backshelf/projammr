@@ -1,0 +1,22 @@
+@import "tailwindcss";
+@import "shadcn/tailwind.css";
+
+/* The design-token layer, in four parts so a surface can take only the ones it
+   renders: the static marketing site imports the first, second and fourth and
+   has no editor to style.
+
+   - foundation: breakpoint and input variants, the token spine for both
+     themes, the artwork accent, the Tailwind theme mapping, the motion
+     utilities and the base layer.
+   - atmosphere, doc and motion style what a component cannot reach from its
+     own className: the fixed atmosphere layers on <body>, the output of a
+     third-party editor, and the page-load entrance, which is keyed off two
+     containers rather than the parts themselves. Component appearance lives
+     in Tailwind classes on the components. */
+@import "./foundation.css";
+@import "./atmosphere.css";
+@import "./doc.css";
+@import "./motion.css";
+
+@source "../../../../apps/client/node_modules/@blocknote/shadcn";
+@source "../**/*.{ts,tsx}";

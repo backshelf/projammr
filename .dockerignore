@@ -1,0 +1,53 @@
+# Dependencies and build output are produced inside the image.
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+
+# Never in an image.
+**/.git
+**/.env*
+**/*.log
+**/.DS_Store
+
+# Tests do not ship, and `next build` would type-check them, and so their
+# helpers (which import `bun:test` and `@workspace/test`, neither in the image).
+**/*.test.ts
+**/*.test.tsx
+**/test-support.ts
+**/test-support.tsx
+
+# Host-built binaries; the image installs its own ffmpeg.
+apps/server/deps
+# Local @workspace/dsp build output; the build-dsp stage produces its own.
+packages/dsp/pkg
+packages/dsp/rust/target
+# Same for @workspace/dit; the build-dit stage produces its own.
+packages/dit/pkg
+packages/dit/target
+# Uploaded files belong in a volume, not the build context.
+apps/server/static
+static
+
+# The dit app is released separately, and its Tauri crate never builds in the
+# image. Bun skips a workspace the lockfile lists but the checkout lacks.
+apps/dit-app
+
+# The marketing site is a static build hosted on its own (Cloudflare Pages),
+# never part of the self-hosted stack.
+apps/web
+
+# Tooling and documentation.
+.agents
+.claude
+**/.idea
+samples
+**/*.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Repository documentation assets; nothing in an image reads them.
+docs

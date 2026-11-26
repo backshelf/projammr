@@ -1,0 +1,2 @@
+ALTER TABLE "collections" ADD COLUMN "status_id" integer DEFAULT 1;--> statement-breakpoint
+ALTER TABLE "collections" ADD CONSTRAINT "collections_status_id_statuses_id_fkey" FOREIGN KEY ("status_id") REFERENCES "statuses"("id") ON DELETE SET DEFAULT;

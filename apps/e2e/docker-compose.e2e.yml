@@ -1,0 +1,8 @@
+# Layered over docker-compose.yml (and docker-compose.build.yml) by
+# src/stack.ts for the end-to-end stack. It changes only which host ports the
+# proxy publishes; CI leaves both variables unset and gets 80 and 443.
+services:
+  proxy:
+    ports: !override
+      - "${E2E_HTTP_PORT:-80}:80"
+      - "${E2E_HTTPS_PORT:-443}:443"

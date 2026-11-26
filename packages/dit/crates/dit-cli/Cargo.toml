@@ -1,0 +1,26 @@
+[package]
+name = "dit-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "dit"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+dirs.workspace = true
+dit-core = { path = "../dit-core" }
+dit-daemon = { path = "../dit-daemon" }
+dit-daws = { path = "../dit-daws" }
+dit-ipc = { path = "../dit-ipc" }
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+dit-core = { path = "../dit-core", features = ["test-support"] }
+dit-daw-ableton = { path = "../dit-daw-ableton" }
+tempfile.workspace = true

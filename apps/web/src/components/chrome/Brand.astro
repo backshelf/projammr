@@ -1,0 +1,18 @@
+---
+/* The mark and the name, linking home. The name is set in Redaction's clean
+   cut, as the client's sidebar brand is: halftone would read as noise at this
+   size. */
+import { Logo } from "@workspace/ui/components/logo";
+
+import { SITE } from "@/site";
+---
+
+<a
+  href="/"
+  class="inline-flex items-center gap-2 rounded-sm text-ink no-underline motion-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+>
+  <span class="text-lead" aria-hidden="true">
+    <Logo />
+  </span>
+  <span class="font-display-clean text-lead">{SITE.name}</span>
+</a>

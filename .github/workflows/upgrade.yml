@@ -1,0 +1,100 @@
+name: Upgrade
+
+# Restores the newest release baseline (apps/server/src/db/baselines/), applies
+# every migration written since, and runs the server smoke files on the result,
+# so a migration that cannot upgrade a real instance fails here. With no
+# baseline committed the job finds nothing to do and passes; committing the
+# first dump is what switches it on.
+# Started by hand, before a release that carries a migration.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: upgrade-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          POSTGRES_DB: projammr_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://ci:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/projammr_ci
+      BETTER_AUTH_SECRET: ${{ secrets.CI_BETTER_AUTH_SECRET }}
+      NOTES_MASTER_KEY: ${{ secrets.CI_NOTES_MASTER_KEY }}
+      FFMPEG_PATH: ffmpeg
+      LOG_LEVEL: error
+    steps:
+      - uses: actions/checkout@v7
+      # A job-level `if:` cannot call hashFiles, so the decision is a step
+      # output the steps below read. Names sort as versions, so the newest
+      # release wins if a directory ever holds two.
+      - name: Find the newest baseline
+        id: baseline
+        run: |
+          dump=$(find apps/server/src/db/baselines -name '*.dump' 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -z "$dump" ]; then
+            echo "No baseline exists yet (the first is committed at the 1.0 tag); nothing to upgrade."
+          else
+            echo "Upgrading from $dump"
+            echo "path=$dump" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: ./.github/actions/setup
+        if: steps.baseline.outputs.path
+      # The runner's pg_restore is 16 and refuses a dump written by pg_dump 17,
+      # so the restore runs with the service container's own client (the same
+      # mismatch server-test's migrate step explains for pg_dump). Flags are the
+      # ones the dump was written under: no owner, no privileges, stop at the
+      # first error so a half-restored database never reaches the migrator.
+      - name: Restore the baseline
+        if: steps.baseline.outputs.path
+        run: |
+          container="${{ job.services.postgres.id }}"
+          docker cp "${{ steps.baseline.outputs.path }}" "$container:/tmp/baseline.dump"
+          docker exec "$container" pg_restore --no-owner --no-privileges --exit-on-error \
+            --username ci --dbname projammr_ci /tmp/baseline.dump
+      - name: Install ffmpeg
+        if: steps.baseline.outputs.path
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      # storeUpload writes with flag "wx" and never creates the directory.
+      - name: Create the static directories
+        if: steps.baseline.outputs.path
+        run: mkdir -p static/assets static/images static/analysis
+        working-directory: apps/server
+      # The baseline's journal names what it already applied, so this runs
+      # only what the release train added since. MIGRATE_BACKUP=0 for the
+      # reason server-test gives: pg_dump 16 on the runner refuses postgres 17.
+      - name: Apply the migrations written since
+        if: steps.baseline.outputs.path
+        run: bun run migrate
+        working-directory: apps/server
+        env:
+          MIGRATE_BACKUP: "0"
+      # The suite runs outside turbo, so nothing else builds pkg/dsp.wasm.
+      - name: Build @workspace/dsp
+        if: steps.baseline.outputs.path
+        run: bun run --filter @workspace/dsp build
+      # Likewise for pkg/dit.wasm.
+      - name: Build @workspace/dit
+        if: steps.baseline.outputs.path
+        run: bun run --filter @workspace/dit build
+      - name: Smoke-test the upgraded database
+        if: steps.baseline.outputs.path
+        run: bun run test:smoke
+        working-directory: apps/server

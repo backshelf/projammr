@@ -1,0 +1,127 @@
+---
+title: Tables and views
+description: Sort, filter, search and group the tables of collections, tracks and sessions, save the views you use, and switch to a board.
+sidebar:
+  order: 15
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Every list in Projammr is the same kind of table, so what you learn on one works on all of them. You can sort,
+filter, search and group any of them, save the arrangement as a view, and see tracks and collections as a board.
+
+## Where the tables are
+
+| Table       | Also on                                  |
+| ----------- | ---------------------------------------- |
+| Collections | the project page, as its collections     |
+| Tracks      | a collection page, as its running order  |
+| Sessions    | a track page, as its sessions            |
+
+To open a table on its own page, select the group's name in the sidebar (**Collections**, **Tracks** or
+**Sessions**), or **Show all tracks** and **Show all sessions** under the recent ones.
+
+<Screenshot id="tracks-table" alt="The tracks table, with status chips, priorities, collections and labels on each row" />
+
+A row with more under it has an arrow to open it: a collection opens to show its tracks, and a track its sessions.
+
+### The columns
+
+Every row starts with a button (play on tracks and collections, [Open in DAW](/docs/guide/sessions/#open-in-daw)
+on sessions) and the row's ID. After those, each table shows some columns to begin with and keeps the rest hidden
+until you ask for them.
+
+- **Tracks:** #, Title, Artists, Priority, Status, Collections, Relations, Labels and Last Updated. You can also
+  show ISRC, ISWC, Explicit and Created At. The # column, the running-order number, only appears on a
+  collection's page.
+- **Collections:** Title, Priority, Status, Labels, Release, UPC and Last Updated, with Created At to show.
+- **Sessions:** Name, DAW, Priority, Track, Collection, Labels, Key, BPM, Tracks, Scenes, Machine, Local File Last
+  Updated and Local File Created At, with Local Filepath and Created At to show.
+
+An explicit track wears a small "E" beside its title.
+
+Open **Columns** in the toolbar to choose which columns show, and use the arrows beside each to move it left or
+right. To make a column wider or narrower, drag the edge of its header. **Reset widths** puts every column back.
+
+## Sorting
+
+Select a column's header to sort by it, again to reverse the order, and a third time to stop sorting by it. Hold
+<kbd>Shift</kbd> and select a second header to sort by that column within the first, such as by status and then
+by title.
+
+## Searching and filtering
+
+The **Search...** box in the toolbar narrows the table to rows that match what you type.
+
+The filter menus narrow it to rows with one value, each showing how many rows have it. Pick **All** to clear one.
+
+| Table       | Filter by                                                       |
+| ----------- | --------------------------------------------------------------- |
+| Tracks      | Status, Priority, Collection, Relation, Label, Artist, Explicit |
+| Collections | Status, Priority                                                |
+| Sessions    | DAW, Track, Priority                                            |
+
+## Grouping
+
+**Group by** splits the table into sections, one per value:
+
+- **Tracks:** Status, Priority, Label or Artist.
+- **Collections:** Status or Priority.
+- **Sessions:** DAW, Priority or Track.
+
+Each section header shows how many rows it holds. A group shows its first 10 rows; when there are more,
+**Show all** takes you to the whole group on its own. Choose **None** to go back to one list.
+
+## Saved views
+
+A view saves how the table is arranged, so you can come back to it in one step: the search, the sort, which
+columns show and in what order and width, the filters and the grouping.
+
+<Screenshot id="tracks-table-views" alt="The Views menu on the tracks table, listing saved views by name" />
+
+<Steps>
+
+1. Arrange the table the way you want it.
+
+2. Open **Views** in the toolbar, type a name in "Save current view as…", and select **Save**.
+
+3. To use it later, open **Views** and select its name.
+
+</Steps>
+
+To change a view, arrange the table again and save it under the same name: it replaces the old one. To delete a
+view, open the **⋮** menu beside it and choose **Delete**.
+
+A view you save is yours alone until you share it. Editors, admins and owners can choose **Share** from a view's
+**⋮** menu to give it to everyone in the project, and **Unshare** to take it back. A shared view carries a small
+badge naming who shared it.
+
+## Boards
+
+The tracks and collections tables can also be a board, with a column for each status and a card for each track or
+collection. Switch between **List** and **Board** at the top of the table.
+
+<Screenshot id="tables-board" alt="The tracks table as a board: a column for each status, with a card for each track" />
+
+- The columns follow your statuses, in order of completion.
+- Drag a card to another column to change its status.
+- Each column shows 50 cards at first; **Load more** at its foot shows the next 50.
+
+Sessions have no status, so they have no board.
+
+<Aside>
+  A saved view does not remember whether you were on the list or the board. The board always groups by status,
+  whatever the list is grouped by.
+</Aside>
+
+## Loading more rows
+
+A table loads 50 rows at a time and fetches more as you scroll toward the end. The foot of the table counts the
+rows, or the rows and groups when it is grouped. If a batch fails to load, "Couldn't load more rows" appears with
+a **Retry** button.
+
+## Next
+
+[Selecting and editing in tables](/docs/guide/editing-in-tables/) covers peek, adding rows, editing cells,
+copying and pasting, and changing many rows at once.

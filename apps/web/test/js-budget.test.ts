@@ -1,0 +1,101 @@
+import { describe, expect, it } from "bun:test";
+
+import { pageScriptBytes } from "../src/integrations/js-budget";
+
+const reader = (assets: Record<string, string>) => async (path: string) => {
+  const body = assets[path];
+  if (body === undefined) throw new Error(`no asset ${path}`);
+  return body;
+};
+
+const readAsset = reader({ "/_astro/page.js": "x".repeat(2500) });
+
+describe("pageScriptBytes", () => {
+  it("counts an inline script's body", async () => {
+    const html = `<head><script>let a = 1;</script></head>`;
+    expect(await pageScriptBytes(html, "/", readAsset)).toBe(
+      "let a = 1;".length
+    );
+  });
+
+  it("counts a loaded script by the size of its file", async () => {
+    const html = `<script type="module" src="/_astro/page.js"></script>`;
+    expect(await pageScriptBytes(html, "/", readAsset)).toBe(2500);
+  });
+
+  it("adds every script on the page", async () => {
+    const html =
+      `<script>abc</script>` +
+      `<script type="module" src="/_astro/page.js"></script>` +
+      `<script is:inline>de</script>`;
+    expect(await pageScriptBytes(html, "/", readAsset)).toBe(3 + 2500 + 2);
+  });
+
+  it("counts nothing on a page with no script", async () => {
+    expect(
+      await pageScriptBytes(`<main><p>hi</p></main>`, "/", readAsset)
+    ).toBe(0);
+  });
+
+  describe("with code Vite split into shared chunks", () => {
+    const entry = `import"./shared.js";`;
+    const named = `import{t as e}from"./shared.js";e();`;
+    const shared = "y".repeat(1900);
+    const assets = reader({
+      "/_astro/entry.js": entry,
+      "/_astro/named.js": named,
+      "/_astro/shared.js": shared,
+    });
+
+    it("counts the chunks an entry imports", async () => {
+      const html = `<script type="module" src="/_astro/entry.js"></script>`;
+      expect(await pageScriptBytes(html, "/", assets)).toBe(
+        entry.length + shared.length
+      );
+    });
+
+    it("counts a chunk once, however many scripts import it", async () => {
+      const html =
+        `<script type="module" src="/_astro/entry.js"></script>` +
+        `<script type="module" src="/_astro/named.js"></script>`;
+      expect(await pageScriptBytes(html, "/", assets)).toBe(
+        entry.length + named.length + shared.length
+      );
+    });
+
+    it("follows imports through re-exports, each relative to its importer, and stops at a cycle", async () => {
+      const a = `export{b}from"./lib/b.js";import"/_astro/a.js";`;
+      const b = `import"../c.js";export const b=1;`;
+      const c = `import"./a.js";`;
+      const html = `<script type="module" src="/_astro/a.js"></script>`;
+      const bytes = await pageScriptBytes(
+        html,
+        "/",
+        reader({
+          "/_astro/a.js": a,
+          "/_astro/lib/b.js": b,
+          "/_astro/c.js": c,
+        })
+      );
+      expect(bytes).toBe(a.length + b.length + c.length);
+    });
+
+    it("follows an inline module script's imports from the page's own path", async () => {
+      const html = `<script type="module">import"../_astro/shared.js";</script>`;
+      expect(await pageScriptBytes(html, "/pricing/index.html", assets)).toBe(
+        `import"../_astro/shared.js";`.length + shared.length
+      );
+    });
+
+    it("leaves out a chunk only a dynamic import() loads", async () => {
+      const lazy = `document.onclick=()=>import("./search.js");`;
+      const html = `<script type="module" src="/_astro/lazy.js"></script>`;
+      const bytes = await pageScriptBytes(
+        html,
+        "/",
+        reader({ "/_astro/lazy.js": lazy })
+      );
+      expect(bytes).toBe(lazy.length);
+    });
+  });
+});

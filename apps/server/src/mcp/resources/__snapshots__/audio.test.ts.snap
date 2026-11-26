@@ -1,0 +1,26 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`auditMarkdown groups findings by severity and tables each track's versions 1`] = `
+"# Audio audit
+
+## Errors
+
+- **missing_file** — the stored file is gone. (fix: \`unlink_audio_version\`)
+
+## Info
+
+- **no_audio** — "No Takes Yet" has no audio version.
+
+## Tracks
+
+### Long Way Home (track 1)
+
+| Version | File | Duration | LUFS | True peak | Lead silence | Tail silence | Clipped bins | BPM | Key | Analysed | Sessions |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| v1 (primary) | long-way-home-v1.wav | 182.0s | -14.2 | -1.4 | 0.5s | 1.2s | 3 | 120.5 | F♯ minor | yes | Tracking |
+
+### No Takes Yet (track 2)
+
+No versions.
+"
+`;

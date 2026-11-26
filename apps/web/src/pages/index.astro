@@ -1,0 +1,225 @@
+---
+/* The landing page, "The Session Diff" (apps/web/.impeccable/surfaces/
+   apps-web.md): a masthead lit by the teal cover with the real diff of two
+   saves beside the headline, then one hunk per pillar of the product, each
+   lit by its own cover and proved by real gear or a real screenshot, then the
+   plans and a close. */
+import Action from "@/components/marketing/Action.astro";
+import Close from "@/components/marketing/Close.astro";
+import CoverAccents from "@/components/marketing/CoverAccents.astro";
+import Hunk from "@/components/marketing/Hunk.astro";
+import KindlingReview from "@/components/marketing/KindlingReview.astro";
+import MastheadArt from "@/components/marketing/MastheadArt.astro";
+import PlanList from "@/components/marketing/PlanList.astro";
+import SaveHistory from "@/components/marketing/SaveHistory.astro";
+import SessionDiff from "@/components/marketing/SessionDiff.astro";
+import Screenshot from "@/components/Screenshot.astro";
+import { coverArt } from "@/data/covers";
+import SiteLayout from "@/layouts/SiteLayout.astro";
+import { SITE } from "@/site";
+---
+
+<SiteLayout
+  title={SITE.name}
+  description="Projammr reads your Ableton saves and keeps every bounce, comment and lyric for a song in one place. Open source and self-hosted."
+  art={coverArt("teal")}
+>
+  <MastheadArt slot="atmosphere" cover="teal" size="hero" />
+
+  <section
+    aria-labelledby="hero-title"
+    class="px-(--gutter) pt-14 pb-24 phone:pt-10 phone:pb-16"
+  >
+    <div class="mx-auto grid max-w-(--page) grid-cols-[minmax(0,1fr)_minmax(0,34rem)] items-center gap-x-14 gap-y-12 stack:grid-cols-1">
+      <div class="flex flex-col gap-7">
+        <h1
+          id="hero-title"
+          class="max-w-[11ch] font-heading text-display leading-none text-balance text-ink"
+        >
+          A home for unfinished music.
+        </h1>
+        <p class="on-art-soft max-w-[46ch] text-lead text-pretty">
+          Open source and self-hosted: Projammr reads your Ableton saves and
+          keeps every bounce, comment and lyric for a song in one place.
+        </p>
+        <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <div class="flex flex-wrap gap-3">
+            <Action href="/docs/self-hosting/quickstart/">Self-host it</Action>
+            <Action href="/pricing/" variant="ghost">
+              Pricing
+            </Action>
+          </div>
+          <Action href="/dit/#download" variant="quiet">
+            Download dit for Mac
+          </Action>
+        </div>
+      </div>
+      <SessionDiff />
+    </div>
+  </section>
+
+  <Hunk
+    id="features"
+    cover="magenta"
+    title="Every save of a set, read from the set itself."
+    lines={[
+      {
+        sign: "+",
+        text: "dit on your Mac records each save of an Ableton Live set.",
+      },
+      {
+        sign: "+",
+        text: "Tempo, key and time signature, every track and group, and each device chain.",
+      },
+      {
+        sign: "+",
+        text: "Plugins with their format and maker, and the sessions that use them.",
+      },
+      {
+        sign: "+",
+        text: "What changed between two saves: tempo, key, tracks, devices, clips and samples.",
+      },
+      {
+        sign: "~",
+        text: "Older saves filled in from the dated copies in Live's Backup folder.",
+      },
+    ]}
+    link={{ href: "/dit/", label: "How dit works" }}
+  >
+    <SaveHistory />
+  </Hunk>
+
+  <Hunk
+    id="listening"
+    cover="sunset"
+    title="Review is listening, with the feedback pinned to the second."
+    layout="stack"
+    lines={[
+      {
+        sign: "+",
+        text: "Every bounce becomes a numbered version of its track, with its own waveform.",
+      },
+      {
+        sign: "+",
+        text: "Comments pinned to a moment, on the version they are about.",
+      },
+      {
+        sign: "+",
+        text: "Integrated loudness and true peak, against the −14 LUFS streaming reference.",
+      },
+      {
+        sign: "+",
+        text: "Two versions compared from the same playhead, with their levels matched on a desktop.",
+      },
+      {
+        sign: "~",
+        text: "A player and a queue that keep going as you move around the app.",
+      },
+    ]}
+    link={{ href: "/features/listening/", label: "Listening and review" }}
+  >
+    <KindlingReview />
+  </Hunk>
+
+  <Hunk
+    id="lifecycle"
+    cover="teal"
+    title="One place for a song, from its first line to the finished record."
+    layout="stack"
+    lines={[
+      {
+        sign: "+",
+        text: "A private notebook, encrypted at rest, where a note can become a track's lyrics.",
+      },
+      {
+        sign: "+",
+        text: "A lyrics editor that counts syllables and marks the rhyme scheme.",
+      },
+      {
+        sign: "+",
+        text: "Projects, collections, tracks and sessions in tables with saved views.",
+      },
+      {
+        sign: "+",
+        text: "Statuses in your own colours, each a share of the collection's progress.",
+      },
+      {
+        sign: "~",
+        text: "Members with roles, invites, and share links for people outside the project.",
+      },
+    ]}
+    link={{ href: "/features/writing/", label: "Notebook and lyrics" }}
+  >
+    <Screenshot
+      adaptive
+      wide
+      id="collection"
+      alt="A collection in Projammr: its cover lighting the page, its tracks in running order with their statuses, and its progress."
+    />
+  </Hunk>
+
+  <Hunk
+    id="artwork"
+    cover="mono"
+    title="The cover art lights the page."
+    layout="stack"
+    lines={[
+      {
+        sign: "+",
+        text: "A project, collection or track takes its colour from its own cover.",
+      },
+      {
+        sign: "+",
+        text: "The server reads the accent once, when the artwork is uploaded.",
+      },
+      {
+        sign: "~",
+        text: "A track with no cover borrows its collection's, then its project's.",
+      },
+      {
+        sign: "−",
+        text: "A brand colour. With no artwork anywhere, the page stays grey.",
+      },
+    ]}
+    link={{ href: "/docs/guide/artwork/", label: "Artwork and colour" }}
+  >
+    <CoverAccents />
+  </Hunk>
+
+  <Hunk
+    id="plans"
+    title="Free to run on your own server. Hosting is on the way."
+    layout="stack"
+    lines={[
+      {
+        sign: "+",
+        text: `The whole app on your own server, free and open source under ${SITE.license}.`,
+      },
+      {
+        sign: "~",
+        text: "Hosted plans are coming, priced by storage and members.",
+      },
+    ]}
+    link={{ href: "/pricing/", label: "Compare the plans" }}
+  >
+    <PlanList />
+  </Hunk>
+
+  <Close
+    id="close"
+    cover="teal"
+    title="Your sessions, your bounces and your notes, on a server you run."
+  >
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div class="flex flex-wrap gap-3">
+        <Action href="/docs/self-hosting/quickstart/">Self-host it</Action>
+        <Action href="/pricing/" variant="ghost">
+          Pricing
+        </Action>
+      </div>
+      <Action href="/dit/#download" variant="quiet">
+        Download dit for Mac
+      </Action>
+    </div>
+  </Close>
+</SiteLayout>

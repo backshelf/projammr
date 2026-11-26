@@ -1,0 +1,106 @@
+---
+title: Backups and restore
+description: Back up the database and the uploaded media, know what the automatic pre-migrate dump covers, and restore either.
+sidebar:
+  order: 60
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+You can take a backup of your instance with one command, and restore the database and the media from it. Two kinds of
+backup land in the same place, the `backups-data` volume:
+
+- **Manual backups**, which you take with the `backup` service: a dump of the database and an archive of the
+  uploaded media, taken one after the other.
+- **Pre-migrate dumps**, which the API takes by itself before it applies a database migration. These cover the
+  database only.
+
+## Take a backup
+
+```sh
+docker compose --profile backup run --rm backup
+```
+
+The instance keeps running while it works. It writes two files to the volume and prints their names:
+
+- `manual-<time>.dump`: the whole database, in PostgreSQL's custom format.
+- `static-<time>.tar.gz`: everything in the `static-data` volume, which is every uploaded audio file and image and
+  the analysis made from them.
+
+`<time>` is when the backup ran, in UTC, like `20260923T101500Z`. Manual backups stay until you delete them.
+
+### Copy backups off the machine
+
+A backup on the same disk as your instance does not survive that disk. The API container mounts the same volume, so
+with the stack running you can copy every backup out of it:
+
+```sh
+docker compose cp api:/app/apps/server/backups ./projammr-backups
+```
+
+## The pre-migrate dump
+
+When the API starts and finds database migrations it has not applied yet, it first dumps the database to
+`pre-<migration>-<time>.dump` in the same volume. `<migration>` names the first pending migration and `<time>` is a
+Unix time in milliseconds. It keeps the newest five pre-migrate dumps and deletes older ones.
+
+If the dump fails, the API applies no migration and does not start. Setting `MIGRATE_BACKUP=0` in `.env` skips the
+dump. [Upgrades and migrations](/docs/self-hosting/upgrades/) covers when it runs.
+
+## Restore the database
+
+A restore replaces everything in the database with the contents of a dump, whether a manual one or a pre-migrate one.
+Nothing may be connected to the database while it runs, so stop the services that use it first.
+
+<Steps>
+
+1. Stop the proxy, the web app and the API.
+
+   ```sh
+   docker compose stop proxy web api
+   ```
+
+2. List the dumps and pick one.
+
+   ```sh
+   docker compose --profile backup run --rm backup 'ls -l /backups'
+   ```
+
+3. Drop the database, create it again empty, and restore the dump into it. Replace the file name with the one you
+   picked.
+
+   ```sh
+   docker compose --profile backup run --rm backup 'dropdb --if-exists "$PGDATABASE" && createdb "$PGDATABASE" && pg_restore --dbname "$PGDATABASE" /backups/manual-20260923T101500Z.dump'
+   ```
+
+4. Start everything again.
+
+   ```sh
+   docker compose up -d
+   ```
+
+</Steps>
+
+The `backup` service runs its command through `sh -c`, which is why the restore goes in one quoted argument. The
+single quotes stop your own shell from expanding `$PGDATABASE`; the service's environment sets it to your database.
+
+Dropping the database first matters. Restored over a database with tables the dump does not know about, those tables
+would stay, and the API would fail to apply its migrations over them. When the API starts after a restore, it applies
+any migrations newer than the dump, taking a pre-migrate dump first.
+
+<Aside>
+  Restoring a pre-migrate dump to undo an upgrade also means going back to the version you ran before it; see
+  [rolling back](/docs/self-hosting/upgrades/#rolling-back).
+</Aside>
+
+## Restore the media
+
+The media archive goes back into the `static-data` volume through the API container, which mounts both volumes. With
+the API stopped, as in step 1 above, and the archive's name in place of this one:
+
+```sh
+docker compose run --rm --entrypoint sh api -c 'tar -xzf backups/static-20260923T101500Z.tar.gz -C static'
+```
+
+Restore the database and the media from the same backup, so the rows and the files agree. Files uploaded after that
+backup stay in the volume, but nothing in the restored database refers to them.

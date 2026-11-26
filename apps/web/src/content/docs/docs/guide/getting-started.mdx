@@ -1,0 +1,111 @@
+---
+title: Getting started
+description: Sign in or create an account, join a project you were invited to, and make your first project.
+sidebar:
+  order: 2
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+To use Projammr you need an account on a Projammr instance: the copy of the app you, your band or your producer
+runs. Depending on how the instance is set up, you create the account yourself or you come in through an invite.
+
+## Signing in
+
+Open the instance's address in your browser. If you are not signed in, the home page is the sign-in card: a
+**Sign in** tab that takes your email and password and, when the instance lets you create an account, a
+**Register** tab beside it.
+
+<Screenshot id="sign-in" alt="The sign-in card, with email and password fields" />
+
+An account is an email address and a password. There is no signing in with Google or any other service.
+
+The heading on the card tells you how the instance takes new accounts:
+
+| The card says                                                     | What it means                                                                                                                                                                            |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Create the first account"                                        | Nobody has an account yet. The account you create here runs the instance: it becomes the instance's admin, and registration closes behind it, so nobody else can sign up uninvited. |
+| "Sign in or create an account"                                    | Registration is open. Choose **Register** and give your name, your email and a password of at least 8 characters.                                                                     |
+| "Sign in", with "Accounts on this instance are by invite only."   | Registration is closed. You need an invite to a project, or an account the instance's admin makes for you.                                                                             |
+
+Five wrong passwords within 15 minutes are allowed. The sixth locks the account for a minute, and each wrong
+password after that doubles the wait, up to an hour. Signing in successfully clears the count.
+
+### If you forget your password
+
+What you do depends on whether the instance can send email.
+
+- **It can:** the password field has a **Forgot password?** link. Enter your email on the "Reset your password"
+  page, and Projammr emails you a link to choose a new password. The page says the same thing whether or not the
+  address has an account, so nobody can use it to find out who is signed up.
+- **It can't:** the sign-in card says "Ask your instance admin for a password reset link." [The admin can make a
+  reset link](/docs/admin/accounts/#create-a-password-reset-link) for your account and pass it on to you.
+
+Either link opens a page where you choose a new password of at least 8 characters, then sign in with it. A link
+that has expired or been used says "This link is invalid or has expired."; ask for a new one.
+
+## Joining a project from an invite
+
+When someone adds you to their project, you get an invite link. Opening it shows the project's name, who invited
+you, and [the role you will have](/docs/collaboration/members-and-roles/#the-roles) in the project.
+
+<Steps>
+
+1. Open the invite link. The page reads "Join", then the project's name.
+
+2. If you are not signed in, sign in, or create an account on the **Register** tab. On an instance that is invite
+   only, register with the email address the invite was sent to: an invite for that exact address is what lets a
+   new account in.
+
+3. Select **Accept invite**. Projammr says "You've joined the project" and opens it.
+
+</Steps>
+
+If the link does not work, the page says why:
+
+- "This invite link isn't valid": it was revoked, or the link is incomplete.
+- "This invite has already been used": somebody accepted it already.
+- "This invite has expired": it is past its expiry date.
+
+In each case, ask the person who invited you to send a new one.
+
+## Your first project
+
+Once you are signed in, the home page depends on how many projects you belong to:
+
+- **None:** "No project open", with a **Create a project** button.
+- **One:** Projammr opens it straight away.
+- **Several:** a "Projects" list, one row per project with its cover, its number of tracks and when it last had
+  any activity. Pick one to open it.
+
+After that, Projammr remembers the project you have open and goes straight back to it the next time you visit.
+
+<Screenshot id="projects" alt="The Projects list: one row per project with its cover, track count and last activity" />
+
+### Creating a project
+
+A project is an artist or a band: the home for its collections, tracks and sessions. If you release under more
+than one name, give each name its own project.
+
+<Steps>
+
+1. Select **Create a project** on the home page, or **Add New** in the project switcher at the top of the sidebar.
+
+2. Give it a **Name**. Everything else is optional: a **Description**, and **Links** to anywhere the project
+   lives (a website, a streaming page, social media), each with a name and an address.
+
+3. Select **Create project**. The new project opens, with you as its owner.
+
+</Steps>
+
+<Aside>
+  A new project starts empty. Collections, tracks and sessions are yours to add by hand, and [dit](/dit/) adds
+  sessions and bounces from your Ableton project folders.
+</Aside>
+
+## Where to next
+
+- [Finding your way around](/docs/guide/finding-your-way-around/) covers the sidebar, the project switcher and
+  the home page.
+- [How the catalogue works](/docs/guide/catalogue/) explains projects, collections, tracks and sessions.

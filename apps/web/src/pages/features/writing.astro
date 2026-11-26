@@ -1,0 +1,140 @@
+---
+/* Writing, one level deeper than the landing page's lifecycle hunk: the
+   private notebook, lyrics and their editor, and the notes on everything
+   else. Lit by the teal cover, the Longshore album's in the demo catalogue.
+   Every claim is from the guide's notebook, lyrics and editing pages. */
+import Action from "@/components/marketing/Action.astro";
+import Close from "@/components/marketing/Close.astro";
+import Hunk from "@/components/marketing/Hunk.astro";
+import MastheadArt from "@/components/marketing/MastheadArt.astro";
+import PageHead from "@/components/marketing/PageHead.astro";
+import Screenshot from "@/components/Screenshot.astro";
+import { coverArt } from "@/data/covers";
+import SiteLayout from "@/layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Notebook and lyrics"
+  description="A private notebook for ideas, a lyrics editor that counts syllables and marks rhymes, and notes on every project, collection, track and session."
+  art={coverArt("teal")}
+>
+  <MastheadArt slot="atmosphere" cover="teal" />
+
+  <PageHead
+    crumb={{ href: "/#features", label: "Features" }}
+    title="From a line in the notebook to the finished record."
+    lede="A private notebook for the ideas, a lyrics editor for the words, and notes on every project, collection, track and session."
+  >
+    <Action slot="actions" href="/docs/guide/notebook/" variant="quiet">
+      The notebook
+    </Action>
+  </PageHead>
+
+  <Hunk
+    id="notebook"
+    cover="teal"
+    title="Somewhere private for the idea, before it is a song."
+    lines={[
+      {
+        sign: "+",
+        text: "Notes belong to you, not to a project. Only you can open, link or delete them.",
+      },
+      {
+        sign: "+",
+        text: "Each one is encrypted at rest on your server, under a key of its own.",
+      },
+      {
+        sign: "+",
+        text: "Type / for headings and lists. The first line is the title, and it saves as you type.",
+      },
+      {
+        sign: "+",
+        text: "Open a note from the command palette or the sidebar's recent notes.",
+      },
+      {
+        sign: "~",
+        text: "It is not end-to-end encrypted: your server holds the key that unlocks it.",
+      },
+    ]}
+    link={{ href: "/docs/guide/notebook/", label: "The notebook" }}
+  >
+    <Screenshot
+      adaptive
+      id="notebook"
+      alt="The notebook: a list of notes beside the one open in the editor."
+    />
+  </Hunk>
+
+  <Hunk
+    id="lyrics"
+    title="A note becomes the lyrics, and the editor helps with the words."
+    lines={[
+      {
+        sign: "+",
+        text: "Turn a note into a track's lyrics, and everyone in that project can read them.",
+      },
+      {
+        sign: "+",
+        text: "Syllables counted on every line, and each section's rhyme scheme lettered beside it.",
+      },
+      {
+        sign: "+",
+        text: "Rhymes with \\word and synonyms with ~word, the perfect rhymes first.",
+      },
+      {
+        sign: "+",
+        text: "Sections headed [Verse 1] or [Chorus], each with its line count and average syllables.",
+      },
+      {
+        sign: "~",
+        text: "The rhymes and synonyms come from dictionaries on your own server, not an outside service.",
+      },
+    ]}
+    link={{ href: "/docs/guide/lyrics/", label: "Writing lyrics" }}
+  >
+    <Screenshot
+      adaptive
+      id="lyrics-editor"
+      alt="The lyrics editor: sections with a syllable count on each line and the rhyme scheme lettered beside it."
+    />
+  </Hunk>
+
+  <Hunk
+    id="notes"
+    title="Notes that sit where the work is."
+    lines={[
+      {
+        sign: "+",
+        text: "Collections, tracks and sessions each have notes, and a project has a description.",
+      },
+      {
+        sign: "+",
+        text: "Type straight into the page, in the same editor the notebook uses.",
+      },
+      {
+        sign: "~",
+        text: "These notes belong to the project and are not encrypted the way the notebook is.",
+      },
+    ]}
+    link={{
+      href: "/docs/guide/creating-and-editing/",
+      label: "Creating, editing and deleting",
+    }}
+  />
+
+  <Close
+    id="next"
+    cover="teal"
+    title="Keep every idea next to the music it became."
+  >
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <Action href="/docs/self-hosting/quickstart/">Self-host it</Action>
+      <Action href="/features/listening/" variant="quiet">
+        Listening and review
+      </Action>
+      <Action href="/features/collaboration/" variant="quiet">
+        Collaboration
+      </Action>
+    </div>
+  </Close>
+</SiteLayout>

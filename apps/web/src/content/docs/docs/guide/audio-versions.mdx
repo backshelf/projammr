@@ -1,0 +1,107 @@
+---
+title: Versions and uploads
+description: Add bounces to a track as versions, choose the primary one, and download them in the format you need.
+sidebar:
+  order: 25
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Every bounce of a song is a **version** of its track: v1, v2, v3 and on. Each version gets its own waveform, its
+own comments and its own measurements, so you can hear how a mix has moved and talk about each one on its own.
+One version is the **primary**: the one people hear first.
+
+## Adding versions
+
+<Steps>
+
+1. Open the track. With no versions yet, the masthead shows **Add a track audio**. Once there are some, open the
+   version menu and choose **Manage track audios…**.
+
+2. The "Track audios" window lists every audio file on the track and its sessions. Drop a bounce onto it, or
+   click to browse.
+
+3. Tick each file that is a version of this track, and select **Save** (it counts them, as in "Save 2
+   versions").
+
+</Steps>
+
+Projammr takes WAV, MP3, AIFF, FLAC, M4A, AAC and OGG files, up to your instance's upload limit per file (128 MB
+unless whoever runs it has changed it).
+
+An audio file already attached to the track or one of its sessions can become a version too: choose **Add as track
+audio** from the attachment.
+
+### How versions are numbered
+
+Versions are numbered in the order the files were made, using each file's own creation date (or the upload date,
+when the file does not carry one). Add an older bounce later and it slots in where it belongs: the versions after
+it move up a number.
+
+### Taking a file off, and deleting it
+
+In "Track audios", untick a file and save to stop it being a version. The file stays in the project, and you can
+tick it again later.
+
+<Aside type="caution">
+  The bin button in "Track audios" is different: it deletes the file itself, straight away, without asking. Untick
+  a file if you only want it to stop being a version.
+</Aside>
+
+## Choosing the version you hear
+
+<Screenshot id="track-versions" alt="The version menu open on a track with three bounces, the primary marked with a star" />
+
+The version menu in the track's masthead lists every version with its number and file name.
+
+- **Pick a version** to load it into the page: its waveform, comments and measurements.
+- **The star** beside a version makes it the primary: "Make v2 the primary version". The primary shows "· Primary"
+  after its file name.
+
+The page opens on the primary version. When you are looking at another one, **Back to primary** returns to it.
+When a track has no primary yet, the newest version you add becomes the primary.
+
+### The same bounce twice
+
+Once versions are measured, Projammr compares each one with the track's other versions. If two sound like the same
+master, the one added later is marked "same audio as v2" (or whichever it matches), so you know there is nothing
+new to hear. Both versions stay.
+
+## What happens after you add a version
+
+Projammr measures every new version in the background. While it works, the loudness beside the version reads
+"measuring…", and the jobs tray in the sidebar shows "Analysing audio" with the file's name and its progress. The
+page fills in on its own when it finishes.
+
+Each version gets:
+
+- its **waveform**;
+- its integrated **loudness** in LUFS and its **true peak**;
+- a **loudness curve** and a **spectrogram** to show under the waveform;
+- its **spectrum**, the average balance of lows and highs across the whole song;
+- a detected **key** and **BPM**;
+- a comparison with the version before it, showing where the two differ.
+
+See [Loudness, spectrum and measurements](/docs/guide/loudness-and-spectrum/) for what each one shows.
+
+### Key and BPM
+
+A track's **Key** and **BPM** in its rail come from its main session, as your DAW reported them. When the session
+has none (or the track has no main session), the rail shows what Projammr detected in the primary version instead,
+in faint type marked "detected", with a "?" when the detection is unsure. When the track has a main session,
+**Adopt** writes the detected value to it, and from then on it is the track's own.
+
+## Downloading
+
+Open the play button's menu and choose **Download**. You can take the original file as it is, or have Projammr
+convert a copy to WAV, FLAC, AIFF, MP3, M4A, AAC or OGG. For MP3 you also pick the bitrate, from 320 kbps down to
+16 kbps. The window tells you what the conversion keeps: "Lossless. Every sample is preserved." or a warning when
+the source is already lossy.
+
+A conversion runs in the background, and the download starts on its own when it is ready.
+
+## Who can do what
+
+Anyone in the project can play, compare and download versions. Adding, removing and deleting versions, and
+choosing the primary, need an editor, admin or owner.

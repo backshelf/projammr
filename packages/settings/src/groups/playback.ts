@@ -1,0 +1,232 @@
+import { z } from "zod";
+import { defineGroup, defineSetting } from "../define.js";
+import { optionsOf } from "../options.js";
+
+export const group = defineGroup({
+  id: "playback",
+  section: "personal",
+  label: "Playback",
+  description:
+    "What the player starts with and how it moves through a queue. Changes made while listening stay in this browser.",
+  order: 30,
+});
+
+/** Which of a track's versions plays: the primary (else the newest), or always the newest. */
+export const VERSIONS_TO_PLAY = ["primary", "latest"] as const;
+
+export type VersionToPlay = (typeof VERSIONS_TO_PLAY)[number];
+
+const seconds = (min: number, max: number) =>
+  z.number().int().min(min).max(max);
+
+export const settings = [
+  defineSetting({
+    key: "playback.defaultVolume",
+    group: "playback",
+    label: "Starting volume",
+    description: "The volume a browser with none of its own starts at.",
+    keywords: ["volume", "level", "loud"],
+    scopes: ["user", "instance"],
+    schema: z.number().min(0).max(1),
+    default: 1,
+    control: { kind: "slider", min: 0, max: 1, step: 0.05 },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.startMuted",
+    group: "playback",
+    label: "Start muted",
+    description: "A browser with no volume of its own starts muted.",
+    keywords: ["mute", "silent", "volume"],
+    scopes: ["user", "instance"],
+    schema: z.boolean(),
+    default: false,
+    control: { kind: "toggle" },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.repeat",
+    group: "playback",
+    label: "Repeat",
+    description: "What a fresh browser's player repeats.",
+    keywords: ["loop", "repeat"],
+    scopes: ["user", "instance"],
+    schema: z.enum(["off", "one", "all"]),
+    default: "off",
+    control: {
+      kind: "select",
+      options: optionsOf({ off: "Off", one: "One track", all: "The queue" }),
+    },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.shuffle",
+    group: "playback",
+    label: "Shuffle",
+    description: "Whether a fresh browser's player shuffles the queue.",
+    keywords: ["random", "shuffle", "order"],
+    scopes: ["user", "instance"],
+    schema: z.boolean(),
+    default: false,
+    control: { kind: "toggle" },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.persistQueue",
+    group: "playback",
+    label: "Keep the queue",
+    description: "The queue and where it was survive a reload.",
+    keywords: ["queue", "reload", "remember", "resume"],
+    scopes: ["user", "instance"],
+    schema: z.boolean(),
+    default: false,
+    control: { kind: "toggle" },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.seekSmall",
+    group: "playback",
+    label: "Seek step",
+    description: "How far an arrow key moves the playhead.",
+    keywords: ["seek", "skip", "arrow", "jump"],
+    scopes: ["user", "instance"],
+    schema: seconds(1, 60),
+    default: 5,
+    control: { kind: "duration", unit: "s", min: 1, max: 60 },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.seekLarge",
+    group: "playback",
+    label: "Large seek step",
+    description: "How far an arrow key moves the playhead with Shift held.",
+    keywords: ["seek", "skip", "shift", "jump"],
+    scopes: ["user", "instance"],
+    schema: seconds(1, 600),
+    default: 30,
+    control: { kind: "duration", unit: "s", min: 1, max: 600 },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.previousRestartsAfter",
+    group: "playback",
+    label: "Previous restarts after",
+    description:
+      "Past this far into a track, Previous goes back to its start rather than to the track before.",
+    keywords: ["previous", "back", "restart"],
+    scopes: ["user", "instance"],
+    schema: seconds(0, 60),
+    default: 3,
+    control: { kind: "duration", unit: "s", min: 0, max: 60 },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.queueEnd",
+    group: "playback",
+    label: "When the queue ends",
+    description: "What the player does after the last track in the queue.",
+    keywords: ["queue", "end", "stop", "rewind", "clear"],
+    scopes: ["user", "instance"],
+    schema: z.enum(["stop", "rewind", "clear"]),
+    default: "stop",
+    control: {
+      kind: "select",
+      options: optionsOf({
+        stop: "Stop on the last track",
+        rewind: "Go back to the first",
+        clear: "Clear the queue",
+      }),
+    },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.queueingStarts",
+    group: "playback",
+    label: "Queueing starts playback",
+    description: "Adding to the queue of an idle player starts playing it.",
+    keywords: ["queue", "autoplay", "idle"],
+    scopes: ["user", "instance"],
+    schema: z.boolean(),
+    default: true,
+    control: { kind: "toggle" },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.rowPlayContext",
+    group: "playback",
+    label: "Playing a track in a collection",
+    description:
+      "What a row's play button queues for a track listed in a collection.",
+    keywords: ["row", "play", "collection", "queue"],
+    scopes: ["user", "instance"],
+    schema: z.enum(["collection", "track"]),
+    default: "collection",
+    control: {
+      kind: "select",
+      options: optionsOf({
+        collection: "The collection from that track",
+        track: "That track alone",
+      }),
+    },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.versionToPlay",
+    group: "playback",
+    label: "Version to play",
+    description: "Which of a track's versions plays when the track is played.",
+    keywords: ["version", "primary", "latest", "mix"],
+    scopes: ["user", "instance"],
+    schema: z.enum(VERSIONS_TO_PLAY),
+    default: "primary",
+    control: {
+      kind: "select",
+      options: optionsOf({ primary: "The primary", latest: "The latest" }),
+    },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.noAudioFallback",
+    group: "playback",
+    label: "A track with no audio",
+    description: "What playing a track with no audio versions does.",
+    keywords: ["attachment", "missing", "audio"],
+    scopes: ["user", "instance"],
+    schema: z.enum(["attachment", "none"]),
+    default: "attachment",
+    control: {
+      kind: "select",
+      options: optionsOf({
+        attachment: "Play its newest audio attachment",
+        none: "Play nothing",
+      }),
+    },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.analysisOnTouch",
+    group: "playback",
+    label: "Live analysis on touch devices",
+    description:
+      "Meters and the moving field on a phone or tablet. Off keeps playback going with the screen locked.",
+    keywords: ["phone", "meters", "battery", "lock screen", "web audio"],
+    scopes: ["user", "instance"],
+    schema: z.boolean(),
+    default: false,
+    control: { kind: "toggle" },
+    audience: "all",
+  }),
+  defineSetting({
+    key: "playback.crossfade",
+    group: "playback",
+    label: "Crossfade",
+    description:
+      "How long the end of one track overlaps the start of the next. 0 cuts straight over.",
+    keywords: ["fade", "gapless", "transition", "overlap"],
+    scopes: ["user", "instance"],
+    schema: z.number().min(0).max(12),
+    default: 0,
+    control: { kind: "slider", min: 0, max: 12, step: 0.5, unit: "s" },
+    audience: "all",
+  }),
+];

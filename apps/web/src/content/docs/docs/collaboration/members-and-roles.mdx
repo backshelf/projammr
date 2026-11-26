@@ -1,0 +1,79 @@
+---
+title: Members and roles
+description: What viewers, editors, admins and owners can do in a project, and how to change someone's role.
+sidebar:
+  order: 61
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Everyone in a project is a member with one role. The role decides what they can change; every member can open
+and play everything in the project.
+
+Membership is per project. There is no way to give someone one collection or one track and not the rest; for
+that, send a [share link](/docs/collaboration/share-links/).
+
+## The roles
+
+Each role can do everything the one above it can, plus more.
+
+| Role       | What it adds                                                                                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Viewer** | Open and play everything in the project; read its activity and member list; comment, and edit or delete their own comments.                    |
+| **Editor** | Create, change and delete collections, tracks and sessions; upload audio; create share links; scan sessions into the project with the scanner. |
+| **Admin**  | Invite people, change members' roles, and remove members.                                                                                      |
+| **Owner**  | Delete the project and hand ownership to someone else.                                                                                         |
+
+A project has one owner: whoever created it, until they transfer it.
+
+Roles are checked by the server on every request, not just hidden in the app. Someone who is not a member of a
+project cannot tell it exists: its pages answer as not found.
+
+## See who is in a project
+
+Open **Settings** from the sidebar and choose **Project**, then **Members**. It lists every member with their
+role; admins and the owner also see the invite form and the pending invites there.
+
+<Screenshot
+  id="members"
+  alt="The Members page of a project's settings: members with their roles, the invite form and one pending invite"
+/>
+
+## Change a role
+
+Admins and the owner can change a member's role with the menu on their row: **admin**, **editor** or
+**viewer**. Two limits apply:
+
+- You can give a role no higher than your own. An admin can make someone an admin; only the owner has the
+  owner's actions.
+- You cannot change the role of someone who outranks you.
+
+## Remove a member
+
+Admins and the owner can remove a member with the bin icon on their row. They lose access to the project
+straight away. The same limits apply: you cannot remove someone who outranks you, and the owner cannot be
+removed.
+
+## Transfer ownership
+
+The owner can hand the project to another member with the crown icon on that member's row. Projammr asks you to
+confirm, because the change is not yours to undo: the other member becomes the owner, you become an admin, and
+only the new owner can transfer it back.
+
+<Aside type="caution">
+  Transferring ownership also hands over deleting the project. Only transfer it
+  to someone you trust with that.
+</Aside>
+
+Transferring is also how you make way to [delete your own account](/docs/guide/settings-and-profile/#deleting-your-account): Projammr will not delete an account that is
+the only owner of a project other people are still in.
+
+## Leave a project
+
+Any member can leave a project, whatever their role. Press Leave on your own row in Settings → Project → Members, or choose
+Leave project in the project menu at the top of the sidebar, and confirm. You lose access straight away and only
+an invite gets you back.
+
+The owner cannot leave while they are the only owner: [transfer ownership](#transfer-ownership) to another member
+first, then leave.

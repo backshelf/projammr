@@ -1,0 +1,52 @@
+---
+title: How the stack fits together
+description: The services Docker Compose runs, how a request reaches each of them, and where your data lives.
+sidebar:
+  order: 40
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+import StackDiagram from "@/components/docs/StackDiagram.astro";
+
+Your instance is five services in one `docker-compose.yml`, built from the repository's `Dockerfile` and configured
+by `.env`. Only one of them, the proxy, can be reached from outside the machine.
+
+<StackDiagram />
+
+## The proxy is the only way in
+
+The proxy publishes ports 80 and 443, and 443 over UDP for HTTP/3. Nothing else in the stack is published, so every
+client reaches the API the same way: the browser and the scanner both send their `/api` requests to the proxy, which
+forwards them straight to the API. `/media` is the address clients use for uploaded files, and the proxy rewrites it
+to the API's own `/static` route. Everything else goes to the web app.
+
+The web app renders pages on its own server. When it needs data for a page, it calls the API directly on the compose
+network at `http://api:8080` rather than going back out through the proxy.
+
+The proxy sets no limit on the size of a request. The API enforces `MAX_UPLOAD_MB` itself, so an upload that is too
+large is refused by the API with its own error.
+
+## Start order and health checks
+
+Each service waits for the one before it to report healthy:
+
+1. **db** is healthy once `pg_isready` answers.
+2. **api** starts when the database is healthy. It applies any pending migrations, then listens on port 8080. Its
+   health check calls its own `/api/health`, which answers 503 while the database is unreachable.
+3. **web** starts when the API is healthy. Its health check calls `/api/health` through the web app's own rewrite
+   to the API, so it passes only when the web app is up and can reach the API.
+4. **proxy** starts when the web app is healthy.
+
+The health checks for `api` and `web` are in the `Dockerfile`; the database's is in `docker-compose.yml`. Docker
+restarts these four services whenever they exit, and when Docker itself restarts, unless you stopped them.
+
+## Where your data lives
+
+The five named volumes in the diagram hold everything that outlives a container. Upgrading or recreating the
+containers leaves them alone, and so does `docker compose down`.
+
+<Aside type="danger">
+  `docker compose down -v` deletes the volumes too: the database, every upload, your backups and the CA your devices
+  trust.
+</Aside>

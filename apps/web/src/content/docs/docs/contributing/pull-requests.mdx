@@ -1,0 +1,72 @@
+---
+title: Pull requests
+description: How a change lands in Projammr — the branch, the pull request, review — and how AI is part of that process.
+sidebar:
+  order: 6
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+Every change from outside reaches `master` through a pull request on GitHub, reviewed and merged by the maintainer.
+
+## From branch to merge
+
+<Steps>
+
+1. **Branch off `master`**, one branch per change, named for the kind of change and what it does:
+
+   ```text
+   feat/session-structure-diff
+   fix/heatmap-overflow
+   ```
+
+   Work tracked in the project's issue tracker puts the issue's key in the name too:
+   `feat/PROJ-<n>-session-structure-diff`.
+
+2. **Make the change**, following the [conventions](/docs/contributing/conventions/), with tests for what it does
+   and [Conventional Commit](/docs/contributing/conventions/#commit-messages) messages.
+
+3. **Run the [checks](/docs/contributing/checks/)** until they are clean, and bring in anything that has landed on
+   `master` since you branched.
+
+4. **Open the pull request against `master`.** Its title is a Conventional Commit title, led by the issue key when
+   there is one: `PROJ-<n>: feat(server): session structure diff`.
+
+5. **The maintainer reviews it** and merges it on GitHub, or asks for changes. Push fixes as new commits on the
+   same branch.
+
+</Steps>
+
+Never force-push a branch that is under review, or rewrite history anyone else has seen.
+
+## The description
+
+The pull request's body is its technical description and nothing else: no template to fill in.
+
+- Start with a `# Summary`: one paragraph covering every change in the branch, leading with what matters most to
+  whoever uses the code (a new endpoint, a new component, a changed behaviour).
+- Then the detail, covering the whole branch, not just its latest commit.
+- When you push more work, rewrite the description so it still describes the whole branch, rather than appending a
+  note about what changed since.
+
+## Checks on the pull request
+
+GitHub Actions runs [every check](/docs/contributing/checks/#what-ci-runs) on each push to the pull request. All of
+them have to pass.
+
+## How AI is part of this
+
+Projammr is heavily AI-assisted, and you should know how before you contribute:
+
+- **AI coding agents write most of the repository:** the application code, the tests, the documentation, the plans
+  and issue descriptions the work is cut from, and the first pass of code review.
+- **One person directs it.** They set the product's direction, decide the design and architecture questions the
+  agents raise, approve each plan before production code is written, and read and merge every pull request.
+- **Review has limits.** Small fixes are committed straight to `master` without a pull request, and a large pull
+  request does not always get a line-by-line read. Assume any line may have been written by an AI and not read by a
+  person. The checks above run on every pull request and every push to `master` regardless.
+
+<Aside>
+  [How AI is used](/ai/) is the full statement. If you would rather not work on AI-written code, that page is there so
+  you can decide before you spend any time on it.
+</Aside>

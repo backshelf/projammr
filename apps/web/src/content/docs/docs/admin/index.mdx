@@ -1,0 +1,79 @@
+---
+title: Running your instance
+description: What an instance admin can do, where the instance's settings live, and how to make someone else an admin.
+sidebar:
+  order: 70
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Every Projammr instance has at least one admin: the person who looks after the accounts on it. As an admin you
+can see every account and how much it stores, open or close registration, hand someone a password reset link,
+disable an account, and make other people admins.
+
+Being an instance admin is separate from your role in a project. It gives you no access to anyone else's
+projects; to work in a project you still need to be one of its members.
+
+## Who the first admin is
+
+The first account created on a new instance becomes its admin. The sign-in page says so before you register:
+it reads "Create the first account" and explains that the account you create will administer the instance.
+Creating that account also closes registration, so nobody else can sign up until you open it again or invite
+them. [Registration](/docs/admin/registration/) covers both.
+
+## Open the instance's settings
+
+The instance's settings are one section of Settings. Choose **Settings** in the sidebar (or in the account menu at
+the foot of it; on a phone, the account sheet), or press <kbd>G</kbd> <kbd>,</kbd>, then **Instance** in the
+settings list. The section only appears for admins.
+
+It has these pages:
+
+- **Access**: whether anyone can create an account. See [Registration](/docs/admin/registration/).
+- **Users**: every account on the instance, with the actions an admin can take on each. See
+  [Accounts](/docs/admin/accounts/).
+- **Storage**: how much the instance stores in total, per project and per account. See
+  [Storage and version](/docs/admin/storage/).
+- **About**: the version of Projammr the instance runs.
+- **Member defaults**: what every member starts with until they choose their own, each of which you can lock.
+
+<Screenshot
+  id="admin-users"
+  alt="The Users page of the instance's settings, listing each account with its role, when it was last seen, its storage and its project count, and the Make admin, Disable and Create reset link actions"
+/>
+
+To anyone who is not an admin, the Instance section is a page that does not exist. The server checks the
+account's role on every admin request, so there is nothing to find by guessing the address.
+
+## Make someone an admin
+
+On the **Users** page, choose **Make admin** on their row. They become an admin straight away, but their browser
+may keep showing Settings without the **Instance** section for up to five minutes, until their session
+refreshes. Signing out and back in shows it at once.
+
+**Remove admin** takes the role away again. Removing it signs that person out everywhere, so they cannot keep
+the instance's settings open after losing the role.
+
+An instance always keeps at least one admin who can sign in. On the last one, **Remove admin** and **Disable**
+are greyed out, with the reason "The instance needs at least one admin who can sign in."
+
+### From the command line
+
+If you cannot sign in as an admin (you have lost the only admin password, say), whoever runs the server can
+promote an existing account with the `make-admin` script. It takes the account's email address, makes that
+account an admin and re-enables it if it was disabled. It does not create an account: the person has to have
+signed up already.
+
+```sh
+docker compose exec api bun dist/scripts/make-admin.js you@example.com
+```
+
+A companion script, `reset-link`, prints a password reset link for an account from the same place. Both are
+for the person with access to the server; [running them is part of self-hosting](/docs/self-hosting/operations/#admin-commands).
+
+<Aside type="note">
+  An admin cannot delete someone else's account. Disabling it is the admin's
+  tool; deleting an account is something only its holder can do, from their own
+  profile.
+</Aside>

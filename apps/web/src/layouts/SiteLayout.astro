@@ -1,0 +1,71 @@
+---
+/* The shell every marketing page renders in: the head (meta, canonical URL,
+   social card, the two faces the first viewport paints preloaded), the theme
+   script, the header and footer, and the grain the token layer puts on
+   <body>. A page lit by a cover passes that cover's accent variables in
+   `art`; with none the page stays grayscale, per the Borrowed Light Rule.
+   The `atmosphere` slot takes what paints behind the top of the page, the
+   masthead's blurred cover, so it runs up under the header; `main` sits a
+   layer above it. */
+import displayFont from "@workspace/ui/fonts/Redaction35.woff2?url";
+import bodyFont from "@workspace/ui/fonts/SplineSansMono.woff2?url";
+import type { ArtVars } from "@workspace/ui/lib/art";
+
+import SiteFooter from "@/components/chrome/SiteFooter.astro";
+import SiteHeader from "@/components/chrome/SiteHeader.astro";
+import ThemeScript from "@/components/theme/ThemeScript.astro";
+import { SITE } from "@/site";
+
+import "@/styles/site.css";
+
+type Props = {
+  title: string;
+  description: string;
+  art?: ArtVars;
+};
+
+const { title, description, art } = Astro.props;
+const fullTitle = title === SITE.name ? title : `${title} · ${SITE.name}`;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <link
+      rel="preload"
+      href={displayFont}
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href={bodyFont}
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <ThemeScript />
+  </head>
+  <body class="relative min-h-svh bg-paper text-ink antialiased" style={art}>
+    <slot name="atmosphere" />
+    <SiteHeader />
+    <main id="main" class="relative z-1">
+      <slot />
+    </main>
+    <SiteFooter />
+  </body>
+</html>

@@ -1,0 +1,142 @@
+import { useId, useMemo, useState, type JSX } from "react";
+import { IconArrowUpRight } from "@tabler/icons-react";
+import { Button } from "@workspace/ui/components/button";
+import { useFormat } from "@workspace/ui/components/format-provider";
+import { Empty, EmptyTitle } from "@workspace/ui/components/empty";
+import {
+  Row,
+  RowMain,
+  RowMeta,
+  RowTitle,
+  Rows,
+} from "@workspace/ui/components/layout/rows";
+import type { Formatters } from "@workspace/ui/lib/formatters";
+import { cn } from "@workspace/ui/lib/utils";
+
+import { call } from "../bridge";
+import { ErrorLine } from "../error-line";
+import { useFocusTarget } from "../focus-target";
+import type { RenderCard, RepoRow } from "../ipc";
+import { usePanelActions } from "../panel-actions";
+import { PanelHead } from "../panel-head";
+import { PanelInput } from "../panel-input";
+import { matching, recentFirst } from "../repo-list";
+import { useCommand } from "../use-command";
+import { useOpenBackfill } from "../use-open-backfill";
+import { RenderBand } from "../renders/render-list";
+
+const NO_RENDERS: readonly RenderCard[] = [];
+
+/** The repos dit tracks, newest first and filtered as you type; the first-run line when there are none. */
+export function Repos({
+  repos,
+  renders = NO_RENDERS,
+}: {
+  repos: RepoRow[];
+  /** The renders waiting: with no set open, their cards are still the way to decide them. */
+  renders?: readonly RenderCard[];
+}): JSX.Element {
+  const { nav } = usePanelActions();
+  const openBackfill = useOpenBackfill();
+  const focusTarget = useFocusTarget();
+  const [filter, setFilter] = useState("");
+  const ordered = useMemo(() => recentFirst(repos), [repos]);
+  const shown = useMemo(() => matching(ordered, filter), [ordered, filter]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PanelHead title="Repos" back={nav === "repos"} />
+      <RenderBand cards={renders} />
+      {repos.length === 0 ? (
+        <Empty className="p-4">
+          <EmptyTitle>
+            Open a set in Live and dit will offer to track its project, or bring
+            in all your projects at once.
+          </EmptyTitle>
+          <Button variant="outline" onClick={() => void openBackfill()}>
+            Bring in projects…
+          </Button>
+        </Empty>
+      ) : (
+        <>
+          <PanelInput
+            ref={focusTarget}
+            type="search"
+            aria-label="Filter repos"
+            placeholder="Filter repos"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            spellCheck={false}
+          />
+          {shown.length === 0 ? (
+            <p className="text-small text-ink-soft">
+              No repo matches “{filter.trim()}”.
+            </p>
+          ) : (
+            <Rows as="ul" className="border-b border-rule">
+              {shown.map((repo) => (
+                <RepoItem key={repo.path} repo={repo} />
+              ))}
+            </Rows>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function RepoItem({ repo }: { repo: RepoRow }): JSX.Element {
+  const titleId = useId();
+  const format = useFormat();
+  const { run, error } = useCommand();
+  const unreachable = repo.unreachable !== null;
+
+  return (
+    <Row
+      as="li"
+      className="flex-wrap items-start px-0 [contain-intrinsic-size:auto_3rem] [content-visibility:auto]"
+    >
+      <RowMain>
+        <RowTitle id={titleId} className={cn(unreachable && "text-ink-soft")}>
+          {repo.name}
+        </RowTitle>
+        <RowMeta
+          title={repo.path}
+          className={cn((unreachable || repo.busy) && "whitespace-normal")}
+        >
+          {repoMeta(repo, format)}
+        </RowMeta>
+      </RowMain>
+      {repo.webPath !== null && (
+        <Button
+          variant="link"
+          aria-describedby={titleId}
+          className="shrink-0 gap-0.5 px-0"
+          onClick={() =>
+            void run(() => call("open_web", { path: repo.webPath }))
+          }
+        >
+          Open on the web
+          <IconArrowUpRight aria-hidden />
+        </Button>
+      )}
+      <ErrorLine error={error} />
+    </Row>
+  );
+}
+
+/** The row's second line: why it cannot be opened, else what it last did, then whether another writer holds it. */
+function repoMeta(repo: RepoRow, format: Formatters): string {
+  const parts: string[] = [];
+  if (repo.unreachable !== null) {
+    parts.push(`Can't open the folder: ${repo.unreachable}`);
+  } else if (repo.lastCommit) {
+    parts.push(
+      `${repo.lastCommit.message} · ${format.relative(repo.lastCommit.at)}`
+    );
+  } else {
+    parts.push("No commits yet");
+  }
+  if (repo.busy) parts.push("waiting for repo");
+  return parts.join(" · ");
+}

@@ -1,0 +1,23 @@
+---
+/* The band a marketing page ends on: one line that sums the page up, then
+   whatever the visitor can do next, passed as the default slot. */
+import Band from "@/components/marketing/Band.astro";
+import type { CoverKey } from "@/data/covers";
+
+type Props = { id: string; title: string; cover?: CoverKey };
+
+const { id, title, cover } = Astro.props;
+const headingId = `${id}-title`;
+---
+
+<Band id={id} cover={cover} labelledby={headingId} class="py-28 phone:py-20">
+  <div class="flex flex-col items-start gap-7">
+    <h2
+      id={headingId}
+      class="max-w-[26ch] text-subtitle/[1.2] tracking-[-0.02em] text-balance text-ink phone:text-section/[1.25]"
+    >
+      {title}
+    </h2>
+    <slot />
+  </div>
+</Band>

@@ -1,0 +1,30 @@
+---
+/* One stretch of a page lit by one cover: its accent on everything inside,
+   and the page wash's light thrown behind it, faded out at both edges so the
+   next band's hue never meets this one on a line. With no cover the band
+   takes the page's own accent and throws no light of its own. */
+import BandLight from "@/components/marketing/BandLight.astro";
+import { coverArt, type CoverKey } from "@/data/covers";
+
+type Props = {
+  cover?: CoverKey;
+  id?: string;
+  /** The heading that names the band, for its landmark. */
+  labelledby?: string;
+  class?: string;
+};
+
+const { cover, id, labelledby, class: className } = Astro.props;
+---
+
+<section
+  id={id}
+  aria-labelledby={labelledby}
+  class:list={["band px-(--gutter)", className]}
+  style={cover ? coverArt(cover) : undefined}
+>
+  {cover && <BandLight />}
+  <div class="mx-auto max-w-(--page)">
+    <slot />
+  </div>
+</section>

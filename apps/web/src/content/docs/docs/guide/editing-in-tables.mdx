@@ -1,0 +1,150 @@
+---
+title: Selecting and editing in tables
+description: Peek at a row, add rows in place, edit cells like a spreadsheet, and change many rows at once.
+sidebar:
+  order: 16
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+A table is also where you change things quickly: look inside a row without leaving the list, type into cells,
+paste from a spreadsheet, and act on a whole selection at once. Everything here except peek needs an editor,
+admin or owner; a viewer can still look, peek, sort, filter and copy.
+
+## Peek
+
+Peek opens a row in a panel beside the table, so you can look at a track, collection or session without losing
+your place.
+
+- **To open it**, select the row's **ID**, or the open button among the row's actions.
+- **To move through the table**, use the arrows at the top of the panel, or <kbd>←</kbd> and <kbd>→</kbd>. The
+  panel counts where you are, such as "4 / 50".
+- **To close it**, select the **×**. Clicking elsewhere leaves it open, so you can keep working in the table.
+
+The panel shows the row's cover, title, status and priority, its key details (for a track: its collections, BPM,
+key, ID, ISRC and ISWC) and what it is connected to. **Open full page** goes to the row's own page. The page's
+address includes the peeked row, so you can send someone a link that opens straight to it.
+
+## Moving around with the keyboard
+
+When a table has your attention (you have clicked in it, or it is the only thing on the page), these keys work:
+
+| Key              | Does                                   |
+| ---------------- | -------------------------------------- |
+| <kbd>J</kbd>     | Move to the next row                   |
+| <kbd>K</kbd>     | Move to the previous row               |
+| <kbd>Enter</kbd> | Open the row's page                    |
+| <kbd>O</kbd>     | Peek the row                           |
+| <kbd>X</kbd>     | Select or deselect the row             |
+| <kbd>Esc</kbd>   | Let go of the row and clear the selection |
+
+## Row actions
+
+Hover a row to show its actions at the right-hand edge: set its status, peek it, copy a link to it, and **⋯** for
+the rest. Right-clicking the row opens the same list:
+
+- **Open** peeks the row, and **Open page** goes to its page.
+- **Set status** (tracks and collections).
+- **Add to collection** (tracks).
+- **Rename** changes its title in the peek panel.
+- **Copy link** copies the address of its page.
+- **Move to project…** sends it to another project. See [Moving to another project](#moving-to-another-project).
+- **Delete**.
+
+If the row is part of a selection, the actions apply to the whole selection.
+
+## Adding rows
+
+Below the rows, **+ Add track** (or collection, or session) opens a blank row at the foot of the table.
+
+<Steps>
+
+1. Select **+ Add track**.
+
+2. Type the title. For sessions it is the name. That is the only thing a new row needs; fill in any other cells
+   you want now, or later.
+
+3. Press <kbd>Enter</kbd>, or select the **+** at the end of the row. Press <kbd>Esc</kbd> to give up on it.
+
+</Steps>
+
+When the table is grouped, each group has its own **+ Add**, which fills that group's value in for you. Adding a
+track under the "Mixing" status group, for instance, makes a track that is already at Mixing.
+
+## Editing cells
+
+The cells of a table work much like a spreadsheet.
+
+- **Select a cell** by clicking it. The arrow keys move to the next cell, and <kbd>Shift</kbd> with an arrow key
+  selects a block of cells.
+- **Edit a cell** by clicking it again, double-clicking it, pressing <kbd>Enter</kbd>, or just starting to type,
+  which replaces what was there.
+- **Keep the change** with <kbd>Enter</kbd>. Pressing <kbd>Esc</kbd> or clicking away throws the change away.
+- **Status** and other menus save as soon as you pick. A tick box, like **Explicit**, flips as soon as you press
+  it.
+
+<Aside type="caution">
+  Unlike most spreadsheets, clicking away from a cell you are typing in does not save it. Press
+  <kbd>Enter</kbd> to keep what you typed.
+</Aside>
+
+Which cells can be edited depends on the table. On tracks: the title, artists, priority, status, ISRC, ISWC,
+explicit and, on a collection's page, the running-order number. Key and BPM come from the audio and the session,
+so they are not typed in.
+
+### Copy and paste
+
+- <kbd>Ctrl</kbd> <kbd>C</kbd> (<kbd>⌘</kbd> <kbd>C</kbd> on a Mac) copies the selected cells, ready to paste into
+  a spreadsheet such as Excel, Numbers or Google Sheets.
+- <kbd>Ctrl</kbd> <kbd>V</kbd> pastes a block copied from a spreadsheet, starting at the selected cell and filling
+  across and down.
+- <kbd>Ctrl</kbd> <kbd>A</kbd> selects every loaded cell.
+
+Each pasted value has to suit its column: a priority column takes a priority, a date column a date. Values that do
+not fit, and columns you cannot edit, are skipped, and a message says how many.
+
+Every edit and every paste saves as soon as you make it.
+
+## Changing many rows at once
+
+Tick the box at the start of a row to select it. Hold <kbd>Shift</kbd> and tick another to select every row
+between them, or tick the box in the header to select every row loaded so far.
+
+<Screenshot
+  id="tracks-table-bulk"
+  alt="Three tracks selected in the tracks table, with the bulk bar offering status, collection, label, priority, move and delete"
+/>
+
+The bulk bar appears, saying how many are selected, with:
+
+- **Set status** (tracks and collections)
+- **Add to collection** (tracks)
+- **Labels**, to **Add label…** or **Remove label…**
+- **Priority**
+- **Move to project…**
+- **Delete**
+
+The **×** clears the selection.
+
+### Selecting every matching row
+
+The header's box selects only the rows loaded so far. When you have ticked all of those and the table holds more,
+the bulk bar offers **Select all matching**. Choose it, and the bar's actions apply to every row that matches the
+table's current search and filters, loaded or not. **Add to collection** is not available for a selection this
+large.
+
+## Moving to another project
+
+**Move to project…** sends rows to another project you are an editor in. You need to be an editor, admin or owner
+of both projects. What travels with them depends on what you move:
+
+- **Tracks:** sessions and audio that only these tracks use move with them.
+- **Collections:** tracks that are only in this collection move with it. Tracks it shares with another collection
+  stay behind and leave it.
+- **Sessions:** their link to a track is cleared, and attachments only these sessions use move with them.
+
+## Deleting rows
+
+**Delete** asks first, naming the row ("Delete "Kindling"?") or counting the selection ("Delete 3 tracks?"). A
+deleted row is gone for good; there is no bin to restore it from.

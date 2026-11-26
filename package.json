@@ -1,0 +1,42 @@
+{
+  "name": "projammr-monorepo",
+  "version": "0.9.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "lint:ci": "turbo lint -- --max-warnings 0",
+    "format": "turbo format",
+    "typegen": "turbo typegen",
+    "release": "bun packages/release/src/release.ts",
+    "version:sync": "bun packages/release/src/sync-version.ts",
+    "version:check": "bun packages/release/src/sync-version.ts --check",
+    "typecheck": "turbo typegen typecheck",
+    "test": "turbo run test --filter=!server",
+    "test:ci": "turbo run test --filter=!server --concurrency=1",
+    "audit": "bun audit --audit-level=high --ignore GHSA-vfj7-8cjw-p6xm",
+    "knip": "knip"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "devDependencies": {
+    "@workspace/typescript-config": "workspace:*",
+    "knip": "^6.44.2",
+    "prettier": "^3.9.10",
+    "prettier-plugin-astro": "^1.1.2",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "turbo": "^2.11.10",
+    "typescript": "^7.1.0-dev.20261010.1"
+  },
+  "overrides": {
+    "form-data": "^4.0.6"
+  },
+  "trustedDependencies": [
+    "esbuild"
+  ],
+  "packageManager": "bun@1.4.3"
+}

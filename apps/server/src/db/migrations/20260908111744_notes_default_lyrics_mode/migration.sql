@@ -1,0 +1,1 @@
+ALTER TABLE "notes" ALTER COLUMN "lyrics_mode" SET DEFAULT true;

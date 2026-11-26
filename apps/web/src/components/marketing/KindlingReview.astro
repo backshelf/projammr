@@ -1,0 +1,60 @@
+---
+/* A track under review, from the demo catalogue: Kindling's first mix with
+   the comments left on it, the final with the first drawn behind it and the
+   playhead stopped where a comment was answered, and both on the loudness
+   scale with the caret on the final. Every figure is the server's own
+   (`@/data/kindling`); every drawing is the app's own gear. */
+import { RailLabel } from "@workspace/ui/components/layout/rail";
+import { LoudnessReading } from "@workspace/ui/components/loudness/loudness-reading";
+import { LoudnessScale } from "@workspace/ui/components/loudness/loudness-scale";
+import { formatLufs, formatTruePeakValue } from "@workspace/ui/lib/loudness";
+import { peakCeiling } from "@workspace/ui/lib/waveform-bars";
+
+import ProofCaption from "@/components/marketing/ProofCaption.astro";
+import VersionWave from "@/components/marketing/VersionWave.astro";
+import { KINDLING } from "@/data/kindling";
+
+type Props = { class?: string };
+
+const { class: className } = Astro.props;
+
+/** The level streaming services normalise to, where the app's meters draw
+ *  their reference line for a viewer who has not chosen their own. */
+const STREAMING_REFERENCE_LUFS = -14;
+
+const { mix, final, durationMs } = KINDLING;
+const scale = peakCeiling(mix.bars, final.bars);
+const answered = final.pins[0]!.positionMs / durationMs;
+const versions = [mix, final];
+---
+
+<figure class:list={["flex min-w-0 flex-col gap-8", className]}>
+  <ProofCaption
+    name={KINDLING.title}
+    detail={`${KINDLING.collection} · ${versions.length} versions`}
+  />
+  <VersionWave version={mix} durationMs={durationMs} scale={scale} />
+  <VersionWave
+    version={final}
+    durationMs={durationMs}
+    scale={scale}
+    compare={mix}
+    progress={answered}
+  />
+  <div class="flex flex-col gap-3">
+    <RailLabel action={`${versions.length} versions`}>Loudness</RailLabel>
+    <LoudnessReading lufs={final.lufs}>
+      <span>LUFS</span>
+      <span>TP {formatTruePeakValue(final.truePeakDb)}</span>
+    </LoudnessReading>
+    <LoudnessScale
+      marks={versions.map((v) => ({
+        lufs: v.lufs,
+        label: `v${v.version} · ${v.name}`,
+      }))}
+      reference={STREAMING_REFERENCE_LUFS}
+      pointer={final.lufs}
+      label={`Loudness ${formatLufs(final.lufs)} LUFS, across ${versions.length} measured versions`}
+    />
+  </div>
+</figure>

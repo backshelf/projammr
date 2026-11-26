@@ -1,0 +1,317 @@
+/* --- Page atmosphere — the wash behind an entity page, and the grain ------ */
+
+/* The light the artwork throws onto the page: a fixed colour field behind
+   everything in the page wrapper, rendered by PageWash and coloured from the
+   accent that wrapper carries. It is a field of light rather than a picture
+   of one — blurring the cover bitmap leaves a dark block wherever the source
+   is dense — and it is lit from one place. The source sits above the top
+   edge, over the title, and everything else decays away from it.
+
+   The field is one hue at three lightnesses, never a second hue. The core is
+   the accent at a wash lightness, the deep tone sits below it and the lift
+   above it, all at the accent's own chroma, so a page's wash is always the
+   colour of its artwork and nothing else. The lightness is per theme: over
+   paper the field is a pale luminous tint, over dark paper a low glow.
+
+   The field is dithered rather than smooth. A gradient of this size across a
+   tint this faint changes by one 8-bit step every few pixels, and each step
+   is a visible contour; the mask below multiplies every pixel's alpha by a
+   little noise, which scatters the contours into grain. The wrapper is an
+   isolated stacking context, so the negative z-index puts the field behind
+   the page's content without escaping under the app chrome. */
+/* Type set over an artwork field rather than over paper. The shadow is sized
+   to the type and tinted with the paper it would otherwise sit on, which buys
+   the contrast back without lightening the field underneath. Every surface
+   that puts its own text over a cover — the player card, the docked
+   mini-player — reads the same treatment from here. */
+.on-art {
+  text-shadow: 0 1px 3px color-mix(in oklab, var(--paper) 70%, transparent);
+}
+
+/* Secondary type over the same field. --ink-soft is pitched against paper and
+   sits too close to a cover to stay legible, so the byline steps up here
+   rather than in each surface that carries one. */
+.on-art-soft {
+  color: color-mix(in oklab, var(--ink) 82%, transparent);
+}
+
+/* The frame a masthead's blurred cover sits in, for every surface that
+   draws one: the client's entity pages and the public site's pages. The art
+   (`.masthead__art`) runs `--bleed` above the top edge, off the scroll, and
+   a mask fades it to nothing before the bottom of its band. The scrim
+   (`.masthead__scrim`) is the legibility floor under the type, and it is
+   not flat: it lifts at the top for the breadcrumb, dips so the art stays
+   vivid, and fades fully out rather than ending on a line. Art and scrim
+   end at the same edge (DESIGN.md's Single Seam Rule). `--masthead-h` is
+   the band's height, which each surface sets for its own pages. The blur,
+   saturation and drift inside the art are in motion.css. */
+.masthead__art {
+  --bleed: 64px;
+  --fade: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 calc(var(--bleed) + 8%),
+    rgb(0 0 0 / 0.9) 43%,
+    rgb(0 0 0 / 0.31) 62%,
+    rgb(0 0 0 / 0.09) 82%,
+    transparent 96%
+  );
+  position: absolute;
+  inset-inline: -12%;
+  top: calc(-1 * var(--bleed));
+  height: calc(var(--masthead-h) + var(--bleed));
+  pointer-events: none;
+  -webkit-mask-image: var(--fade);
+  mask-image: var(--fade);
+}
+
+.masthead__scrim {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: var(--masthead-h);
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--paper) 20%, transparent) 0%,
+    color-mix(in oklab, var(--paper) 20%, transparent) 10%,
+    color-mix(in oklab, var(--paper) 34%, transparent) 24%,
+    color-mix(in oklab, var(--paper) 52%, transparent) 36%,
+    color-mix(in oklab, var(--paper) 58%, transparent) 46%,
+    color-mix(in oklab, var(--paper) 34%, transparent) 58%,
+    transparent 72%
+  );
+}
+
+.dark .masthead__scrim {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--paper) 18%, transparent) 0%,
+    color-mix(in oklab, var(--paper) 18%, transparent) 10%,
+    color-mix(in oklab, var(--paper) 30%, transparent) 24%,
+    color-mix(in oklab, var(--paper) 50%, transparent) 36%,
+    color-mix(in oklab, var(--paper) 56%, transparent) 46%,
+    color-mix(in oklab, var(--paper) 32%, transparent) 58%,
+    transparent 72%
+  );
+}
+
+@media (width < 768px) {
+  .masthead__art {
+    --bleed: 48px;
+  }
+}
+
+.wash {
+  --wash-l: 0.8;
+  --wash-c-max: 0.15;
+  --wash-core: oklch(from var(--art) var(--wash-l) min(c, var(--wash-c-max)) h);
+  --wash-deep: oklch(
+    from var(--art) calc(var(--wash-l) - 0.12) min(c, var(--wash-c-max)) h
+  );
+  --wash-lift: oklch(
+    from var(--art) calc(var(--wash-l) + 0.08) min(c, var(--wash-c-max)) h
+  );
+  --key-a: 0.58;
+  --lobe-a: 0.3;
+
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
+
+  /* The key light, drawn on the container itself. Two ellipses off the top
+     edge: the core, wide and low over where the title sits, and a smaller,
+     paler one at the top right that runs under the rail. Both fall off
+     through a bell-shaped run of stops — a straight ramp to transparent ends
+     on a visible rim and reads as a disc rather than as light. */
+  background:
+    radial-gradient(
+      ellipse 82vw 66vh at 31vw 6vh,
+      oklch(from var(--wash-core) l c h / var(--key-a)) 0%,
+      oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.7)) 26%,
+      oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.36)) 52%,
+      oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.1)) 78%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 58vw 54vh at 88vw -2vh,
+      oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.72)) 0%,
+      oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.46)) 30%,
+      oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.18)) 60%,
+      oklch(from var(--wash-lift) l c h / calc(var(--key-a) * 0.04)) 84%,
+      transparent 100%
+    );
+
+  /* The dither. A tile of fine fractal noise whose alpha runs 0.84–1, so the
+     mask takes up to 16% off any pixel at random. Only alpha is set — a mask
+     image reads nothing else — and the tile is stitched so it repeats without
+     a seam. */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0 0 0 0.84'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23d)'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='d' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0 0 0 0.84'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23d)'/%3E%3C/svg%3E");
+}
+
+.dark .wash {
+  --wash-l: 0.42;
+  --wash-c-max: 0.13;
+  --key-a: 0.44;
+  --lobe-a: 0.26;
+}
+
+/* The haze the light moves through: two large, faint, tilted ellipses lower
+   on the page, one in the deep tone and one in the lift, so that as they
+   pass over each other and over the key light the field deepens and pales
+   rather than only brightening. Their resting places (the 0% keyframe, and
+   all reduced motion ever shows) are a composition in their own right: the
+   deep one low on the reading side, the pale one out to the right under the
+   rail. */
+.wash__lobe {
+  position: absolute;
+  width: var(--lobe-w);
+  height: var(--lobe-h);
+  border-radius: 50%;
+  transform: rotate(var(--lobe-tilt));
+  background: radial-gradient(
+    closest-side,
+    oklch(from var(--lobe-colour) l c h / var(--lobe-a)) 0%,
+    oklch(from var(--lobe-colour) l c h / calc(var(--lobe-a) * 0.72)) 28%,
+    oklch(from var(--lobe-colour) l c h / calc(var(--lobe-a) * 0.34)) 54%,
+    oklch(from var(--lobe-colour) l c h / calc(var(--lobe-a) * 0.09)) 78%,
+    transparent 100%
+  );
+}
+
+.wash__lobe--deep {
+  --lobe-colour: var(--wash-deep);
+  --lobe-w: 86vmax;
+  --lobe-h: 58vmax;
+  --lobe-tilt: -16deg;
+  left: -24vmax;
+  top: 48vh;
+}
+
+.wash__lobe--lift {
+  --lobe-colour: var(--wash-lift);
+  --lobe-w: 74vmax;
+  --lobe-h: 52vmax;
+  --lobe-tilt: 22deg;
+  right: -30vmax;
+  top: 26vh;
+}
+
+/* Each lobe travels a slow closed loop of its own — one clockwise, one
+   against it — with periods that share no factor, so the pair never returns
+   to the same arrangement and the field never visibly repeats. Linear
+   timing keeps the speed constant through every waypoint; an eased curve
+   would settle at each one and read as breathing. Only `transform` moves,
+   so the lobes are composited without repainting. The negative delay on the
+   second starts it partway round rather than in step with the first. */
+@keyframes wash-drift-a {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(var(--lobe-tilt)) scale(1);
+  }
+  20% {
+    transform: translate3d(6vw, -7vh, 0) rotate(calc(var(--lobe-tilt) + 5deg))
+      scale(1.06);
+  }
+  40% {
+    transform: translate3d(11vw, 1vh, 0) rotate(calc(var(--lobe-tilt) + 8deg))
+      scale(1.1);
+  }
+  60% {
+    transform: translate3d(5vw, 9vh, 0) rotate(calc(var(--lobe-tilt) + 3deg))
+      scale(1.03);
+  }
+  80% {
+    transform: translate3d(-5vw, 5vh, 0) rotate(calc(var(--lobe-tilt) - 4deg))
+      scale(0.96);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--lobe-tilt)) scale(1);
+  }
+}
+
+@keyframes wash-drift-b {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(var(--lobe-tilt)) scale(1);
+  }
+  20% {
+    transform: translate3d(-8vw, 6vh, 0) rotate(calc(var(--lobe-tilt) - 6deg))
+      scale(1.04);
+  }
+  40% {
+    transform: translate3d(-12vw, -3vh, 0) rotate(calc(var(--lobe-tilt) - 9deg))
+      scale(0.95);
+  }
+  60% {
+    transform: translate3d(-4vw, -10vh, 0) rotate(calc(var(--lobe-tilt) - 2deg))
+      scale(1.02);
+  }
+  80% {
+    transform: translate3d(6vw, -4vh, 0) rotate(calc(var(--lobe-tilt) + 5deg))
+      scale(1.08);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--lobe-tilt)) scale(1);
+  }
+}
+
+.wash__lobe--deep {
+  animation: wash-drift-a 67s linear infinite;
+}
+
+.wash__lobe--lift {
+  animation: wash-drift-b 103s linear infinite;
+  animation-delay: -41s;
+}
+
+/* A fixed grain over the whole page — tape hiss, print stock. Pure CSS,
+   identical in both themes, fixed so it doesn't swim while scrolling. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: calc(var(--grain-opacity) * 0.055);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Film grain (`data-grain` on <html>): half of each theme's strength, or
+   none. `off` removes the layer outright rather than compositing a
+   transparent one over the whole page. */
+:root[data-grain="subtle"] {
+  --grain-opacity: 0.25;
+}
+
+:root.dark[data-grain="subtle"] {
+  --grain-opacity: 0.375;
+}
+
+:root[data-grain="off"] {
+  --grain-opacity: 0;
+}
+
+:root[data-grain="off"] body::after {
+  content: none;
+}
+
+/* Artwork glow (`data-glow` on <html>), the page's half: `soft` dims the
+   wash's key light and haze to six tenths, `off` takes the wash and the
+   masthead's art field away and leaves the room lit only by the accent. The
+   field's own half of `soft` is in motion.css, beside its tuning. */
+:root[data-glow="soft"] .wash {
+  --key-a: 0.35;
+  --lobe-a: 0.18;
+}
+
+:root.dark[data-glow="soft"] .wash {
+  --key-a: 0.26;
+  --lobe-a: 0.16;
+}
+
+:root[data-glow="off"] :is(.wash, .masthead__art) {
+  display: none;
+}

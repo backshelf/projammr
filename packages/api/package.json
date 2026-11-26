@@ -1,0 +1,33 @@
+{
+  "name": "@workspace/api",
+  "version": "0.9.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./api": "./src/api.d.ts",
+    "./lib/*": "./src/*.ts"
+  },
+  "scripts": {
+    "format": "bun --bun prettier --write \"**/*.ts\"",
+    "typecheck": "bun check",
+    "lint": "bun --bun eslint .",
+    "test": "bun test --parallel --timeout=30000"
+  },
+  "dependencies": {
+    "@better-auth/oauth-provider": "^1.7.19",
+    "better-auth": "^1.7.19",
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/node": "^26.6.6",
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/settings": "workspace:*",
+    "@workspace/test": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "eslint": "^10.14.0",
+    "server": "workspace:*",
+    "typescript": "^7.1.0-dev.20261010.1"
+  }
+}

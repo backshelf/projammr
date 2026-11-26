@@ -1,0 +1,115 @@
+---
+title: Operations
+description: Admin commands, rotating the notes key, tuning and logs, and fixing a media volume the API cannot write to.
+sidebar:
+  order: 80
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The jobs that keep your instance running from the command line: recovering an admin account, rotating the key your
+notes are encrypted under, tuning the API and reading its logs.
+
+## Admin commands
+
+The API image carries two scripts for when the web app cannot help you, such as when the only admin is locked out.
+Run them in the running API container, with the address of the account they act on.
+
+### Make an account an instance admin
+
+```sh
+docker compose exec api bun dist/scripts/make-admin.js you@example.com
+```
+
+This promotes an existing account to instance admin, and enables it again if it was disabled: the way back for an
+instance whose only admin has left, disabled their own account, or forgotten their password with no way to reset it.
+The account has to exist already; the script does not create one. An account promoted while signed in may need to
+sign in again before [the admin pages](/docs/admin/) appear.
+
+### Print a password reset link
+
+```sh
+docker compose exec api bun dist/scripts/reset-link.js you@example.com
+```
+
+This prints a one-time link that sets a new password for the account. The link works for one hour, and the script also
+clears any sign-in lockout on the address. [An instance admin can issue the same link from the web app](/docs/admin/accounts/#create-a-password-reset-link); this is the
+route for when the admin is the one who cannot sign in.
+
+## Rotating the notes key
+
+`NOTES_MASTER_KEY` is the root of the keys every note is encrypted under. Rotating it re-wraps each note's own key
+under a new root, and takes four steps:
+
+1. In `.env`, put the new key in `NOTES_MASTER_KEY` and the old one in `NOTES_MASTER_KEY_PREVIOUS`. While
+   `NOTES_MASTER_KEY_PREVIOUS` is set, a note that has not been re-wrapped yet still opens under the old key.
+2. Raise `NOTES_KEY_VERSION` by one (it is `1` until you have rotated once, so set it to `2`). That is how the API
+   tells notes on the old key from notes on the new one.
+3. Restart the API so it picks the three variables up:
+
+   ```sh
+   docker compose up -d
+   ```
+
+4. Re-wrap the notes:
+
+   ```sh
+   docker compose exec api bun dist/scripts/rotate-notes-key.js
+   ```
+
+   It re-wraps notes in batches of 500, each batch in its own transaction, so it is safe to stop and run again.
+   When it finishes it logs how many notes are still on the old key; once that is 0, remove
+   `NOTES_MASTER_KEY_PREVIOUS` from `.env` and run `docker compose up -d` again.
+
+Leave `NOTES_KEY_VERSION` at its new value afterwards. It is not temporary: it names the key generation the notes are
+wrapped under, so the next rotation raises it again.
+
+Without Docker, the same steps work from `apps/server`: run `bun scripts/rotate-notes-key.ts` for step 4.
+
+### If the API refuses to start
+
+The API checks at startup that `NOTES_MASTER_KEY` opens the notes stored under `NOTES_KEY_VERSION`. When it does not,
+the API exits with `NOTES_MASTER_KEY cannot open the notes stored under NOTES_KEY_VERSION …` instead of starting
+and failing on each note later. It means `NOTES_MASTER_KEY` was changed without a rotation, or the key is not the
+one the notes were written under. If you meant to rotate, follow the four steps above: the old key goes in
+`NOTES_MASTER_KEY_PREVIOUS` and `NOTES_KEY_VERSION` goes up by one. If you did not, put the original
+`NOTES_MASTER_KEY` back. With no notes on the current version there is nothing to check, and the API starts.
+
+It also checks that no note is left on an older key with nothing to open it. When some are, the API exits with
+`… stored under a NOTES_KEY_VERSION below the configured …`, naming how many: a rotation was left unfinished, or
+`NOTES_MASTER_KEY_PREVIOUS` was removed before the rotate script reported 0. Put the old key back in
+`NOTES_MASTER_KEY_PREVIOUS`, run `docker compose up -d`, then run the rotate script from step 4 again, and remove
+`NOTES_MASTER_KEY_PREVIOUS` only once it reports 0.
+
+## Tuning and logs
+
+These variables are not in `.env.example`, but `docker-compose.yml` passes each one to the API when `.env` sets it.
+Left unset, the API's own default applies.
+
+| Variable         | Default | What it does                                                                                        |
+| ---------------- | ------- | --------------------------------------------------------------------------------------------------- |
+| `DB_POOL_MAX`    | `20`    | The most database connections the API holds open at once.                                           |
+| `LOG_LEVEL`      | `info`  | The lowest level the API logs: `debug`, `info`, `warn` or `error`. It seeds the instance's **Log level** setting, which an admin can change in the app. |
+| `LOG_FORMAT`     | text    | `json` writes each log line as one JSON object, for a log collector; anything else writes plain text. |
+| `MIGRATE_BACKUP` | on      | `0` skips the [pre-migrate dump](/docs/self-hosting/backups/#the-pre-migrate-dump).                 |
+
+Two more tuning variables, `MEDIA_CONCURRENCY` and `JOB_RETRY_DELAY_MS`, are in `.env.example`; see
+[Configuration](/docs/self-hosting/configuration/), which also lists the variables that
+[seed a setting](/docs/self-hosting/configuration/#variables-that-seed-a-setting).
+
+<Aside type="caution">
+  At `debug`, the API logs the body of every email it sends, and those carry password reset and verification links.
+  Keep `LOG_LEVEL` at `info` or above unless you are chasing a problem.
+</Aside>
+
+Each service logs to Docker. Follow one with `docker compose logs -f <service>`, for example
+`docker compose logs -f api`.
+
+## Uploads fail with EACCES
+
+The API runs as the `bun` user. A `static-data` volume first created by an older image that ran as root is owned by
+root, so the API cannot write uploads into it and they fail with `EACCES`. Give the directory to `bun` once:
+
+```sh
+docker compose run --rm --user root --entrypoint chown api -R bun:bun /app/apps/server/static
+```

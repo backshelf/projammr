@@ -1,0 +1,20 @@
+[package]
+name = "dit-daw-ableton"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = ["gzip"]
+# Reading and writing the gzip wrapper through zlib: C code the wasm build leaves out.
+gzip = ["dep:libz-sys"]
+
+[dependencies]
+dit-core = { path = "../dit-core", default-features = false }
+libz-sys = { workspace = true, optional = true }
+quick-xml.workspace = true
+regex.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

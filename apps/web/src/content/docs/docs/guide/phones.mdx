@@ -1,0 +1,109 @@
+---
+title: Projammr on your phone
+description: What the app looks like on a phone, how to get around it, and how to install it on your home screen.
+sidebar:
+  order: 44
+---
+
+import { Aside, Steps, Tabs, TabItem } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Projammr works in your phone's browser, laid out for a small screen. It is at its best for listening, checking
+where songs stand and leaving feedback on the move; the heavier editing, like working through a table cell by cell,
+stays on a computer.
+
+## Getting around
+
+On a phone the sidebar is replaced by two bars.
+
+- **Along the top**: the project you are in (tap it to switch projects), and on the right the jobs tray and your
+  account. On your profile or a new project's page, it shows **Back** instead, since an installed app has no
+  browser back button.
+- **Along the bottom**: five tabs, **Collections**, **Tracks**, **Notes**, **Sessions** and **Search**. Search
+  opens the [command palette](/docs/guide/search-and-shortcuts/). Press and hold **Notes** to start a new note
+  straight away.
+
+Your account menu has **Profile**, **Settings** (yours, the project's and, for the instance's admins, the
+instance's), a theme switch (**light**, **dark** or **system**) and **Sign out**. The tabs along the bottom stay
+in Settings too.
+
+## Pages
+
+Project, collection, track and session pages keep their shape: the cover-lit masthead, then the details, then the
+page's sections. The details that sit in the rail on a computer come straight under the title, and the less-used
+ones fold behind **More details**.
+
+## Tables
+
+Tables become lists of cards, each with a cover, the title, a couple of details, and its status and priority.
+
+- **Tap the cover** to [peek](/docs/guide/editing-in-tables/#peek) at the row.
+- **Tap ⋯, or press and hold a card**, for its actions, such as setting its status, adding it to a collection,
+  moving it or deleting it.
+- **Filter** opens "Filter & sort": the filters, the sort, grouping, your saved views, and **Select rows** to pick
+  several cards and change them together with the bulk bar.
+
+Cells cannot be edited on a phone, and there is no blank row for adding one: for those, open the row's page, or
+use a computer.
+
+## Listening
+
+When something is playing, a small player sits above the bottom tabs, with a thin progress line. Tap it, or drag
+it up, to open the now-playing sheet: the cover, the controls, the live loudness meter, the queue and
+[the Lab](/docs/guide/the-lab/).
+
+<Screenshot id="now-playing" viewport="phone" alt="The now-playing sheet on a phone, with the cover, the controls and the live loudness meter" />
+
+- On a track, the version menu opens as a sheet from the bottom, titled "Versions".
+- On iPhone and iPad the player has a mute button but no volume slider; use the phone's own volume buttons.
+- Comparing two versions switches between them without matching their loudness. See
+  [Comparing two versions](/docs/guide/waveform-and-comments/#comparing-two-versions).
+
+<Aside type="caution">
+  While the Lab is changing the sound, playback stops when the screen locks. The now-playing sheet warns you with
+  "Lab on · playback stops when the screen locks". Turn the Lab off to keep listening with the screen locked.
+</Aside>
+
+On phones that support it, buttons give a short buzz when you press them.
+
+## Installing Projammr on your home screen
+
+Add Projammr to your home screen and it opens like an app: full screen, with its own icon, without the browser's
+address bar.
+
+<Tabs>
+<TabItem label="iPhone and iPad">
+<Steps>
+
+1. Open your Projammr instance in Safari and sign in.
+
+2. Tap the **Share** button, then **Add to Home Screen**.
+
+3. Tap **Add**.
+
+</Steps>
+</TabItem>
+<TabItem label="Android">
+<Steps>
+
+1. Open your Projammr instance in Chrome and sign in.
+
+2. Open Chrome's **⋮** menu and choose **Add to Home screen** or **Install app**.
+
+3. Confirm.
+
+</Steps>
+</TabItem>
+</Tabs>
+
+Projammr does not prompt you to install it; the browser's own menu is the way in.
+
+## When you lose signal
+
+Projammr needs a connection to load pages and to play audio. When the connection drops:
+
+- a banner reads "Offline · changes wait for a connection", and what you were doing goes through once you are back
+  online;
+- opening a page you cannot reach shows "You're offline", with **Try again** for when the signal returns.
+
+Covers you have already seen stay on your phone, so they still show while you are offline. Signing out clears them.

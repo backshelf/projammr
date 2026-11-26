@@ -1,0 +1,126 @@
+---
+title: Sessions
+description: What a session's page shows about an Ableton set, from its tempo and key to every track and device inside it, and how to open the set from the app.
+sidebar:
+  order: 32
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+A session is the DAW project behind a track. When [dit](/dit/) reads one of your Ableton sets, its
+session page shows what is inside it: the tempo and key, every track and the devices on it, the samples it uses,
+and a history of every save. You never type any of that in; it comes from the set itself.
+
+<Screenshot
+  id="session"
+  alt="A session page: the set's tempo, key and track counts in the rail, and its structure of tracks and devices below"
+/>
+
+## The masthead
+
+A session's masthead reads "Session", or "Main session" with a star when it is its track's
+[main session](/docs/guide/catalogue/#sessions). Under the title, a line gives the DAW, the tempo, the key, and
+when the set was last saved, such as "saved 2 days ago".
+
+## What the page shows
+
+- **Notes**: your own notes on the session, typed straight into the page.
+- **Structure**: the set as your latest save left it, with what that save changed marked on it: every track in
+  order, the tracks in a group nested under it, and each track's chain of devices beside it. The heading counts
+  the clips, such as "212 audio · 38 midi clips".
+- **Attachments**: files that belong with this session. Its drop zone asks for "a bounce or an export from this
+  session".
+- **Samples**: the sample files the set uses, by their paths on the computer the set was scanned on. It only
+  appears when the set uses samples.
+- **History**: the latest six saves, each with what changed since the one before. When there are more, **All**
+  followed by the count opens the full [save history](/docs/guide/session-history/).
+- **Comments**: see [Comments and activity](/docs/guide/comments-and-activity/).
+
+### Structure
+
+The structure compares your latest save with the one before it. Its header says when the two saves were made, such
+as "Mon 14 Sept · 20:57 → 22:47", and on which machine. The set's first known save is shown on its own, as "first
+save seen", with nothing marked.
+
+At the top the whole set is drawn as a skyline: one bar per track, in the order the set lists them and in the
+colour you gave the track in Live. A bar's height is how many devices the track has, against the busiest track in
+the set. Each group is a line under the tracks it holds, in the group's colour, with its name beneath when there is
+room. The return tracks and the master sit apart at the right, the way Live's mixer shows them. Under a track the
+save changed, a mark says how:
+
+| Mark                           | Means                                  |
+| ------------------------------ | -------------------------------------- |
+| A small arrow pointing up      | The track is new in this save          |
+| A dashed outline and a dash    | The track was removed                  |
+| A dot                          | The track was renamed or its devices changed |
+
+Below the skyline, anything else the save changed is shown on its own gauge: the tempo moving along a 60 to 200
+BPM ruler, the audio and MIDI clip counts as bars with what the save added lit up, and the time signature, key,
+scene count or Live version as before and after.
+
+Then comes the list of tracks. Each row is one track of the set, with a small square of its colour, and marked as an
+audio track, a MIDI track, a return track, a group track or the master track. A row the save changed carries a
+mark before its colour: `+` for a new track, `−` for a removed one (struck through), `~` for one that was renamed
+or whose devices changed. A renamed track shows its old name struck through beside the new one.
+
+The devices on a track are listed in the order they sit in its chain, each pointing on to the next. Built-in
+devices are shown quieter than third-party plugins, so the plugins stand out, and each plugin carries its format,
+such as VST3 or AU. A device the save added starts with `+`; one it removed starts with `−` and is struck through.
+A large group (more than eight tracks) starts folded unless something inside it changed; open it with its arrow.
+
+When the save changed any tracks:
+
+- **Changes** and **Whole set**, beside the header, switch the list between just the changed tracks and every
+  track. The structure starts on the whole set.
+- The arrows beside them step from one changed track to the next, and back. With the structure focused, `]` and
+  `[` do the same.
+- Pointing at a track in the list lights its bar in the skyline and dims the rest. Clicking a bar brings its
+  track into view, opening its group if it is folded.
+
+When there is no structure to show, the section says why:
+
+- "Sessions added by hand have no structure to show."
+- "Scan this session with the desktop scanner to read its tracks and devices."
+- For a DAW the scanner cannot read tracks from, that DAW "doesn't report tracks and devices."
+
+## The rail
+
+The rail holds what the scanner reported about the file:
+
+- **Local filepath**: where the set lives on the computer that has it. You can copy it, and edit it if the set
+  has moved.
+- **File created at**, **File modified** and the **Machine** it was last seen on.
+- **Main**: the star that makes this the track's main session, "The session that carries this track's work."
+- **DAW**, **Tempo**, **Time signature**, **Key**, **Tracks**, **Scenes** and **DAW version**, each when the set
+  reports it.
+- **Created** and **Updated**: when the session was added to Projammr and last changed there.
+
+## Open in DAW
+
+**Open in DAW**, at the foot of the rail, opens the set in your DAW on your computer. The same button starts every
+row of the sessions table.
+
+It works through the scanner, so [dit needs to be installed and running](/dit/) on the computer you are using,
+and the set needs to be on that computer. Hover the button to see where it will open: "Opens the file on", then
+the machine's name and when the file was last modified.
+
+If nothing answers, Projammr says "Projammr desktop app required", with a link to download the scanner.
+
+<Aside>
+  The button is greyed out for a session added by hand: "No local file — this session was created manually and
+  never scanned".
+</Aside>
+
+## Sessions added by hand
+
+You can add a session without the scanner, with a **Title**, **Notes** and the **DAW** it lives in. It is a
+placeholder: a name to hang notes, attachments and comments on. With no file behind it, it has no structure,
+samples or history, and it cannot be opened in a DAW.
+
+## Where sessions appear
+
+- On their track's page, in its **Sessions** table.
+- In the sessions table for the whole project, with a column for each of the set's details. See
+  [Tables and views](/docs/guide/tables/).
+- In the sidebar's **Sessions** group, the five edited most recently.

@@ -1,0 +1,2054 @@
+# Reference: Hono API server (`apps/server`)
+
+_Updated 2026-10-20._
+
+Hono ^4.13 on `Bun.serve`, port 8080, basePath `/api`, hono-openapi ^1.3, zod ^4.4,
+drizzle-orm 1.0.0-rc.4, better-auth ^1.6, tests on `bun test`.
+
+**Dev-server hygiene:** whenever you start the dev server, close it as soon as you're done —
+`fuser -k 8080/tcp` (`pkill` can miss the `tsx` child; `ss -tln | grep 8080` to verify). Don't leave it
+running for the user.
+
+## Layout
+
+- `src/app.ts` — the pure Hono app: every mount, `/openapi`, `/docs`, `/health`, the invite preview. No
+  `serve()` call, so importing it binds no port. Every test file and `scripts/generate-api.ts` import it
+  directly.
+- `src/server.ts` — the entry point: `Bun.serve({ fetch: app.fetch, port: 8080, idleTimeout, maxRequestBodySize:
+  MAX_REQUEST_BODY_BYTES })`, with the idle timeout from `src/lib/connections.ts` (`IDLE_TIMEOUT_SECONDS`, 10),
+  then `startJobRunner()` (prune + resume, then a daily prune), `startStorageAudits()`, `startGuestReaper()`
+  (`db/queries/guests.ts` — deletes an `isAnonymous` user with no comments and no session younger than the
+  policy's `guestRetentionDays`, 30 by default), `startRetentionSweeper()` (`db/queries/retention.ts`, activity
+  past `activityRetentionDays` when one is set), `startSaveContentSweeper()` (`db/queries/save-retention.ts`, the
+  content of uncommitted saves past `saveContentRetentionDays`, and the objects nothing then references), `startDeviceCodeReaper()` (`db/queries/device-codes.ts`, `device_codes` rows a day past `expiresAt`) — each runs at boot and then on a `startPolicyTimer`
+  (see **Instance policy**) — `loadPronunciation()`, `loadThesaurus()` (warmed
+  here, not at module scope, because `app.ts` is imported by everything that never wants to pay that
+  cost). SIGTERM/SIGINT call `beginShutdown()`
+  (aborting `shutdownSignal`, which ends every open job event stream), stop the server, end the pool and exit
+  (8 s cap), so a container stop is immediate rather than a timeout.
+- There is no `src/index.ts`.
+
+## app.ts wiring (order matters)
+
+1. `requestId()` then `requestLog` then `securityHeaders` on `*`, on the root app (before `basePath`) —
+   one structured log line per request (`method, path, status, ms, requestId, userId`) written once the
+   response is known, then the response headers every reply carries (see **Security headers** below).
+2. `csrfProtection` on `/api/*`, still ahead of `resolveSession` and everything else: a refused origin
+   costs nothing more than the check itself, and a cookie must never reach a handler on a request this
+   rejects. See **CSRF** below.
+3. `except(isUploadPost, requestBodyCap)`, excepting only a POST to an upload path: the three literal ones
+   (`/api/assets/upload`, `/api/images/upload`, `/api/images/instance`) and a repo's pack upload, matched exactly as
+   `/api/repos/<digits>/objects` (so `…/objects/missing` keeps the cap); any other method there keeps the cap. On `*`: every body but an upload's is held to the fixed
+   `REQUEST_BODY_CAP_BYTES` before anything reads it; the uploads get `uploadBodyLimit` (the pack, `packBodyLimit`)
+   at their own mounts (step 16). See **Instance policy** below.
+4. `GET /api/health` — registered on the root app **ahead of** `resolveSession`, with its full path, so a
+   monitor's request carries no cookies and pays for no session lookup. Returns
+   `{ status: "ok"|"degraded", db, media: {ffmpeg}, queue, version }`: `"degraded"` when the
+   DB is unreachable (2s timeout) or ffmpeg is missing, but 503 only for the DB; a missing ffmpeg still answers
+   200. The version comes from `lib/version.ts` and rides on the 503 too: `version` is `appVersion` (the
+   `APP_VERSION` env var when non-empty, else the server's `package.json`; the same value `/api/instance`
+   returns).
+5. `resolveSession` on `*`, still on the root app, so `/static/*` gets the same session resolution as
+   `/api/*`. Never throws — sets `user`/`session` or `null`.
+6. `app.route("/", staticFiles)` — mounted before `basePath`, so it serves at `/static/...`, not
+   `/api/static/...`.
+7. `app.all("/.well-known/*", auth.handler)` — the OAuth discovery documents at the origin root:
+   `/.well-known/oauth-protected-resource[/api/mcp]` (the MCP plugin) and
+   `/.well-known/oauth-authorization-server[/api/auth]` (the OAuth provider). Better Auth serves both from a
+   request hook that only runs for requests reaching its handler, so they need this mount.
+8. `app = app.basePath("/api")`.
+9. `cors({ origin: trustedOrigins, allowMethods: GET/POST/PUT/DELETE/PATCH, credentials: true })`.
+10. `GET /api/openapi` — 401 in production for a signed-out caller; otherwise open. In dev it's what the
+   client types itself off (`bun run typegen`); in prod it's a map for anyone signed in.
+11. `GET /api/docs` — Scalar reference UI over the spec above; 404 (not 401) in production for a
+   signed-out caller.
+12. `GET /api/auth/openapi` — Better Auth's own generated schema; 401 in production for a signed-out
+    caller, through the same `specNeedsSession` middleware as `/api/openapi`. Its `openAPI()` plugin serves
+    that same document from two more paths under the `/auth/*` catch-all — `/api/auth/open-api/generate-schema`
+    and `/api/auth/reference`, the latter a Scalar page — so the middleware covers all three; gating the alias
+    alone leaves the document public. `/api/docs` keeps its own gate and its 404 (on purpose).
+13. `GET /api/invites/:token` — public invite preview, registered ahead of the authenticated
+    `/invites/*` mount since the invitee hasn't signed in yet. The preview is `{role, projectName,
+    invitedByName, email, expired, accepted}`: it carries the invited address so the invite page can lock
+    sign-up and sign-in to it; the token stays the only capability. Behind `guestAccess`: while the instance
+    turns guest access off, a signed-out caller gets 401 and the invite page shows its sign-in prompt.
+14. `GET /api/instance` — public, like the invite preview above it: `{registration, hasUsers, emailEnabled,
+    version, updateCheck, passwordMin, passwordMax, guestAccess, selfDeletion, brand, settings}`, what the sign-in
+    page reads before anyone has signed in. `emailEnabled` is `false` until mail exists; `updateCheck` and the
+    four after it are the instance policy's (read per request: the sign-up, reset and change-password forms
+    hold a new password to `passwordMin`/`passwordMax`, and the profile leaves out account deletion while
+    `selfDeletion` is off); `version` is the server's own `package.json` version (`lib/version.ts`, a JSON
+    import, inlined by `bun build`). `settings` holds every `audience: "public"` setting resolved at the
+    instance (`publicSettings`, `db/queries/settings.ts`), and `registration` is `instance-access.registration`
+    read the same way. `brand` is `{name, logoImageId, iconImageId, themeColour, backgroundColour}` from the
+    `instance-branding` settings (`instanceValues`, through the settings cache), plus `logoImagePath` and
+    `iconImagePath`: each image's stored key while an instance-scope image of that id exists
+    (`instanceImagePaths`, `db/queries/images.ts`), null otherwise. The static route serves that key to anyone,
+    so a signed-out page, dit or a manifest can show the mark from `/static/<key>` (or `/media/<key>`
+    through the web app, `?w=` for a resize).
+15. `mountEntities(app)` — see **Entity registry** below — then `app.route("/projects", projectRepoRoutes())` and
+    `app.route("/sessions", sessionHistoryRoutes())`, which hang off those entity mounts and their gates.
+16. Remaining mounts, each `app.use("/x/*", authenticated)` (+ `authorizeProject(...)` where scoped)
+    then `app.route("/x", x)` — `images` and `assets` put `uploadBodyLimit` on their `POST /upload` (and `images`
+    on its `POST /instance`) between the two — in this order: `track-audios`, `invites`, `statuses`, `me`, `admin`
+    (`authenticated` then `instanceAdmin`), `notes`, `settings` (`authorizeProject(resolveSettingsRoute, …)`
+    plus the `settings-write` bucket, 60/120min, on its PATCH, PUT and POST — see its rows in the route
+    table and `db.md`'s **Settings**),
+    `lyrics`, `comments`, `images`, `uploads`, `assets`, `jobs`, `commits` (`authorizeProject(resolveCommitRoute)`), `saves` (`authorizeProject(resolveSaveRoute)`),
+    `repos` (`authorizeProject(resolveRepoRoute)`, then `packBodyLimit` and the `repo-objects` bucket on the pack upload, in that order, then four
+    routers: `repoRoutes`, `repoArchiveRoutes`, `repoHistoryRoutes`, `repoObjectRoutes`), `devices` (`authenticated` only; every
+    route checks the path's device against the session), `share` (no mount-level gate — two routers self-gate per route: `app.route("/share", sharelinks)` — the link's own management, list/options/create/patch/turn-off (`DELETE /:token`, a soft revoke answering 204 even on a link already off)/snapshot, each gated `authenticated` per route — is mounted **before** `app.route("/share", shareGuest)`, because `sharelinks`'s static paths (`/`, `/options`) must be tried first or `shareGuest`'s `/:token` matches them as a token value; every guest route resolves its token through the one query `getSharelinkRow` in `db/queries/sharelinks.ts` — read, stream and cover directly, the comment routes through `resolveSharelinkTrackAudio` and `assertShareComment` — so a link's state is answered in that one place: 410 with `code: "revoked"` for a link the owner turned off (checked first, so it beats expiry), 410 with `code: "expired"` for one past its expiry, 404 with no `code` for a token that never existed; the management routes treat a revoked link as a 404),
+    `mcp` (only when `mcpServed`, read once at boot; no `describeRoute`, no `authenticated` mount — the route
+    gates itself through `requireMcpAuth`, see **MCP** below), `auth` (unguarded Better Auth catch-all, last;
+    ahead of it, each keyed by `clientAddress` since none of their callers is signed in yet:
+    `/auth/oauth2/register` (`oauth-register`), `/auth/sign-in/email` (`auth-signin`),
+    `/auth/sign-up/email` (`auth-signup`), `/auth/sign-in/anonymous` (`guest-signin`), `/auth/device/code` and
+    `/auth/device` (`device-signin`; `/auth/device/token` is left unmetered) — allowances in the
+    bucket table under **Instance policy**).
+17. `app.onError(jsonErrorHandler)`.
+
+### Instance bootstrap and closed registration
+
+`auth.ts` declares `user.additionalFields` for `instanceRole` and `disabledAt` (`input: false`, so no request
+body can set either) and hooks `databaseHooks.user.create.before`: a share-page guest passes straight through,
+and every other account asks `admitSignUp(email)` (`db/queries/settings.ts`) what it may be. The first
+account on the instance becomes its admin, behind a durable claim row (a key no settings group registers, so
+the settings routes never see it) rather than depending on registration closing — `access.closeAfterFirst`
+closes registration too, but the single-admin guarantee holds either way. A claim yields to a fresh sign-up
+once it is stale (`FIRST_ADMIN_CLAIM_STALE_MS`) or the same email retries. Afterwards a sign-up needs either
+open registration or an unexpired, unaccepted invite for that exact address, and is refused with Better Auth's
+`APIError("FORBIDDEN")` — a 403 from `POST /auth/sign-up/email` — otherwise. The concurrency argument and the
+advisory lock are in `docs/agents/db.md`'s **Settings**.
+
+`resolveSession` treats a disabled account as signed out (so every existing 401 covers it, rather than each
+gate learning about the flag) and revokes its session rows on the way past. Better Auth's cookie cache holds a
+copy of the user for `session.cookieCache.maxAge` (5 minutes), so a caller whose browser holds a fresh
+`better-auth.session_data` cookie can outlive the flag by that much; nothing else can, since a cache miss
+reads the row.
+
+**Sessions and the cookie cache on a role change.** `/me` hands the client the session's copy of
+`instanceRole`, so the client's admin shell is only ever as current as that cache — authorization is not,
+since `middleware/instance-admin.ts` reads `users.instance_role` on every `/admin/*` request. A demotion
+therefore revokes the target's sessions (`changeInstanceUser`), the same as a disable: once the cached copy
+lapses there is no session left to refresh it, so the demoted admin cannot keep the admin shell past the
+window. A promotion revokes nothing — nobody is signed out for being given more — so a promoted user waits
+out the cache or signs in again before the client's admin link appears.
+
+**Registration in the tests:** `signUpAndSignIn` reopens registration before it signs an actor up — the shared
+development instance was claimed long ago, and the migration seeded it `closed`. The files that exercise a
+closed instance (`routes/instance.test.ts`), a fresh one (`db/queries/settings.test.ts`,
+`db/queries/instance-users.test.ts`) or the instance's settings rows (`routes/settings.test.ts`,
+`routes/settings-instance.test.ts`) run in the serial phase for that reason.
+
+### Sign-in lockout
+
+`auth.ts`'s `hooks.before`/`hooks.after` (`createAuthMiddleware`, `better-auth/api`) gate `/sign-in/email`
+specifically — every other Better Auth path passes through untouched, since a global hook fires for every
+endpoint and checks `ctx.path` itself. `before` refuses a locked account with 429 and `Retry-After` — the same
+status, body and header whether or not the email belongs to a real account, matching `INVALID_EMAIL_OR_PASSWORD`'s
+own enumeration guard — before Better Auth ever reads the account or checks a password; `after` reads
+`ctx.context.newSession` (set by `setSessionCookie` on success — clears the lockout row) or `isAPIError(ctx.context.returned)`
+(records a failure) once the endpoint has already decided the outcome, so a wrong password only ever reaches the
+password check while the account is unlocked. `db/queries/signin-attempts.ts` (`checkLockout`, `recordFailure`,
+`clearLockout`) and `db/schema/signin-attempts.ts` own the state and the rule (`lockAfter`, which reads the
+free allowance, base and maximum lock from `instancePolicy().access` per failure); see
+`docs/agents/db.md`'s **Sign-in lockout** for the table and the doubling rule. Better Auth's own `rateLimit` is
+off (`auth.ts`) — no client address reaches it reliably enough to key one shared bucket on — so this and the
+`auth-signin` per-address bucket below are the whole of `/sign-in/email`'s brute-force defence, one per account
+and one per caller.
+
+### Mail
+
+`emailEnabled` (`lib/env.ts`) is `SMTP_URL != null`, decided once at boot; nothing else reads `SMTP_URL`
+directly. `MAIL_FROM`, required alongside `SMTP_URL`, supplies only the **address** —
+`lib/env.ts`'s `parseMailFromAddress` (nodemailer's `addressparser`) pulls it out of either a bare
+`addr@x` or a `Name <addr@x>` value once at boot into `mailFromAddress`, discarding any name the value
+carried; the display name comes from `instance-branding.mailSenderName` (admin audience, so it is not on
+`GET /api/instance`) instead, read fresh on every send. `lib/mail.ts`'s `sendMail({to, subject, text, html})`
+sends through `nodemailer.createTransport`, building `from: fromHeader(mailSenderName, mailFromAddress)`
+(nodemailer's `{name, address}` object form) from an `instanceValues(["instance-branding.mailSenderName"])`
+read per call; `SMTP_URL=json` selects nodemailer's own `jsonTransport` instead of a real connection, which
+is what every test that sends mail runs against, and requires no fixture SMTP server. `lib/mail-templates.ts`
+holds the copy as plain functions (no template engine) — `resetPasswordEmail`, `verificationEmail`,
+`changeEmailConfirmationEmail`, `deleteAccountEmail`, `inviteEmail` — each returning `{subject, text, html}`;
+`inviteEmail` also takes the instance name (`instance-branding.name`, read by its caller,
+`createInvite`) rather than a literal product name. `lib/auth-mail.ts` adapts those into the
+`{user, url}` / `{user, newEmail, url}` shape Better Auth's own callbacks call with.
+
+`sendMail` logs the recipient and subject at `info` and the **body at `debug`**. The body carries the
+reset, verification or change-email token, each a credential until it is used, so at `info` it would sit in
+the container's stdout and in whatever collects it — an operator reading logs could take over any account
+that had asked for a reset. A test that needs the link therefore reads the whole capture rather than the
+first line naming the address (`redirectLogs` defaults to `minLevel: "debug"`); `mail.test.ts` pins the
+guard by capturing at `info` and requiring the token to be absent.
+
+With mail configured, `auth.ts` wires `emailAndPassword.sendResetPassword`,
+`emailVerification.sendVerificationEmail`, `user.changeEmail.sendChangeEmailConfirmation` and
+`user.deleteUser.sendDeleteAccountVerification` to those adapters, and `emailAndPassword.requireEmailVerification`
+is a **getter** (`emailEnabled && instancePolicy().access.requireVerifiedEmail && cachedRegistrationMode() ===
+"open"`, `db/queries/settings.ts`) rather than a plain boolean — assigned directly as an own property of
+the options object, never through a spread, since `{...obj}` reads an accessor once and freezes the value it
+returned. The link lifetimes (`resetPasswordTokenExpiresIn`, `emailVerification.expiresIn`) are getters the same
+way, set with or without mail. Without mail, none of the four senders are wired (`sendResetPassword` and
+`sendVerificationEmail` are `undefined`; `emailAndPassword.enabled` alone still gives sign-up/sign-in), `disabledPaths` adds
+`/request-password-reset` (404, not the 400 Better Auth gives an unconfigured `sendResetPassword`), and
+`PATCH /me/email` (`routes/me.ts`) is the change-email path instead: immediate, gated on
+`auth.api.verifyPassword`, 404s when `emailEnabled` so the two change-email paths never coexist. Because
+it checks a password, it carries its own bucket (`email-change`, keyed per user like every
+post-auth bucket) — the per-account sign-in lockout only covers `/auth/sign-in/email`, so without one the
+route is a password oracle for anyone holding a session they should not have.
+`createInvite` (`db/queries/invites.ts`) sends `inviteEmail` when `emailEnabled`; the invite row and its
+copyable link exist regardless, so a mail failure never fails the invite itself.
+
+`POST /admin/users/:id/reset-link` (instance admin) and `scripts/reset-link.ts <email>` both call
+`mintResetLink` (`db/queries/reset-link.ts`), which writes a `verifications` row of the same shape Better
+Auth's own `sendResetPassword` flow does (`reset-password:<token>` → the user id, for the policy's
+`linkLifetimeMinutes`) and hands back
+the URL once rather than mailing it — the fallback for an instance with no mail transport, or for an admin
+resetting an account that never received (or lost) its mail. `POST /api/auth/reset-password` (always
+mounted, not in `disabledPaths`) consumes it the same way either kind of link would: Better Auth's
+`internalAdapter.consumeVerificationValue` deletes every row under that identifier in the same transaction
+it reads, so a second attempt with the same token finds nothing and fails the way an expired one would. The
+admin route also clears the target's sign-in lockout (`db/queries/signin-attempts.ts`'s `clearLockout`) and
+writes a `reset_link_issued` row to `admin_audit` (`db/queries/admin-audit.ts`) naming the admin and the
+target — see **Admin audit trail** in `db.md`.
+
+### Account deletion
+
+`user.deleteUser` is enabled in Better Auth (`auth.ts`); the instance's `access.selfDeletion` gates it per
+request instead, in `hooks.before`, which answers `/delete-user` and `/delete-user/callback` with a 403 while it is
+off (and the profile page leaves the section out). `POST /api/auth/delete-user` accepts a `password`
+directly regardless of `emailEnabled`, so a no-mail instance deletes on the spot while a mailed instance
+sends a confirmation link first (`sendDeleteAccountVerification`, conditional on `emailEnabled` like the
+other three mail callbacks above). Either path converges on the same `beforeDelete` hook immediately before
+Better Auth deletes the `users` row.
+
+`deleteAccount` (`db/queries/account-deletion.ts`) is that hook's body:
+
+1. `deletionPlan(userId)` splits the account's sole-owned projects into `blocking` (another member is still
+   in it) and `deleted` (no one else is); a project the account merely edits or views is in neither list.
+   `GET /me/deletion-plan` exposes the same split for the client to render before the user confirms.
+2. Any `blocking` project throws `APIError("CONFLICT", {message, blocking})` — the response body carries the
+   full blocking list, not just a message, so the client can link each one to its Members settings.
+3. `lockAdminsAndTarget` (`db/queries/instance-users.ts`, shared with `changeInstanceUser`) refuses the
+   instance's last sign-in-capable admin the same way a self-demote or self-disable would.
+4. Each `deleted` project goes through the existing `ENTITIES.project.remove`, so its files and storage
+   usage are cleaned up exactly as a manual project delete would. The account's user-scope images (its
+   avatars) go the same way through `removeUserImages` (`db/queries/images.ts`, built on `removeImage`, which
+   `DELETE /images/:id` also uses): `images_scope_owner` forbids a user-scope image with no owner, so the
+   `users` row's `set null` would otherwise fail. Images it uploaded to a project stay with the project.
+5. `recordAdminAction` writes an `account_self_deleted` row to `admin_audit`, inside the closing
+   transaction below rather than before the project deletes: a removal that throws must not leave a row
+   claiming a deletion that never happened. Actor and target are the same account, and both still exist
+   there, since Better Auth drops the `users` row only after this hook returns. See **Admin audit trail**
+   in `db.md`.
+6. The account's comments and activity rows have their `userId` set to `null` (comments' FK cascades, so
+   this must happen before the user row goes; activity's FK is already `SET NULL` but is nulled here too for
+   symmetry) rather than being destroyed — the client renders a null author as "Deleted user". The account's
+   notes linked to no project are deleted directly; a note linked to a track on a project the account does
+   not own is not reachable here and is swept away by the `users` row's own delete cascade instead.
+   Assets the account uploaded to a project it does not own stay in that project: `assets.createdByUser` is
+   `SET NULL`, so the `users` row's delete leaves them with no uploader.
+
+`ENTITIES.project.remove` is bound to the module-level `db` and takes no executor, so steps 4 and 5 are not
+one transaction; `deletionPlan`/`deleteAccount` take an optional `database` parameter (default the module
+`db`) purely so the last-admin scenarios can run against `withMigratedDatabase`'s throwaway database in
+tests, since a real project delete cannot be pointed at one.
+`scripts/make-admin.ts <email>` promotes an account to instance admin from the CLI — the bootstrap path
+when there is no admin left to use `PATCH /admin/users/:id`. Both scripts are `bun build`t as a second,
+separate invocation in `package.json`'s `build` script (`scripts/reset-link.ts scripts/make-admin.ts
+--outdir=dist/scripts`) — folding them into the first `bun build src/server.ts src/db/migrate.ts ...` call
+re-roots `--outdir` at the two entry points' common parent instead of `src/`.
+
+### CSRF
+
+`app.use("/api/*", csrfProtection)` (`middleware/trusted-origin.ts`) wraps `hono/csrf`'s `csrf({ origin:
+isTrustedOrigin })`. That checks `Origin` only for non-safe methods whose content type is CORS-simple
+(`multipart/form-data`, `application/x-www-form-urlencoded`, `text/plain`, or no `Content-Type` at all) —
+exactly the shape a plain HTML form can send without the preflight `cors()` would otherwise force, which
+is the gap `cors()` alone leaves open: it withholds a response header, never the request, its side effects,
+or the cookie riding along with it. A refused request never reaches `resolveSession`; a refused origin is
+logged once (a 256-entry LRU, `lib/lru-set.ts`) through `logRefusedOnce`, not once per request.
+
+`csrfProtection` skips the check entirely — forwards straight to `next()` — for a request carrying
+`Authorization: Bearer` (dit, MCP tool calls) or carrying no `Cookie` header at all (`POST
+/auth/oauth2/token`, the OAuth provider's token endpoint: an MCP client's code exchange, authenticated by
+its authorization code and PKCE verifier, never a cookie). Either way there is no ambient credential for a
+cross-site request to ride, so there is nothing for the check to protect.
+
+### Machine headers
+
+dit sends `X-Device-Name` at sign-in, which `auth.ts`'s `session.create.before` hook stores on the auth session,
+and `X-Machine-Id` on every request (`lib/push-machine.ts` resolves it on the push routes; see **Machines** below).
+A machine id is not a credential: it grants nothing the session does not already have, and the `/machines/:id`
+routes check the path's id against the session themselves.
+
+### Security headers
+
+`securityHeaders` (`middleware/security-headers.ts`), mounted on `*` ahead of everything else, sets on
+every response the site-wide `SECURITY_HEADERS` from `@workspace/security-headers`:
+`X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
+`Content-Security-Policy-Report-Only` (`self`; `blob:` for the DSP worklet/worker and canvas rendering;
+`data:`/`blob:` images; `'wasm-unsafe-eval'` for `dsp.wasm`; `frame-ancestors 'none'`) and, only when
+`publicTlsMode` is true (`TLS_MODE=acme`), `Strict-Transport-Security`. The policy ships
+report-only — it is not yet enforced — so a gap in it degrades nothing. The web app sends the same set on its
+pages from `next.config.ts`'s `headers()`, so no proxy in front of either adds any.
+
+**Env vars** (`src/lib/env.ts`, throws at import when malformed — every test and `generate-api.ts`
+imports `app.ts`, so these must be set wherever those run). A row marked **seed** is not read by the code that
+uses it: it seeds an instance setting, through `POLICY_SETTINGS` in `src/lib/instance-policy.ts` (see **Instance
+policy** below). While it is set, the setting's value comes from it (the settings' `env` layer, source `env`)
+until an admin stores one, and again after a reset; `DEFAULT_INSTANCE_POLICY` starts from it; every consumer
+reads the policy. The variable's text is checked by the setting's own schema at import (a number for the
+numeric seeds, lowercased for `LOG_LEVEL`), and a value the schema refuses throws, naming the variable:
+
+| Var | Required | Notes |
+|---|---|---|
+| `DATABASE_URL` | yes | read raw in `db/index.ts`, not validated in `env.ts` |
+| `BETTER_AUTH_SECRET` | yes | throws at import if unset |
+| `BETTER_AUTH_URL` | no | `betterAuthUrl`, default `http://localhost:3000` (the Next origin that proxies `/api` in development; compose sets `https://${PUBLIC_HOST}`). The OAuth issuer (`${betterAuthUrl}/api/auth`), the JWKS URL and `mcpResource` (`new URL("/api/mcp", betterAuthUrl).href`, the audience of every MCP access token) derive from it. `mcpEnabled` is false unless it is HTTPS or a loopback host (the MCP plugin's own rule; it throws otherwise): the server then boots without `jwt()`/`mcp()` and logs one warning, so a plain-HTTP LAN address turns MCP off. The process serves MCP only while `mcpServed` (`auth.ts`) — `mcpEnabled && instancePolicy().integrations.mcpEnabled`, read once at import — is true. `MCP_DISABLED=1` turns it off outright; the `typegen` script sets it, because the OAuth provider seeds its `oauth_resources` row as soon as Better Auth is constructed and typegen runs without a database (CI's `typecheck-build` and `test` jobs have none) |
+| `NOTES_MASTER_KEY` | yes | 32 bytes base64, throws at import if wrong length; root of every note's key at the current `NOTES_KEY_VERSION`; `server.ts` refuses to boot when it cannot open a note on that version |
+| `NOTES_KEY_VERSION` | no | default 1; a whole number 1–32767 (the `key_version` smallint), throws at import otherwise; `notesMasterKeys.version`. Raised by one per key rotation and left there |
+| `NOTES_MASTER_KEY_PREVIOUS` | no | 32 bytes base64, throws at import if set but the wrong length; set only during a `scripts/rotate-notes-key.ts` rotation, so a note not yet re-wrapped is still readable; `server.ts` refuses to boot when it is unset and notes sit below `NOTES_KEY_VERSION` — see `docs/agents/db.md`'s notes table |
+| `MIGRATE_BACKUP` | no | default on; `"0"` skips `applyMigrations`'s pre-migrate `pg_dump` (`src/db/migrator.ts`) |
+| `TRUSTED_ORIGINS` | no | comma list, lowercased; falls back to `CLIENT_URL`, then `http://localhost:3000` |
+| `BASE_URL` | no | default `http://localhost:8080`, used in the OpenAPI `servers` entry |
+| `MAX_UPLOAD_MB` | no | **seed** of `instance-limits.maxUploadMb` (`limits.maxUploadMb`), default 128 (MiB); a positive number no higher than `MAX_UPLOAD_CEILING_MB` (2048, `@workspace/settings/bounds`). Compose always passes it (`${MAX_UPLOAD_MB:-128}`), so under Docker the setting reads source `env` until an admin sets it. Both upload validators and `GET /uploads/limits` read the policy per request (`uploadLimitBytes()`). `Bun.serve`'s `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` — the ceiling plus 1 MiB for the multipart envelope, fixed — so the setting, not the transport, refuses a file; Bun still answers a body over the ceiling with a bare 413 before the app runs, and `middleware/body-limit.ts` holds each route to its own limit before the body is read (see **Instance policy**). The upload routes buffer the whole form, so the limit is also RAM per upload in flight |
+| `SAVE_CONTENT_RETENTION_DAYS` | no | **seed** of `instance-jobs.saveContentRetentionDays` (`jobs.saveContentRetentionDays`), default 90, a whole number 1–36500: how long the content of a save no commit names is kept before the `save_content_sweep` job drops it |
+| `MEDIA_CONCURRENCY` | no | **seed** of `instance-jobs.analysisWorkers` (`jobs.analysisWorkers`), default 2, a whole number 1–64 — the job `TaskQueue`'s concurrency, which follows a policy refresh (`setConcurrency`); each audio slot decodes the file once through one `ffmpeg` child, feeding an `@workspace/dsp` analysis session for peaks, loudness and spectrum together |
+| `JOB_RETRY_DELAY_MS` | no | default 5000 — multiplied by attempt number between job retries |
+| `TRUSTED_PROXY_HOPS` | no | default 0; `trustedProxyHops` — how many entries from the right of `X-Forwarded-For` `clientAddress` (`lib/client-address.ts`) trusts, one per reverse proxy hop that appends rather than trusts a caller-claimed value. Compose sets 1 (Caddy, the only ingress, which proxies `/api/*` and `/media/*` straight here; the client's `proxy.ts` forwards the chain unchanged); at 0 the header is never read at all and the raw socket address is used, so a caller behind no trusted proxy cannot spoof one by claiming any value |
+| `TLS_MODE` | no | `acme` or `internal` (default), read as `publicTlsMode` (`acme` ⇒ true) — gates `Strict-Transport-Security` in `securityHeaders`. Compose passes it through to the `api` service so the header can agree with which Caddy site is live without the server knowing about ACME itself; `docker-compose.tailscale.yml` sets `acme`, since Tailscale's certificate is publicly trusted |
+| `MAX_PROJECT_GB` | no | **seed** of `instance-limits.projectCapGb` (`limits.projectCapGb`); unset or blank means unlimited (null); the cap one project's stored files may reach (a project's own `storageCapGb` can only lower it, see **Project policy**). A negative or unparseable value throws at import; zero is a valid cap. An admin can change a seeded cap but not remove it: a stored row never holds null, so clearing the setting returns to the variable. `limitFor` (`db/queries/storage-usage.ts`) reads the policy per check |
+| `MAX_USER_GB` | no | **seed** of `instance-limits.userCapGb` (`limits.userCapGb`), the same for one account across every project |
+| `LOG_LEVEL` | no | **seed** of `instance-integrations.logLevel` (`integrations.logLevel`), default `info`; `debug`, `info`, `warn` or `error`, any case, anything else throws at import. `lib/log.ts` reads the policy per line |
+| `LOG_FORMAT` | no | `json` writes one JSON object per line; read once by `lib/log.ts` |
+| `MCP_DISABLED` | no | `1` forces MCP off whatever `integrations.mcpEnabled` says (see `BETTER_AUTH_URL` above) |
+
+## Instance policy (`src/lib/instance-policy.ts`)
+
+Everything an instance admin can set about how the server behaves is one frozen snapshot, `InstancePolicy`. Each
+value is an instance setting from the `instance-*` groups of `@workspace/settings` (`docs/agents/packages.md`),
+and `POLICY_SETTINGS` is the one table tying a policy value to its setting key, and a seeded one to its variable:
+
+| Group | Keys (setting group) |
+|---|---|
+| `access` | `closeAfterFirst`, `invitesBypass`, `requireVerifiedEmail`, `sessionLifetimeDays`, `passwordMin`/`passwordMax` (8–128, min ≤ max), `lockoutFreeFailures`, `lockoutBaseMinutes`/`lockoutMaxMinutes` (base ≤ max), `linkLifetimeMinutes`, `guestAccess`, `selfDeletion` (`instance-access`) |
+| `limits` | `pushSamplesEverywhere` (boolean, default off: dit repos push their samples whatever their switch says, and the switch reads locked on), `maxUploadMb` (≤ `MAX_UPLOAD_CEILING_MB`), `projectCapGb`/`userCapGb` (null = unlimited), `audioTypes` (⊆ `AUDIO_EXTENSIONS`), `imageTypes` (⊆ `IMAGE_TYPES`), `auditIntervalHours`, `orphanMode` (`delete`\|`report`), `guestRetentionDays`, `longestAudioHours` (`instance-limits`) |
+| `jobs` | `analysisWorkers`, `jobRetentionDays`, `activityRetentionDays` (null keeps history forever), `saveContentRetentionDays` (days an uncommitted save's content is kept, 1–36500, default 90, never null; seeded by `SAVE_CONTENT_RETENTION_DAYS`) (`instance-jobs`) |
+| `integrations` | `mcpEnabled`, `mcpToolGroups` (⊆ `MCP_SCOPES`), `logLevel` (`instance-integrations`), `updateCheck` (`instance-branding`) |
+| `rateLimits` | one `{burst, perMinute}` per bucket, `instance-rate-limits.<bucket>.burst` and `.perMinute`, each with a floor |
+
+`instancePolicySchema` is built from those settings' own schemas, so a floor, a ceiling or an enum is declared once
+(`AUDIO_EXTENSIONS`/`IMAGE_TYPES` in `groups/instance-limits.ts`, `MCP_SCOPES`/`LOG_LEVELS` in
+`groups/instance-integrations.ts`, `RATE_BUCKETS` in `groups/instance-rate-limits.ts`, the upload and password
+bounds in `@workspace/settings/bounds`); the schema adds the two ordered pairs, refused at both of their values.
+Registration mode and the branding the server does not act on (name, images, colours, mail sender) are settings
+outside the policy; registration is read by `cachedRegistrationMode` and in `admitSignUp`'s transaction.
+
+- **Reading.** `instancePolicy()` is synchronous and returns the current snapshot; every consumer calls it at the
+  moment it acts, never into a module-level copy. `DEFAULT_INSTANCE_POLICY` is the seed: the settings' own
+  defaults (`policySource`), with each seeded setting whose variable is set taking the variable's value
+  (`SEEDED_SETTINGS`, which is also the settings' `env` layer, `db/queries/settings-env.ts`). The module imports
+  only the settings registry, so `lib/log.ts` can read it without a cycle.
+- **Refreshing.** `refreshInstancePolicy(source)` parses the whole source (a `ZodError` leaves the snapshot as it
+  was), freezes it, swaps it in and calls every `onInstancePolicyChange(listener)` with `(next, previous)`.
+  Per-use readers need nothing more; the holders of a value between uses subscribe: the job queue's concurrency
+  (`mediaQueue.setConcurrency`, `lib/jobs.ts`) and the timers below.
+- **From the settings.** `reloadInstanceSettings()` (`db/queries/settings.ts`) reads the instance's rows afresh
+  into the settings cache and refreshes the policy from them (each policy value's setting resolved over the rows,
+  the `env` layer and the defaults). It runs once in `server.ts` before the app is imported (below), every 30 s
+  (`startInstanceSettingsRefresh`, the cache's TTL, unref'd, started by `server.ts` only, so a test or typegen
+  reads nothing), and in the writing process as the instance target's `committed` hook, before an instance
+  write or lock answers. A reload a write's forget overtook changes nothing (that write reloads after it); one
+  whose read fails changes nothing, and one whose rows make no policy updates the cache but keeps the snapshot;
+  either is logged (`could not refresh the instance settings`). So every process converges on another's write
+  within the interval.
+- **Write check.** The instance target's `check` hook runs inside the write's transaction once its rows change:
+  it builds the policy the rows would give and, when the policy refuses it (`settingsRefusedBy`, which maps each
+  issue's path back to its setting key), throws a 400 `invalid_request` whose `details.issues` names every
+  setting involved (both of an out-of-order pair) and whose message says why, so no stored combination can make
+  a reload fail.
+- **Timers.** `startPolicyTimer(task, {intervalMs, runAgainOn?})` (`lib/policy-timer.ts`) runs `task` every
+  `intervalMs(policy)`, unref'd; a refresh that changes the interval — or the `runAgainOn` value, when given —
+  re-arms it once (and runs the task at once for a `runAgainOn` change); any other refresh leaves it alone. The
+  storage audit re-arms on `auditIntervalHours`; the job prune (`startJobPruning`, daily, from `startJobRunner`),
+  the guest reaper and the history sweeper (`startRetentionSweeper`, `db/queries/retention.ts`, daily) run again
+  on a change of their retention.
+- **Boot-read keys** (restart-required): `access.sessionLifetimeDays` (Better Auth copies `session.expiresIn` at
+  construction, and `session.updateAge` beside it: `sessionUpdateAgeSeconds`, a quarter of the lifetime capped at
+  one day) and `integrations.mcpEnabled` (`mcpServed`, which decides the MCP plugins in `auth.ts` and the
+  `/mcp` mount in `app.ts`). Both are read through `runningInstancePolicy()`, which pins the snapshot in force at
+  its first call; `auth.ts` makes that call as it is first evaluated. `server.ts` awaits
+  `reloadInstanceSettings()` and only then imports `app.js` dynamically, and none of its static imports reaches
+  `app.ts` or `auth.ts` (`src/boot-order.test.ts` walks them), so the pinned snapshot is the stored one. The hub
+  read reports it per restart-required setting as `running`. `mediaQueue` also reads its first concurrency at
+  import, but follows refreshes.
+- **Better Auth.** `emailAndPassword.requireEmailVerification` (`requireVerifiedEmail` and registration `open`,
+  mail permitting), `resetPasswordTokenExpiresIn` and `emailVerification.expiresIn` (both `linkLifetimeMinutes`)
+  are getters on the options objects, which Better Auth keeps and re-reads per request (`auth.test.ts` checks the
+  getters survive into `auth.$context`). Its password bounds are copied at construction, so they are pinned to
+  8–128 and `hooks.before` checks `passwordMin`/`passwordMax` on `/sign-up/email`, `/reset-password` and
+  `/change-password` with Better Auth's own `PASSWORD_TOO_SHORT`/`PASSWORD_TOO_LONG` body. The same hook answers
+  403 to `/delete-user` and `/delete-user/callback` while `selfDeletion` is off, and to `/sign-in/anonymous` while
+  `guestAccess` is off.
+- **Upload ceiling and body limits.** `MAX_UPLOAD_CEILING_MB` (2048) is the schema maximum of `maxUploadMb`;
+  `server.ts`'s `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` (ceiling + 1 MiB), the most any request can carry,
+  and the web client's `proxyClientMaxBodySize` is the same ceiling (`next.config.ts` imports it from
+  `@workspace/settings/bounds`, which imports nothing so Next's config loader can read it). What a route reads is
+  held per request, before anything
+  reads the body, by `middleware/body-limit.ts` (Hono's `bodyLimit`: a declared `Content-Length` over the limit is
+  refused without a byte read, a body with no length is counted as it streams and refused once past it).
+  `requestBodyCap`, mounted on `*` in `app.ts` right after `csrfProtection` for every path but the uploads
+  (`except(isUploadPost, …)`), holds a route to `REQUEST_BODY_CAP_BYTES` (a fixed 128 MiB + 1 MiB) and answers a 413 `{error:
+  "Request body too large"}`. `uploadBodyLimit`, mounted on `POST /assets/upload`, `POST /images/upload` and
+  `POST /images/instance` after
+  `authenticated` and before `authorizeProject` reads the form, holds them to `uploadLimitBytes()` + 1 MiB, read
+  from the policy per request, and answers the validator's own refusal — a 400 `invalid_request` whose
+  `details.issues` is a `too_big` issue for `file` carrying `maximum` (the file limit) — so the client's
+  `tooBigMaximum` reads either the same way. `packBodyLimit` holds `POST /repos/:id/objects` (a raw body with no
+  `file` field) to `uploadLimitBytes()` exactly and is mounted **after** `authorizeProject`, so a caller outside the project is a 404 before any 411 or 413: a body with
+  no `Content-Length` (or with a `Transfer-Encoding`) is a 411 `length_required` (`A pack needs a Content-Length`)
+  before a byte is read, and a pack over the limit is a 413 `pack_too_large` (`This pack is
+  larger than this instance's upload limit (<n> MB)`), nothing stored. dit always sends a length.
+- **Tests** set a non-default snapshot with `stubInstancePolicy(patch)` (`src/test/instance-policy.ts`, the
+  defaults under a group-by-group patch, through `refreshInstancePolicy`) and put the default back with
+  `restoreInstancePolicy()` in an `afterEach`. Each test file runs in its own process, so a snapshot never crosses
+  files; a policy-wide sweep (the guest reaper, the history sweeper, job pruning) still reaches every file's rows in
+  the shared database, so such a test picks windows no other suite's rows fall in.
+
+**Rate buckets** (`rateLimits`, name → default burst/perMinute, floor burst/perMinute; the table is `RATE_BUCKETS`
+in `@workspace/settings/groups/instance-rate-limits`, which also gives each bucket the label and wording of its two
+settings, and a floor is its settings' schema minimum). `rateLimit(name)` and `spendToken(name, key)`
+(`middleware/rate-limit.ts`) read the allowance per call:
+
+| Bucket | Default | Floor | Where |
+|---|---|---|---|
+| `moves` | 10/20 | 1/1 | `moveRateLimit` (the three entity moves), MCP `move_to_project` |
+| `bulk-moves` | 5/10 | 1/1 | `bulkMoveRateLimit` (`POST /bulk/move`) |
+| `session-moves` | 10/20 | 1/1 | MCP `link_sessions` |
+| `audio-backfill` | 5/10 | 1/1 | `POST /projects/:id/audio-backfill`, MCP backfill tool |
+| `share-read` | 60/120 | 10/20 | `GET /share/:token`, `/share/:token/comments` |
+| `share-stream` | 20/60 | 10/20 | `/share/:token/stream`, `/share/:token/cover/:id` |
+| `share-comment` | 5/10 | 1/1 | posting, editing, deleting a share comment |
+| `email-change` | 5/10 | 1/1 | `/me/email` |
+| `notes-save` | 60/120 | 10/20 | `PATCH /notes/:id` |
+| `lyrics-analyze` | 60/120 | 10/20 | `POST /lyrics/analyze` |
+| `settings-write` | 60/120 | 10/20 | `PATCH`, `PUT`, `POST` under `/settings/*` |
+| `image-upload` | 100/300 | 5/10 | `POST /images/upload`, `POST /images/instance` |
+| `upload` | 100/300 | 5/10 | `POST /assets/upload` |
+| `repo-objects` | 100/300 | 5/10 | `POST /repos/:id/objects` (the pack upload; not the `missing` negotiation) |
+| `repo-archive` | 10/10 | 1/1 | `GET /commits/:id/archive`, `GET /repos/:id/archive` (the zips), `POST /repos/:id/objects/fetch` (the object fetch) |
+| `convert` | 10/10 | 1/1 | `POST /assets/:id/convert` |
+| `oauth-register` | 5/5 | 1/1 | `/auth/oauth2/register` |
+| `auth-signin` | 10/20 | 3/3 | `/auth/sign-in/email` |
+| `auth-signup` | 5/5 | 2/2 | `/auth/sign-up/email` |
+| `guest-signin` | 5/10 | 2/2 | `/auth/sign-in/anonymous` |
+| `device-signin` | 5/10 | 2/2 | `/auth/device/code`, `/auth/device` (the code lookup), per account when signed in, else per address |
+| `mcp` | 60/120 | 10/20 | every authenticated `POST /mcp` |
+| `device-heartbeat` | 10/10 | 3/3 | `PUT /machines/:id`, per machine |
+
+## Middleware (`src/middleware/`)
+
+| File | What it does |
+|---|---|
+| `session.ts` | `resolveSession` — calls `auth.api.getSession`, sets `user`/`session` or null. Never throws. |
+| `authenticated.ts` | `authenticated` throws 401 if `user`/`session` is null, then 403 (`"This needs an account"`) if `user.isAnonymous` — the `anonymous()` plugin's guest session (the share page's commenting) never passes this gate. The one place `AuthType` narrows to `AuthedEnv`. `guestOrMember` (same file) is the 401-only check, for the share routes a guest is meant to reach. `guestAccess` (same file) is the instance's switch on the routes a link opens without an account (every `share-guest.ts` route, first, and the public `GET /invites/:token`): while `access.guestAccess` is off it answers a signed-out caller or an anonymous session a bare 401, and passes a real account. |
+| `authorize-project.ts` | `authorizeProject(resolveProjectId, policy?)` gates a mount on the `Scope` a resolver answers with: `{kind:"project",id}` gates on membership; `{kind:"user",id}` passes only that user (404 for anyone else, same as a missing row); `{kind:"instance"}` is readable by anyone signed in and writable only by an instance admin (`isInstanceAdmin`, now an **async** read of `users.instance_role`); `{kind:"none"}` needs authentication alone; `null` is 404. `policy` is a `RoleByMethod` map (`GET/HEAD`→viewer, else editor by default) or a `(c) => MemberRole \| undefined` function for path-dependent rules, consulted only for a `project` scope. Sets `c.set("projectId", ...)` / `c.set("role", ...)` for handlers to read via `gatedProject(c)` / `gatedRole(c)` — both throw 403 on an ungated mount. `isReadMethod(method)` (`GET`/`HEAD`) is exported for resolvers that need to tell a read from a write. |
+| `project-resolvers.ts` | The non-entity resolvers, each returning a `Scope`: `resolveTrackAudioRoute`, `resolveCommentRoute`, `resolveStatusRoute` (`{kind:"instance"}` for a read of a seeded global; any write to one is a 403 thrown from the resolver with the query's own wording, instance admin included), `resolveInviteRoute` (`unscoped` for `/accept`), `resolveAssetRoute`, `resolveJobRoute`, `resolveRepoRoute` (the path's `:id` → the repo's project via `projectIdForRepo`; reads nothing else, so every route mounted under `/repos/:id` is gated by it), `resolveImageRoute` (`{kind:"user",id}` for an avatar, `{kind:"instance"}` for an instance image and, for an instance admin only, `POST /images/instance`; `null`, so 404, for anyone else there). `resolveEntityRoute(module)` is the default for every entity mount: the path id when there is one; otherwise, a read with no third path segment is `null` (no such route), a read whose segment doesn't parse as an id (a malformed id, or a literal sub-path like `bulk`) is `unscoped` so the matched route's own validation answers it, and any write (the `POST` create, or a module's `PATCH`/`DELETE /bulk`) reads `projectId` from the body via `requireProjectInBody`. |
+| `request-refs.ts` | `segments(c)`, `pathId(c)` (path segment 2, since a wildcard mount middleware can't see a downstream route's `:id`), `readBody(c)` (memoized so the handler's own `c.req.valid()` still sees it), `requireProjectInBody(c)` (400 when the body names no `projectId`), `unscoped` (the `{kind:"none"}` constant). |
+| `rate-limit.ts` | `takeToken(name, key)` is the token-bucket primitive — one shared map keyed `name:key`, swept hourly when idle, in-memory and per-process. `name` is a `RateBucketName`, and each spend reads that bucket's `{burst, perMinute}` from `instancePolicy().rateLimits` (the table under **Instance policy**): a bucket refreshed to a lower burst is clamped on its next spend, and a changed refill applies from there. `rateLimit(name)` is a short Hono middleware wrapper, keyed on `c.get("user")?.id` (else `clientAddress(c)`, see below), answering a refusal with a `Retry-After`; `moveRateLimit` is `rateLimit("moves")`, which all three entity moves apply; `bulkMoveRateLimit` is `rateLimit("bulk-moves")`, applied by `POST /bulk/move`. `spendToken(name, key)` is the same spend for a caller outside the middleware chain, throwing the 429 `HTTPException` itself: the MCP `move_to_project` and `link_sessions` tools spend from `moves` and `session-moves` under the actor's id, so a tool and its REST route share one allowance, and the `mcp` route spends from `mcp`. `device-heartbeat` is keyed by the device id, not the user, and spent with `spendToken` in `PUT /devices/:id/heartbeat` only after the ownership check, so naming another account's device cannot drain its allowance. The pre-auth buckets mounted in `app.ts` — `oauth-register`, `auth-signin`, `auth-signup`, `guest-signin` — have no signed-in caller to key on, so every one of them draws on `clientAddress`; `device-signin` is mounted the same way but, being the one pre-auth bucket the signed-in `/auth/device` lookup also spends, keys on the account when there is one. |
+| `client-address.ts` | `clientAddress(c, hops = trustedProxyHops)` — the caller's real address once `hops` trusted reverse proxies are skipped: reads that many entries from the right of `X-Forwarded-For`, one per trusted hop, falling back to `hono/bun`'s `getConnInfo(c).remote.address` (the raw socket) at `hops = 0` or when the header is short. At `hops = 0` the header is never read at all — a caller behind no trusted proxy cannot claim a different bucket for itself by sending one. `rateLimit` uses it for every unauthenticated caller. |
+| `instance-admin.ts` | `instanceAdmin` — the gate on `/admin/*`, mounted after `authenticated`. Passes `users.instance_role = 'admin'` through the shared `isInstanceAdmin` (read per request, so a promotion or demotion lands on the next one) and answers everyone else a **404**, so the mount is invisible rather than forbidden. |
+| `trusted-origin.ts` | `isTrustedOrigin` — case-insensitive membership in `trustedOrigins`, shared by `cors()` and `csrfProtection`'s Origin check. `csrfProtection` — see **CSRF** above; a refused origin is logged once through a 256-entry `LruSet` (`lib/lru-set.ts`). |
+| `security-headers.ts` | `securityHeaders` — see **Security headers** above. |
+| `request-log.ts` | `requestLog` — the one structured request log line described above. A success on a `QUIET_PATHS` path (`GET /api/projects/:id/jobs` and `/jobs/events`, which clients repeat or hold open, and `/api/machines/:id`, the machine's beat, every 30 s per machine) logs at `debug` instead of `info`. |
+
+## Entity registry (`src/entities/`)
+
+Four entities — **project, collection, track, session** — are declared once as `EntityModule`s
+(`src/entities/types.ts`) and everything else (routes, activity logging, comments, search, images,
+assets) reads the registry rather than switching on a kind by name.
+
+- Each entity's detail read (`getProject`, `getCollection`, `getTrack`, `getSession`) returns its
+  `attachments` as `attachedAssetSchema` rows (`db/schema/assets.ts`): the asset plus `uploadedBy`
+  `{id, name, image}` or `null` when the asset has no uploading user, including once the uploader has
+  deleted their account. The reads pass `attachmentsWithUploadedBy`
+  (same file) as the `with` clause for the relation. The unpaginated `getSessionsInProject` listing keeps
+  bare `assetSchema` rows.
+- `src/entities/shared.ts` — `defineEntity(spec)` builds a module from its typed create/edit/row types,
+  deriving `projectIdFor` (via `scopedResolver`), `activityTarget`, `assertInProject` (via
+  `scopedAssert`) and `assetSources`. `defineList(spec)` does the same for a project-scoped listing
+  (paginated page, summaries, bulk update/delete/**select**). `EntityList.selectIds(projectId,
+  selection)` (`entities/types.ts`) is the resolver every bulk write's `selection` goes through when a
+  caller needs the plain id list rather than a write: each kind's `select{Kind}Ids` (`entities/*/queries.ts`)
+  runs `selectionScope(idColumn, selection, kindWhere(projectId, kindSelectionFilters(selection)))`
+  ordered by id, the same pipeline `bulkUpdate*`/`bulkDelete*` already run; an id outside `projectId` is
+  excluded silently, never a 404. A bulk route that hands ids to another query calls it as
+  `m.list.selectIds` instead of re-deriving the selection itself.
+- **How a paginated page and a selection share a predicate.** `get{Kind}sPage` builds its own `base`
+  (count, facets and groups all re-read it) while the selection side goes through `{kind}sWhere`, so a
+  row-scope rule has two call sites and belongs in one per-kind helper both use. An `ids` selection
+  carries no filters (`selectionFilters`) but is still ANDed with the kind's filter clause
+  (`selectionScope`), so a default that narrows rows when a filter is absent must not apply to it.
+  `facetCounts` reads a single table with no joins, so any predicate in `base` is self-contained (an
+  `EXISTS` subquery, not a join). Every sort key's order term comes from `sortTerm(column, descending)`
+  (`db/queries/pagination.ts`): nulls sort last in both directions, then the `id` tiebreak ascending, on
+  the plain and the grouped page alike. A sort key that reads another table names its join in the kind's
+  `{kind}SortJoins` map (`status` → `statusJoin` for tracks and collections, `bpm`/`key` →
+  `mainSessionJoin` for tracks, `track` → `trackJoin` for sessions); the plain page applies it through
+  `withJoins` and `groupedIdRows` takes it as `sortJoins` beside the group's own `spec.joins`, and
+  `withJoins` joins a table once when the grouping and the sort both read it. A correlated-subquery sort
+  column (`primaryAudioLufs`, `lastSaveAt`) needs no join. `/summary` and
+  `GET /projects/:id/sessions` bypass the page pipeline entirely (dit clients diff against them). A
+  `z.stringbool()` query filter refuses a JSON boolean, so it cannot be passed from an MCP tool input.
+- **The tracks list** (`entities/track/queries.ts`). `trackQuerySchema.archived` is
+  `archivedScopeSchema` (`db/queries/pagination.ts`): absent lists live tracks only, `only` archived ones,
+  `include` both. `trackArchivedScope(scope)` is the one predicate, read by `getTracksPage`'s `base` (so
+  rows, `rowCount`, facets and groups agree) and by `tracksWhere`. `getTracksPage` keeps one list of active
+  filter clauses, each tagged with its dimension (`q`, `status`, `priority`, `collection`, `relation`,
+  `label`, `artist`, `explicit`, and `fields` for every `cf_<id>` filter): the rows apply all of them and
+  each facet applies every clause whose dimension is not its own (`whereExcept`), so a new filter joins the
+  list and no facet can miss it. `trackSelectionFilters` gives an `ids`
+  selection `include`, so a bulk write by id reaches archived rows, and an `all: true` selection its own
+  `archived` filter (live only when absent or unparseable). The same param reaches MCP `list_tracks`
+  through `querySchema`. Rows carry `archivedAt`, `lastSaveAt` (the newest `saves.file_updated_at`
+  across the track's sessions, null with none) and `saveCount`, filled for the page's ids by one grouped
+  `trackSaveStats(trackIds)` (`db/queries/saves.ts`). The sort keys `lastSaveAt` and
+  `saveCount` are correlated subqueries over `saves` joined to `sessions`, never a stored
+  column, so they sort grouped pages too.
+- `src/entities/index.ts` — `ENTITIES = { project, collection, track, session }`, `entityModules()`,
+  `COMMENT_TARGETS` (the four entities plus `track_audio`, which is commentable but not a CRUD entity —
+  `src/entities/track-audio/index.ts`). **Deliberately holds no routers** — the query layer reads the
+  registry, routes read the query layer, so a registry that imported routers would close that loop.
+- `src/routes/entities.ts` — `mountEntities(app)` is the one place a router file is named: for each
+  module, `app.use(mountPath+"/*", authenticated)`, `authorizeProject(resolveEntityRoute(module),
+  module.policy)`, then `genericBulkRoutes(module)`, then the entity's own router
+  (`entities/<kind>/routes.ts`), then `genericRoutes(module)` — in that order because every one of
+  `genericBulkRoutes`' paths is a literal (`/bulk`, `/bulk/move`) that an entity's own dynamic route
+  (`/:id/move`) would otherwise read as an id and 400 on, while the entity's own static paths still need
+  to be matched before the rest of `genericRoutes`' generic `/:id` shape swallows them.
+  `entityListRoutes()` mounts every entity's paginated/summary listing under
+  `/projects`.
+- `src/routes/generic.ts` — `genericBulkRoutes(m)` builds the `/bulk`-prefixed routes every listable
+  entity gets, mounted ahead of its own router for the reason above: `PATCH /bulk` + `DELETE /bulk`
+  (`m.list`), `POST /bulk/move` (`m.move && m.list`; rate-limited on `bulkMoveRateLimit`; body
+  `{projectId, selection, targetProjectId}` → `{moved, droppedFields, priorityFallbacks}`; resolves
+  `selection` through `m.list.selectIds`, then `moveEntities` — an empty resolved selection answers
+  `{moved: 0, droppedFields: [], priorityFallbacks: []}` with no transaction, though its rate-limit token
+  is still spent), `PATCH /bulk/labels` (`m.labels && m.list`;
+  body `{projectId, selection, add, remove}` → `{updated}`; a label id in both `add` and `remove`, or
+  outside the project, is a 400 checked before `m.list.selectIds` resolves the selection or any
+  transaction opens; resolves through `bulkSetEntityLabels`, which touches only the ids named — every
+  other label a row carries is left alone — and counts a row as `updated` only when its label set
+  actually changed). `genericRoutes(m)` builds the rest of what
+  every entity gets: `POST /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` (204, no body), `PUT /:id/labels`
+  (only if `m.labels`), `POST /:id/attachments` (only if `m.attachments.link`). `entityListRoutes()`
+  builds `GET /:id<mountPath>/paginated` and `GET /:id<mountPath>/summary` per listed entity, mounted
+  under `/projects`. A paginated route's `page`/`pageSize` come from `paginationQuerySchema`
+  (`db/queries/pagination.ts`): `DEFAULT_PAGE_SIZE` 50, `MAX_PAGE_SIZE` 200 — the client sends its
+  `tables.rowsPerLoad` setting as `pageSize`, and a value over the max is clamped down to it rather than
+  rejected (`min(1)` still rejects). The `/summary` reads return every row, archived
+  ones included, and carry the archive state for the client to hide: `/tracks/summary` has `archivedAt`
+  and lists live tracks first (each group newest first); `/sessions/summary` and `GET /sessions/:id`
+  have a derived `archived` (true when the session's track is archived, false with no track).
+
+| Kind | `mountPath` | `table` file | has `list`? | has `labels`? | notes |
+|---|---|---|---|---|---|
+| `project` | `/projects` | `db/schema/projects.ts` | no | no | `projectColumn` points at its own `id` (a project is its own scope); custom `resolveRoute` (the path id directly, or `unscoped` for `POST /projects` — a project has no parent project to require in the body, unlike every other entity's default resolver); `recordsDelete: false` (deleting a project takes its own feed with it); `policy` is a function keying off the path (`POST .../invites` → editor, the lowest role the project policy's `whoMayInvite` can allow, with `createInvite` holding the project's own value; `GET .../invites` and non-GET `/members` → admin, `DELETE /projects/:id` and `/transfer-ownership` → owner, `POST .../leave` → viewer); `mcpCreate: false`, `deleteRole: "owner"` — the policy's own `DELETE /projects/:id` branch reads `deleteRole` too, so REST and MCP share one source |
+| `collection` | `/collections` | `db/schema/collections.ts` | yes | `"collection"` | `assertWritable` checks `statusId` via `assertStatusUsable` and `priorityId` via `assertLevelsInProject` (400); `status.set` wraps `updateCollectionStatus`; `priorityLevel: true` |
+| `track` | `/tracks` | `db/schema/tracks.ts` | yes | `"track"` | `assertWritable` checks `statusId` and `priorityId` as collections do; `assetSources` includes both its attachments and its `track_audios` join; `status.set` wraps `updateTrackStatus`; `priorityLevel: true`; `archive.set` is `setTracksArchived` (`entities/track/queries.ts`: one update that stamps or clears `archived_at` on only the rows not already in that state, answers `{ids, sessionCount}` for the rows that changed; `updatedAt` bumps) — the only module with an `archive` hook |
+| `session` | `/sessions` | `db/schema/sessions.ts` | yes | `"session"` | custom `resolveRoute`: one project per request, resolved from `projectId`, or the first existing session/track named anywhere in the body including `moves`/`attachments` arrays; two different `projectId`s in one body is a 400; `mcpCreate: false` (dit creates sessions); `assertWritable` checks `trackId` and `priorityId`; `priorityLevel: true` |
+
+`EntityModule` (`src/entities/types.ts`) also carries five fields the MCP tools read, each optional and
+defaulted for a module that doesn't set it: `mcpCreate` (default `true`; whether `create_<kind>` exists),
+`deleteRole` (default `"editor"`; the role `delete_<kind>` and, for `project`, the REST delete policy
+require), `status` (absent by default; a `{ set(id, statusId) }` hook for the two kinds `set_status` can
+move), `priorityLevel` (set on `track`, `collection` and `session`, whose rows hold a priority level: their
+MCP write tools take the level's name as `priority` in place of `priorityId`), and `move(id, projectId,
+actorId)` (absent on `project`; `track`, `collection` and `session` point it at
+`moveTrackToProject`/`moveCollectionToProject`/`moveSessionToProject` in `db/queries/move.ts`, and
+`move_to_project` builds its `kind` enum from the modules that set it). The REST `POST /:id/move` handlers
+call those three functions directly, and answer the moved row with the move's report
+(`moveReportSchema`: `droppedFields` and `priorityFallbacks`) merged on (`movedRowSchema`).
+
+Tracks, collections and sessions each carry a level of their project's priority scale (`db.md`, **Priority
+levels**): list rows and detail bodies have `priority: PriorityLevel` (`{id, name, colour, rank}`, one OpenAPI
+component) beside `priorityId`; create bodies take an optional `priorityId` (omitted → the project's default),
+`PATCH /:id` and `PATCH /bulk` take `priorityId`, and a level of another project is a 400. The three paginated
+listings take `sort=priority` (by rank), `groupBy=priority` (one group per level with rows, rank order,
+labelled by name) and `priority=<id>,<id>` (membership, a malformed list is a 400), with a `priority` facet.
+
+A track's `relations` edges (`GET /tracks/:id`, `trackRelationEdgeSchema`) each carry `relationType: {id,
+name}` (`db.md`, **Relation types**). The tracks listing's `relation=<id>` filters to tracks with a relation of
+that type on either end, `relation=any` to tracks with any relation at all, and its `relation` facet counts
+tracks per type id plus `any` (no sort or groupBy — a many-to-many with no natural rank); the MCP layer's own
+query schema
+(`withRelationFilterName`/`resolveRelationFilterName`, `mcp/relation-type-names.ts`) takes the same two forms
+naming the type by its name instead of its id, as `add_track_relation`'s `relation` input does.
+
+## MCP (`src/mcp/`)
+
+`POST /api/mcp` is a bearer-token endpoint outside the cookie-session world: no `authenticated` mount,
+no `describeRoute` (so it never reaches `/api/openapi`, `v1.d.ts` or `generate-api.ts`), registered only
+when `mcpEnabled` (`src/lib/env.ts`) — an off server answers 404 there like any unknown path.
+
+- `route.ts` — `createMcpRoute(tools = TOOLS, resources = RESOURCES)` builds the Hono sub-app mounted at
+  `/mcp`; the default export is `createMcpRoute()`, and a test drives the same wiring with fixture specs by
+  calling the factory itself. `POST /` first runs an origin guard: a request with no `Origin` header passes
+  (every non-browser client, which is most of them); a present one must be in `trustedOrigins` or match the
+  request's own `sameOrigin()` (`lib/origin.ts`) — this is the transport specification's DNS-rebinding
+  defence, not CORS, which only withholds headers rather than refusing the request. Past the guard,
+  `requireMcpAuth(auth, handler, {resource: mcpResource, requiredScopes: ["read"], jwksUrl:
+  selfUrl("/api/auth/jwks")})` (`@better-auth/mcp`) verifies the bearer JWT (issuer, audience, expiry)
+  against the provider's JWKS and calls `handler(request, claims)`, built fresh per request so it can close
+  over the Hono context: it loads the actor, sets `c.set("user", actor.user)` (so `requestLog` and the
+  activity log see the MCP caller with no branch of their own), spends one `spendToken({name: "mcp",
+  burst: 60, perMinute: 120}, actor.id)`, reads a clone of the body to find a `tools/call`'s tool name and, when
+  `toolScope` names a scope the actor lacks, calls `requireScope` so the thrown insufficient-scope error
+  reaches `requireMcpAuth`'s own try/catch before the tool is ever dispatched (a body it cannot parse, or a
+  method other than `tools/call`, is left to the SDK) — then hands the request to a handler built over
+  `tools`/`resources` with the actor riding along under `AuthInfo.extra`. No token is a 401 naming
+  `resource_metadata` and `scope="read"` in `WWW-Authenticate`; a named write tool a read-only token cannot
+  use is a 403 naming `insufficient_scope` and the missing scope the same way; the burst's 61st call is 429;
+  a token whose subject row was deleted since minting is 401 (`requireMcpAuth` only checks the JWT, never
+  whether the row still exists).
+- `actor.ts` — `Scope = "read" | "write"`; `Actor = {id, name, scopes, user}` (`user` is the same shape
+  `resolveSession` puts on a cookie session). `loadActor(claims)` selects the `users` row named by
+  `claims.sub`, 401 if it no longer exists, 403 (`"This needs an account"`) if `user.isAnonymous`
+  — an MCP client is never a share-page guest — then parses `claims.scope` into the granted scope set.
+  `authInfoFor(actor, claims, token)` /
+  `actorFrom(authInfo)` are the two ends of carrying the actor through the SDK's per-request `AuthInfo`
+  (`extra.actor`) — the registry (`registry.ts`) reads it back with `actorFrom` rather than re-deriving it.
+- `authorize.ts` — the per-tool gates, all plain functions over an `Actor` (no request object): `requireProject(actor,
+  projectId, minRole)` calls `requireMembership` (`db/queries/authorization.ts`), the same helper
+  `authorizeProject` calls over HTTP — a non-member gets a 404 (`project not found`, no existence leak), a
+  member below `minRole` gets the same 403 text `authorizeProject` throws; `requireResolved(actor, scope,
+  label, minRole)` is the shared 404-then-`requireProject` shape for a resolver outside the entity registry
+  — `scope` is `db/queries/authorization.ts`'s `Scope` (imported here as `ResourceScope`, since `actor.ts`
+  already names its own OAuth `Scope`), and anything but `{kind:"project",id}` 404s naming `label`, same as
+  a non-member gets the byte-identical `${label} not found` 404, so a caller can't tell a missing row from
+  a foreign one; `requireEntity(actor, kind, id, minRole)` resolves `ENTITIES[kind].projectIdFor(id)` into a
+  `Scope` and delegates to `requireResolved`, so a track audio (`projectIdForTrackAudio`) or a job
+  (`projectIdForJob`) gates the same way without its own copy — `requireProject` itself still takes a bare
+  `projectId`, since its callers already have one and gain nothing from routing it through `Scope`;
+  `requireScope(actor, scope)` throws
+  `createInsufficientScopeError([scope])` (`better-auth/oauth2`) rather than a plain `HTTPException` —
+  `createResourceServerChallenge` only recognises a failure built that way, so one that escapes a tool's
+  own try/catch reaches `requireMcpAuth`'s built-in RFC 6750 step-up challenge instead of a hand-built
+  header; `toolFailure(err)` maps `HTTPException`/`ZodError` to `{status, message}` for a tool's `isError`
+  result and rethrows anything else (including an insufficient-scope error, so it reaches the transport
+  rather than being folded into a text result).
+- `spec.ts` — `defineTool`/`defineResource`, identity functions that type a spec at its module's definition
+  site, and the `ToolSpec`/`ResourceSpec` types. A leaf module: tool and resource modules import it, never
+  `registry.ts`, which imports them (importing the registry from a tool module would close a cycle).
+- `registry.ts` — the only file that calls the SDK's `McpServer`/`registerTool`/`registerResource`;
+  `ToolSpec` carries a name, scope, Zod `input`/`output` and a `run(actor, input)`, `ResourceSpec` a URI
+  (template) and a `read(actor, params)` it shares with a tool. `buildServer(actor, tools = TOOLS,
+  resources = RESOURCES)` makes one `McpServer` per request, holding the actor by closure: a tool the
+  actor's scopes do not cover, or whose scope the instance does not offer (`integrations.mcpToolGroups`,
+  read per request; `MCP_SCOPES` in `@workspace/settings/groups/instance-integrations` is the scope list
+  itself), is never registered, so
+  `tools/list` is the exact set the caller may use, in
+  `tools`' own order, which keeps the list deterministic across requests. A registered tool's callback
+  calls `requireScope` (defence in depth — `route.ts`'s pre-dispatch check is what actually produces the
+  challenge, since the SDK folds an error thrown here into an ordinary `isError` result instead), runs the
+  spec, and returns `{content, structuredContent}` on success or `{isError: true, content}` naming the
+  status on failure, through `toolFailure`. The result is parsed against the tool's `output` outside that
+  failure mapping (a result that breaks its own schema is a server bug, not a 400) and serialised to JSON.
+  `wireSchema(schema, io)` hands the SDK each input and output as the JSON the client actually exchanges:
+  zod cannot turn a `Date` into JSON Schema, so a `z.date()` is advertised as a `date-time` string (a field
+  whose metadata already names its wire type, such as `epochDate`, keeps it), inputs are still validated by
+  the tool's own zod schema, and one row schema with a timestamp no longer fails the whole `tools/list`. A resource registers as a plain URI string or, when its
+  template carries a `{variable}`, as the SDK's `ResourceTemplate`; either way `read` throwing (an actor
+  outside the project, say) becomes a JSON-RPC error, never a resource's contents. `toolScope(name, tools)`
+  is the lookup `route.ts` uses ahead of dispatch. `createMcpHandlerFor(tools, resources)` wraps
+  `buildServer` in `createMcpHandler(..., {legacy: "reject"})`; `route.ts` builds the production instance
+  over the real `TOOLS`/`RESOURCES`. A tool module is one file under `tools/` exporting an array of
+  `ToolSpec`s; `tools/index.ts` concatenates every module's array in registration order, and adding a tool
+  never touches the registry. `resources/read.ts` and `resources/index.ts` mirror this for
+  `projammr://projects` and `projammr://projects/{projectId}`, sharing the same two functions a resource
+  read and a tool both call.
+- `tools/read.ts` (`READ_TOOLS`, scope `read`): `list_projects` (`getProjectsForUser`, no gate — a caller's
+  own memberships) and `get_project` (`getProject` + `getStatusesInProject` + `getPriorityLevels` (as
+  `priorities`, the scale with its counts) + `getLabelsInProject` + `getProjectMembers` in one call, gated at
+  viewer) are hand-written; the exported `listProjects` and
+  `getProjectDetail` functions are what `resources/read.ts` reads too. `list_tracks`/`list_collections`/
+  `list_sessions` and `get_track`/`get_collection`/`get_session` are built by one `listTool(module)` and
+  `getTool(module)` over `entityModules().filter(m => m.list)` (project is served by `get_project` instead),
+  so a fourth listed entity appears with no change here: `listTool` wraps `module.list.page`, gated at
+  viewer, with `paginatedResponseSchema(list.rowSchema)` as its output. `EntityList` carries
+  `sortColumns` and `groupColumns`, which `defineList` fills from each module's whitelists
+  (`trackSortKeys`, `trackGroupColumns`, …); `listTool` both enumerates them in its description and
+  intersects enums over `sort` (`<key>.asc` / `<key>.desc`) and `groupBy` onto `list.querySchema`, so
+  `tools/list` spells the values out and a wrong one is a `toolFailure` (PROJ-837). REST keeps
+  `paginationQuerySchema`'s plain strings and `parseSort`'s lenient fallback, so a stale client URL
+  resolves to the default order instead of 400ing — the leniency is the difference between a URL a
+  person can bookmark and a tool an agent cannot see misfire. `trackSortKeys` exists because the track
+  listing sorts by `trackNumber` (the number inside a filtered collection) on top of `trackSortColumns`;
+  both `parseSort` and `sortColumns` read that one array so they cannot drift.
+  `getTool` wraps `module.load(id, gate.role)` after
+  `requireEntity(actor, module.kind, id, "viewer")`, merging in `module.mcpDetail`'s extra fields when the
+  module declares one. `EntityModule.mcpDetail` (`entities/types.ts`) is an optional
+  `{schema, read(id), replaces?}` hook a module sets for data an MCP caller needs that the HTTP detail
+  response doesn't carry, or carries in a heavier shape than MCP wants. Without `replaces`, `schema` is just
+  the added keys and the tool's output is `module.schemas.detail.and(schema)`; with `replaces`, `getTool`
+  deletes those keys from the loaded detail before merging in `read`'s result, and `schema` must describe
+  the *whole* merged output — the module states its own post-omit schema (`trackDetailSchema.omit(...)
+  .extend(...)`) rather than `getTool` calling `.omit()` on the generic `ZodType` it holds, which would lose
+  the literal key types `.omit` needs. Only `track` sets `mcpDetail`: it adds `audioVersions` (id, version,
+  isPrimary, asset name, durationMs) from `getTrackAudios`, and replaces `sessions` with summaries (id,
+  name, main, daw, tempo, timeSignature, rootNote, scale, localFileUpdatedAt, updatedAt — no `notes`
+  or `structure`, which stay full-size on `get_session` only) built from `getTrackSessions`, the same query
+  `list_track_sessions` calls. `mcpDetail.description` overrides `get_<kind>`'s default description for a
+  module whose hook changes what the tool returns. The remaining tools are hand-written, one call each:
+  `list_collection_tracks` (`getTracksInCollection`, gated on the collection), `list_track_sessions`
+  (`getTrackSessions`, gated on the track), `search` (`searchProject`, gated on the project — a query under
+  two characters answers no results, matching the query layer's own floor; every result carries `archived`,
+  true for an archived track and a session of one, and live results come before archived ones, each group in
+  score order) and `get_activity`
+  (`getProjectActivity`, gated on the project). `mcp/tools/repos.ts` (`REPO_TOOLS`, registered after
+  `READ_TOOLS`) adds the dit history reads, all `read` scope: `list_repos {projectId}` (`listRepos`, gated
+  on the project, `{repos}` in the repo routes' `repoWithSetsSchema`, sets with their branch tips), `list_commits {sessionId, branch?,
+  since?, limit?}` (`getSessionCommits`, gated on the session; `limit` takes the saves route's bounds and default,
+  `branch` filters by branch name and an unknown name answers `{commits: []}`, `since` is an ISO instant keeping the commits committed after it), `diff_commits {sessionId, from, to}` (the diff route's `diffStates`, `from`/`to` as `save:<id>` or `commit:<id>`, gated on the session) and `get_commit {id}` (`getCommit`,
+  one commit in `sessionCommitSchema`'s shape with every save it covers and its meta, no computed diff; gated
+  through `projectIdForCommit` → `requireResolved` (the resolver the REST commit routes use), so a missing commit and one in a project
+  the actor is not in both answer `commit not found`). Every tool whose read answers an array wraps it in a
+  single-key object (`{projects: [...]}`, `{tracks: [...]}`, `{results: [...]}`, `{activity: [...]}`),
+  because MCP structured content must be a JSON object.
+  `mcp/tools/machines.ts` (`MACHINE_TOOLS`) adds `list_machines {projectId?}` (scope `read`): `{machines: {id, name, platform, appVersion, lastSeenAt, online, openSession: {id, name} | null, pushedRepos: {id, name, projectId}[]}[]}`, the caller's machines most recently seen first. With `projectId` it keeps the machines tracking a repo of that project (gated on the project as viewer, 404 `project not found` otherwise). `openSession` is set only while the machine is online and the caller is a member of the session's project; an offline machine reports none. `pushedRepos` are the repos of its commits and saves, only those of projects the caller is a member of.
+- `entity-writes.ts` — `patchEntityAs(actor, module, projectId, id, patch)` is the write side every MCP
+  entity-patching tool shares: `assertWritable` → `module.row(id)` (for the before/after diff) →
+  `module.update(id, patch)` → `logUpdate` under the caller, the same sequence `PATCH /:id` runs over HTTP.
+  The caller has already gated `id` at editor through `requireEntity` and passes the project that gate
+  resolved.
+- `tools/notes.ts` / `resources/notes.ts` — notes and lyrics, on top of `EntityModule.notesField` (`entities/
+  types.ts`, default `"notes"`, `"description"` on the project module only) and `lib/markdown-blocks.ts`'s
+  `blocksToMarkdown`/`markdownToBlocks`. `read_notes`/`write_notes` take `{kind, id}` (`kind` one of
+  `rawEntityKindEnum`) and convert the entity's notes field in document mode, gated at viewer/editor through
+  `requireEntity`; `write_notes` reads the row first so a `<!-- keep:id -->` placeholder in the markdown puts
+  an unrepresentable block back. `read_lyrics`/`write_lyrics` take `{trackId}`, converting the track's linked
+  `notes` row (`db/queries/notes.js`'s `noteIdForTrack`/`getNote`/`createNote`/`saveNote`) in lyrics mode:
+  `read_lyrics` gates viewer on the track then answers `{markdown: null}` for both "no note" and "a note the
+  caller may not read" (`getNote`'s 404), so the id never distinguishes them; `write_lyrics` creates and
+  links a note where there is none, saves over one the caller may write (`getNote(...).can.write`), and
+  answers 403 naming the note's author, or 409 with "changed elsewhere" text, without retrying, for the two
+  failure cases. Both tools' plain functions (`readNotes`, `writeNotes`, `readLyrics`, `writeLyrics`) are
+  exported for the resources — `projammr://tracks/{trackId}/lyrics` and `projammr://{kind}/{id}/notes` (the
+  latter 400s a `kind` outside `isEntityKind`) — to call directly, the same pattern `tools/read.ts` and
+  `resources/read.ts` share. `saveOrExplainStale(subject, save)` is the shared 409-rewording helper
+  `writeLyrics` and `writeNote` both call, so "changed elsewhere" text lives in one place. The same module
+  also carries the notebook tools — the caller's own notes, named apart from `read_notes`/`write_notes` so a
+  model does not confuse an entity's own notes with a personal note addressed by `noteId`, and each tool's
+  description says so: `list_notes` (`listNotes(actor.id)`, id/title/preview/pinned/lyricsMode/updatedAt/
+  track), `read_note`/`write_note` (`{noteId}`/`{noteId, markdown}`, gated by `getNote`'s own 404 — no
+  `requireEntity` call, since a note's access is `loadNoteAccess`, not project membership), `create_note`
+  (`{markdown, trackId?}`, lyrics mode when `trackId` is given — overriding `createNote`'s own default of
+  lyrics mode — else document mode), `link_note`/`unlink_note`/`delete_note` (`{noteId, trackId}`/`{noteId}`/
+  `{noteId}`, `delete_note` marked `destructive`; `unlink_note` answers `{note}`, null for a caller who is not
+  the author). All six read and write in whichever mode the note is
+  already stored in (`noteMode`), and every one that moves a note across the boundary of a track's lyrics
+  slot logs through `routes/activity-log.ts`'s `logLinkChange(c, link, action)` over `activityContext(actor)`
+  — the same function `routes/notes.ts` calls for the REST routes, including `write_lyrics`'s create-and-link
+  path. The resource `projammr://notes/{noteId}` reads through `readNote`.
+- `tools/organise.ts` (`ORGANISE_TOOLS`) generates the entity-CRUD and vocabulary tools from the entity
+  registry rather than naming a kind: `create_track`/`create_collection` (`createTool`, over the modules
+  with `mcpCreate !== false` — `session` and `project` opt out, so a create tool never exists for them even
+  though `project` has a `create`), `update_<kind>` for every entity (`patchTool`: `module.schemas.edit`
+  with `notes`/`description` stripped, since those go through the notes tools; the write itself is
+  `mcp/entity-writes.ts`'s `patchEntityAs`), `delete_<kind>` for every entity (`deleteTool`, `destructive:
+  true`, gated at `module.deleteRole ?? "editor"` — `project` sets `"owner"`, the REST `DELETE
+  /projects/:id` policy reads the same field). `bulk_update` iterates the modules with a `list` for its
+  `kind` enum and parses `patch` through that module's own `patchSchema` inside `run`, so a bad patch is a
+  400 through `toolFailure`'s `ZodError` branch rather than a 500. On a module with `priorityLevel`, the
+  create, update and bulk tools name a priority level by `priority`, its name in the project's scale
+  (`mcp/priority-names.ts`: `withLevelName` swaps `priorityId` for it in the input shape, `resolveLevelName`
+  looks it up in the gated project and hands the module `priorityId`; a name the scale lacks is a 404 naming
+  it, as `set_status` answers). The `list_<kind>s` tools keep the REST filter, `priority=<id>,<id>` level ids
+  as `get_project` lists them. `set_labels`/`list_labels`/`delete_label`
+  wrap `setEntityLabels`/`getLabelsInProject`/`deleteLabel`; the `set_labels` kind enum comes from the
+  modules with `labels`. `set_status` resolves a name through `getStatusesInProject` (own project's plus
+  the seeded globals) and calls the module's `status.set` hook — the only two modules that declare one are
+  `track` and `collection` — before `logUpdate`; an unmatched name is a 404 naming it. `archive_<kind>`/
+  `unarchive_<kind>` (`archiveTool`, over the modules that declare `archive` — today `track`) take `{ id }`,
+  gate at editor on the row, call `archive.set([id], archived)` and `logArchives` under `activityContext`,
+  and answer the row; a repeat call succeeds and logs nothing because `set` answers only the ids it changed.
+  `create_status`/
+  `update_status`/`delete_status` wrap the status query functions directly, refusing a global status the
+  same way the REST route does. The remaining organise tools each wrap the query a REST route calls, gated at
+  editor, with the body schema imported from beside that query rather than redeclared; every query logs its
+  own activity:
+
+  | Tool | Input | Wraps | Checks beyond the gate |
+  |---|---|---|---|
+  | `add_tracks_to_collection` (idempotent) | `{collectionId, trackIds}` | `bulkAddTracksToCollection` → `{added}` | every `trackIds` entry in the collection's project, else 404 |
+  | `remove_track_from_collection` (destructive) | `{collectionId, trackId}` | `removeTrackFromCollection` → the membership row | 404 when the track is not in the collection |
+  | `set_track_number` (idempotent) | `{collectionId, trackId, trackNumber}` | `updateTrackNumberInCollection`, swapping with a track that holds the number → `{tracks}` in their new order | |
+  | `link_sessions` (idempotent) | `{moves: [{sessionId, trackId \| null, main}]}` | `bulkMoveSessions` → `{moved}` | gated on the first session's project; `bulkMoveSessions` (`entities/session/queries.ts`, called by this tool alone) 404s any session or track outside it; spends the `session-moves` bucket; an empty `moves` returns `{moved: 0}` before any gate |
+  | `add_track_relation` | `{fromTrackId, toTrackId, relation}` (`relation` a type's name) | `resolveRelationTypeName` + `addTrackRelation` → the relation row | `toTrackId` in the from-track's project, else 404; `relation` naming no type of that project, else 404 |
+  | `remove_track_relation` (destructive) | `{trackId, relationId}` | `deleteTrackRelation` → the relation row | |
+  | `move_to_project` (destructive) | `{kind, id, projectId}` | the module's `move` hook → the moved row with `droppedFields` and `priorityFallbacks` | gated on the source; spends the `moves` bucket; the move function itself answers 403 unless the caller is an editor in the target |
+- `tools/audio.ts` (`AUDIO_TOOLS`) wraps the audio audit read (`db/queries/track-audios.ts`): `audit_audio`
+  (`{projectId, trackIds?}`, viewer-gated) runs `auditProjectAudio` + `audioFindings` over a project, paged
+  by `trackIds` for a catalogue over a few hundred tracks; `get_track_audio_facts` (`{trackId}`) is the same
+  read scoped to one track (gated with `requireEntity`, 404 for an id with no row), returned with its
+  findings and its `mainSession` (`{id, name, tempo, rootNote, scale} | null`, `getMainSessionForTrack` in
+  `entities/session/queries.ts` — the track's own DAW session, for the caller to compare against the
+  version's detected tempo and key, which stays the model's judgement rather than a finding code, since the
+  detectors are heuristics); `list_candidate_audios` (`{trackId}`) wraps `getCandidateAudios`' array in
+  `{candidates}`, since MCP structured content must be an object. `audit_audio`'s output is
+  `audioAuditSchema`, a real Zod schema defined beside `auditProjectAudio` in `track-audios.ts`
+  (`AudioAudit`/`AuditTrack`/`AuditVersion`/`Finding` are all `z.infer` of schemas there,
+  `FINDING_CODES`/`FINDING_FIXES` the source for the finding enum). Each `AuditVersion.analysis` carries its
+  scalar analysis (duration, LUFS, LRA, true peak), `silence` (`{leadMs, tailMs}`), `clippedBins`/
+  `clippedFrames`/`clippedOverBins` (the clipped-bin count, its total full-scale frames, and how many of
+  those bins also passed 0 dBTP — computed in SQL over the lazy `clipping` column with `jsonb_array_length`
+  and a `jsonb_array_elements` subquery rather than selecting the array), `bpm`/`bpmConfidence`/
+  `musicalKey`/`keyConfidence`, `duplicateOfId` and whether it's current. `audioFindings` raises four content
+  findings from these once a version is current: `long_silence_lead`/`long_silence_tail` (info, past the
+  project policy's `auditLeadSilenceSeconds`/`auditTailSilenceSeconds`, strict `>`), `clipping` (warn, `clippedBins > 0`, naming the bin count,
+  total frames and over-peak bins in the message) and `duplicate_version` (warn, `duplicateOfId != null`,
+  `fix: "unlink_audio_version"`, naming the duplicated version by looking it up among the same track's
+  versions). The registry parses every tool result against its `output` before serialising it, so a
+  types-only shape is not enough.
+  `link_audio_versions` (`{trackId, assetIds, primaryAssetId?}`, editor-gated on the track, `assertInProject`
+  on the assets) wraps `linkTrackAudios`, returning `linkTrackAudiosResultSchema` (`{audios,
+  analysisJobIds}`) — the same schema `POST /tracks/:id/audios` sends, moved beside `linkTrackAudios` in
+  `track-audios.ts` so both import it; `set_primary_audio`/`unlink_audio_version` (`{trackAudioId}`, editor-
+  gated through `requireResolved(actor, await projectIdForTrackAudio(id), "track audio", "editor")`) wrap
+  `setPrimaryTrackAudio`/`unlinkTrackAudio`, 404ing the rare case the gate's row vanishes before the write;
+  `unlink_audio_version` is `destructive: true`. `queue_analysis` (`{trackAudioIds}`, editor-gated on every
+  id — a caller passing ids from two projects needs editor on both) wraps `enqueueAudioAnalysis`, returning
+  `{jobIds}`; a version whose analysis is already current is a no-op inside `analyseTrackAudio`, not
+  reflected in the returned ids differently. `queue_backfill` (`{projectId}`, admin-gated, then
+  `spendToken("audio-backfill", actor.id)`) wraps `enqueueAudioBackfill`, returning the queued job
+  through `getJob` so the shape matches `get_job`'s. `get_job` (`{jobId}`, viewer-gated via
+  `projectIdForJob`) and `cancel_job` (`{jobId}`, editor-gated, `cancelJobOrThrow`) wrap the job queries
+  directly; `cancelJobOrThrow` (`db/queries/jobs.ts`) is the 404-then-409 shape `POST /jobs/:id/cancel`
+  also calls, so the two never redecide what "already finished" means. `list_jobs` (`{projectId, status?,
+  recentMs?}`, viewer-gated) wraps `getProjectJobs`, taking `status` as an array of `rawJobStatusEnum`
+  values (not the REST route's comma-string) and returning `{jobs}`, capped like every other read of that
+  query. All eight reuse `jobSchema` (`db/schema/jobs.ts`) for a job's shape. The polling pattern every write tool's description names:
+  `queue_analysis`/`queue_backfill`, then `get_job` until `status` is `done`, `failed` or `cancelled`.
+- `resources/audio.ts` (`AUDIO_RESOURCES`) serves `projammr://projects/{projectId}/audio-audit`
+  (`text/markdown`, viewer-gated): `auditMarkdown(audit)` is the pure formatter, findings grouped by
+  severity as bullets then one table per track of its versions (version, file, duration, LUFS, true peak,
+  lead/tail silence, clipped bins, BPM, key, analysed, sessions).
+- `mcpResource` (`src/lib/env.ts`) is the canonical resource URI (`new URL("/api/mcp", betterAuthUrl)`),
+  the audience every access token is bound to and what the `WWW-Authenticate` challenge's
+  `resource_metadata` points at.
+- Testing: `src/test/mcp.ts`'s `mintMcpToken(actor, scopes)` runs the real PKCE authorization-code flow
+  (`app.request`, no port bound) and `callTool(token, name, args)` posts one stateless `tools/call`.
+  `requireMcpAuth` fetches the JWKS over HTTP, and its only knob is the URL. The default,
+  `${betterAuthUrl}/api/auth/jwks`, is the public HTTPS host, which the API container cannot reach (the
+  proxy's certificate comes from a CA it does not trust), so the route asks `lib/self-origin.ts`'s
+  `selfUrl()` for the process's own loopback listener; `server.ts` records the bound port with
+  `setListeningPort`. Tests: `ensureMcpServerListening()` (called by `callTool`, and in `beforeAll` of
+  any suite hitting `/api/mcp` directly) binds `Bun.serve` on a free port once per test process
+  (`unref`'d) and records it, the one server test path that needs a listener.
+
+## Project policy (`src/db/queries/project-policy.ts`)
+
+Everything that shapes a project without being one of its rows — what a create fills in, how sharing and
+invites behave, the home page's windows, the audio pipeline's thresholds — is one `ProjectPolicy` object in
+four sections: `defaults`, `sharing`, `conventions`, `audio`. `projectPolicy(projectId)` is the only reader:
+every consumer calls it once for the operation in hand and keeps the answer no longer (no cache). It gets
+the policy from one internal source function, `readProjectPolicy`, which resolves the 29 keys of the four
+`project-*` settings groups through `projectValues(projectId, keys)` (`db/queries/settings.ts`, beside
+`instanceValues`): the project's own rows (read fresh), then the instance's (through the settings cache), then
+the `env` seed and the registry default, with the instance's locks applied so a locked key beats the project's
+row. `policyOf` maps each key to its field (the registry's string `mp3Kbps` becomes a number) and every read is
+a fresh copy. No consumer reads `DEFAULT_PROJECT_POLICY` itself (only tests pin against it): it is `policyOf`
+over the registry defaults, and `project-policy.test.ts` pins each value to what the server did before the
+policy existed. `WhoMayInvite`, `ShareCommentPrivacy` and `DuplicateKeep` are the settings groups' own types,
+re-exported here; a compile-time check keeps the group's share kinds and `sharelinks.shareType` the same union.
+
+A project's settings write that sets `project-audio.storageCapGb` is checked by `projectTarget.check` (a
+target's `check` receives the keys the write named): a cap above the instance's `instance-limits.projectCapGb`
+is a 400 (path the key) whose message does not state the instance's cap, since only an admin sees it. The
+instance's cap is read inside the write's transaction; null on either side leaves nothing to compare. A write
+of any other key is not held to it, so an instance cap lowered below a project's leaves that project's other
+settings writable (`limitFor` already applies the lesser cap).
+
+A default fills only what a request leaves out; a body that names a value keeps it. The consumers:
+
+| Field(s) | Read by | Behaviour |
+|---|---|---|
+| `defaults.trackStatusId` / `collectionStatusId` (1) | `createTrack`, `createCollection` | an omitted `statusId` takes it if `isStatusUsable` (the project's own or a global status), else the column default; a collection body's explicit `null` stays |
+| `defaults.labelIds` ([]) | `createTrack`, `createCollection` | `linkLabelsInProject` links the ids still labels of the project, in the create's transaction; the rest are skipped |
+| `defaults.artists` ([]), `explicit` (false) | `createTrack` | tracks only (collections have neither); `newTrackSchema` leaves `artists` undefined when omitted so the default can apply |
+| `defaults.newSessionMain` (false) | `createSession` (`takesMainByDefault`) | an omitted `main` on a new session linked to a track makes it the main, the previous main stepping down in the same transaction (`clearTrackMain`) |
+| `sharing.shareExpiresDays` (null), `shareCommentPrivacy` (`public`), `shareDownloads` (false) | `createSharelink` | an omitted `expiresAt`, `privateComments`, `downloadsEnabled`; null expiry is the column's far-future sentinel |
+| `sharing.shareKind` (`connected`) | — | the kind a share dialog opens on; both create routes name their kind in the path |
+| `sharing.guestComments` (true) | `createShareComment` | off: `POST /share/:token/comments` is a 403; reading, editing and deleting stay |
+| `sharing.whoMayInvite` (`admin`), `inviteRole` (`viewer`), `inviteDays` (7) | `createInvite` | below `whoMayInvite` a 403 `forbidden` (the route gate is editor, the lowest value); an omitted `role` is `inviteRole`, still capped by `assertMayGrant`; the invite lives `inviteDays` |
+| `conventions.todayNewHours` (24), `quietAfterDays` (30) | `getProjectToday` | the renders/saves window and the quiet threshold; 0 days lists nothing quiet |
+| `audio.audit*` (15 s, −40 LUFS, −1 dBTP, 2 s, 3 s, 0.3) | `audioFindings(audit, thresholds)` via `auditWithFindings` | the six content thresholds (`AuditThresholds`) |
+| `audio.tempoKeyCorrection` (true), `tempoKeyCorrectionPercent` (4) | `analyseTrackAudio`, `settleTempoOctave` | off: no main-session hint is read, detected tempo and key are stored as is |
+| `audio.sameBounceWindowMinutes` (2), `duplicateKeep` (`largest`) | `findDuplicateAudio` → `bounceGroups` | the bounce window and the keep rule (`KEEP_ORDER`: `largest`, `lossless`) |
+| `audio.mp3Kbps` (320) | `enqueueAssetConversion` | an MP3 conversion with no `kbps` |
+| `audio.autoAnalyse` (true) | `linkTrackAudios` (`analysesOnLink`), `findOutstandingAudioBackfills` | off: a link queues no analysis and the boot pass skips the project. Everything asked for still queues: `POST /track-audios/:id/analysis`, `queue_analysis`, `queue_backfill`, `POST /projects/:id/audio-backfill`, and a lazy reader's re-queue (the measures route's 404, collection runtimes and summaries) |
+| `audio.storageCapGb` (null) | `limitFor(scope)` | a project's cap is the lesser of this and `MAX_PROJECT_GB`; null leaves the instance cap |
+
+Durations are counted in the policy's own units and turned into milliseconds with `lib/duration.ts`
+(`SECOND_MS`, `MINUTE_MS`, `HOUR_MS`, `DAY_MS`).
+
+**Test seam.** `withProjectPolicyForTest(projectId, patch, run)` lays a `ProjectPolicyPatch` (any fields of
+any sections) over one project's policy for as long as `run` takes, and lifts it however `run` ends, so a
+patch can neither reach another file's project nor outlive its test when files share a module graph
+(`bun test <dir>`). Anything that reads the policy inside `run` — a request, a job the test settles
+there — sees the patch. Each consumer's suite has a case under a non-default policy through it.
+
+## Route table (paths relative to `/api`; every mount below `authenticated` unless noted)
+
+### Every entity (`/projects`, `/collections`, `/tracks`, `/sessions`) — from `genericRoutes`
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/` | 201; logs `created` |
+| PATCH | `/bulk` | only entities with `list`; body `{projectId, selection, patch}` |
+| DELETE | `/bulk` | only entities with `list`; body `{selection}`; logs one `deleted` row per id |
+| POST | `/bulk/move` | only entities with `move` and `list`; rate-limited (`bulk-moves` bucket); body `{projectId, selection, targetProjectId}` → `{moved, droppedFields, priorityFallbacks}` (`droppedFields` as the move preview's; `priorityFallbacks` is `{from, to, count}` per priority level name the target's scale lacks, whose rows took its default); editor required in both projects; empty resolved selection is `{moved: 0, droppedFields: [], priorityFallbacks: []}`, no transaction |
+| POST | `/bulk/archive`, `/bulk/unarchive` | only entities with `archive` and `list`; body `{projectId, selection}` → `{ids, sessionCount}`; editor; `selection` resolves through `m.list.selectIds`; idempotent: rows already in the target state are left out of `ids` and log nothing; logs one `archived` / `unarchived` activity row per changed id (`logArchives`, no diff) |
+| PATCH | `/bulk/labels` | only entities with `labels` and `list`; body `{projectId, selection, add, remove}` → `{updated}`; touches only the label ids named, every other label on a row is untouched; a label in both `add` and `remove`, or from another project, is a 400 before the selection is resolved |
+| GET | `/:id` | `m.load(id, c)` |
+| PATCH | `/:id` | logs `updated` (diffed before/after) |
+| DELETE | `/:id` | 204, no body; whether it logs an activity entry varies by entity (see table above) |
+| PUT | `/:id/labels` | only track/collection/session; body `{labelIds, names}` |
+| POST | `/:id/attachments` | only entities with a `link`-capable attachment join; 409 on a duplicate |
+
+### `/projects` extra routes (`entities/project/routes.ts`)
+
+| Method | Path | Role | Notes |
+|---|---|---|---|
+| GET | `/:id/search` | viewer | trigram-ranked, live results before archived ones (each result has `archived`); empty `q` short-circuits to `[]`; `limit` (default 20) above `MAX_SEARCH_LIMIT` (50) is capped at it, not refused |
+| GET | `/:id/heatmap` | viewer | session-save counts by local calendar day; `from`/`to` epoch ms (any width, no `from < to` check), `tz` IANA (default UTC); only days with saves are returned |
+| GET | `/:id/saves` | viewer | project's saves, newest first, each carrying the previous save's metadata; `limit` (default 10, max 100), `day` + `tz`, and the heatmap's filters; no lower time bound; rows carry `meta` twice (~6 KB each on the dev DB) |
+| GET | `/:id/sessions/daws` | viewer | distinct `(daw, dawName)` pairs among the project's sessions |
+| GET | `/:id/today` | viewer | `{ renders, saves, counts: { renders, saves }, quiet: { tracks, total } }` for the project home (`getProjectToday`, no query parameters); `counts` is every render and save in the window, past the cap (a `count(*) over ()` on `getRecentTrackAudios` and `getProjectSaves`, which return `{ audios, total }` and `{ saves, total }`): renders linked (`getRecentTrackAudios`, cap 12) and saves made (`getProjectSaves`, `liveTracksOnly`, cap 12) within the project policy's `conventions.todayNewHours` (24 h by default), newest first, archived tracks left out; `quiet` is the live tracks untouched for the policy's `conventions.quietAfterDays` (30 d by default; 0 lists none) (`getQuietTracks`, cap 8, `total` counts all). The caps are the `TODAY_*_LIMIT`/`QUIET_LIMIT` constants in `entities/project/queries.ts`; the windows are the project policy's |
+| GET | `/:id/tracks/artists` | viewer | every artist credited on the project's tracks, archived included, most credited first then by name (`getProjectArtists`, sharing `artistCounts` with the paginated listing's `artist` facet) |
+| GET | `/:id/plugins` | viewer | devices/plugins named by session structure, most used first; each row carries `sessionIds` (the sessions naming it, id order) and `sessionTracks` (each of those sessions' track entries naming it, same order; `tracks` is their sum). The query groups by device and session first, then by device |
+| GET | `/:id/plugins/sessions` | viewer | sessions naming one device |
+| GET | `/:id/samples` | viewer | every sample path the project's sessions reference, grouped by path — `SampleUsage` `{ path, kind, sessions, sessionIds, missing }`, most sessions first then path; `kind` is the most recently saved session's |
+| GET | `/:id/samples/sessions` | viewer | the sessions referencing one path (`?path=`, required, decoded server-side) — `SampleSession` `{ id, name, daw, updatedAt, trackId, trackTitle, status }`, most recently saved first; an unreferenced path is `[]`, not 404 |
+| GET | `/:id/activity` | viewer | optional `entityType`+`entityId` |
+| GET | `/:id/storage` | viewer | `{scopeKind, scopeId, usedBytes, limitBytes, repositoryBytes}` — what the project's files take and the instance's project cap, `limitBytes` null when uncapped; `repositoryBytes` is the part of `usedBytes` that is repo objects whose first push on the instance was into one of its repos (`projectStorageReportSchema`) |
+| GET | `/:id/statuses` | viewer | globals + this project's own |
+| GET / POST | `/:id/labels` | viewer / editor | POST answers 409 when the name exists (no activity row); the entity label-set `names` still reuse by name |
+| PATCH | `/:id/labels/:labelId` | editor | body `{name?, colourHex?}`, at least one; 404 for a label not in the project, 409 when the name is another label's |
+| DELETE | `/:id/labels/:labelId` | editor | 204, no body |
+| GET | `/:id/priorities` | viewer | the priority scale bottom level first: `{id, name, colour, rank, isDefault, counts: {tracks, collections, sessions}}[]` (`scaleEntrySchema`) |
+| POST | `/:id/priorities` | editor | body `{name, colour}` (`colour` `#rrggbb`/`#rrggbbaa`, the label rule); 201 `{id, name, colour, rank, isDefault}` appended at the top; 409 `{error: "A priority level with that name already exists"}` for a taken name |
+| PUT | `/:id/priorities/order` | editor | body `{ids}`, every level of the project exactly once, bottom first; answers the reordered scale as GET does; 400 for a missing, repeated or foreign id |
+| PATCH | `/:id/priorities/:levelId` | editor | body `{name?, colour?, isDefault?: true}`, at least one; `isDefault: true` moves the flag off the old default in the same transaction (`false` is a 400); 404 for a level not in the project; 409 for a taken name |
+| DELETE | `/:id/priorities/:levelId` | editor | `?replaceWith=<levelId>` required; the level's tracks, collections and sessions move to it in the same transaction, then 204; 400 when `replaceWith` is missing, the same level or another project's, and when deleting the default; 404 for a level not in the project |
+| GET | `/:id/relation-types` | viewer | the project's relation types in list order, each with `inUse` — how many track relations use it (`relationTypeEntrySchema`) |
+| POST | `/:id/relation-types` | editor | body `{name}`; 201 appended at the end (`rankedRelationTypeSchema`); 409 for a name the list already has |
+| PUT | `/:id/relation-types/order` | editor | body `{ids}`, every type of the project exactly once, first first; answers the reordered list with `inUse`, as GET does |
+| PATCH | `/:id/relation-types/:typeId` | editor | body `{name}`; 404 for a type not in the project; 409 for a name another type has |
+| DELETE | `/:id/relation-types/:typeId` | editor | 204, no body; 409 `relation_type_in_use` (`details.inUse`) while any track relation still carries the type |
+| POST | `/:id/audio-backfill` | admin | rate-limited (`audio-backfill`, 5/10min); 202, queues a job |
+| GET | `/:id/jobs` | viewer | `status` comma list; `recentMs` windows done/cancelled rows by `finishedAt` (failed rows always stay); at most `MAX_PROJECT_JOBS` (200) rows, the newest |
+| GET | `/:id/jobs/events` | viewer | server-sent events: `snapshot` (the `recentMs=10000` read), then `job` per row change, `ping` every 5 s |
+| DELETE | `/:id/jobs/failed` | editor | deletes the project's failed jobs only; answers `bulkDeletedSchema` (`{ deleted: n }`), like the entity bulk deletes |
+| GET | `/:id/sessions` | viewer | |
+| GET | `/:id/members` | viewer | |
+| PATCH / DELETE | `/:id/members/:userId` | admin | rank-bounded (can't touch a member who outranks the caller); last-owner 409; DELETE answers 204, no body |
+| POST | `/:id/leave` | viewer | any member; last owner must transfer first |
+| POST | `/:id/transfer-ownership` | owner | body `{userId}`; caller becomes admin, target becomes owner |
+| GET | `/:id/invites` | admin | the pending invites (they carry email addresses) |
+| POST | `/:id/invites` | editor at the gate, then the project policy's `sharing.whoMayInvite` (admin by default) in `createInvite`: below it a 403 `forbidden` | body `{email, role?}`; an omitted `role` is the policy's `sharing.inviteRole`, the invite lives `sharing.inviteDays`, and the role is still capped at the caller's own rank (`assertMayGrant`) |
+| GET / POST / PATCH / DELETE | `/:id/saved-views[/:viewId]` | viewer / editor | a view is its creator's and private until shared. GET answers the caller's own views plus every shared one, each with `owner: {id, name}`; optional `kind` filter (`track`, `collection` or `session`; a plural value answers 400). POST creates a private view owned by the caller, or overwrites the caller's own same-named view of that kind. PATCH and DELETE need the view's owner or admin+, checked in the write's own `WHERE`; anyone else gets 404, as for a missing view, even on a view shared with them. Only the owner may change `shared`: a non-owner admin whose body carries it gets 403 and nothing is written. DELETE answers 204, no body |
+
+### `/tracks` extra routes (`entities/track/routes.ts`)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/:id/attachments` | |
+| GET | `/:id/audios` | ordered by version |
+| GET | `/:id/sessions` | main session first, then most recent |
+| POST | `/:id/audios` | body `{assetIds, primaryAssetId?}`; idempotent, resequences versions, ignores non-audio assets; responds `{audios, analysisJobIds}` — the linked versions plus the ids of any `audio_analysis` jobs queued for the newly linked rows (none where the project policy's `audio.autoAnalyse` is off; `POST /track-audios/:id/analysis` analyses one on request) |
+| GET | `/:id/candidate-audios` | every audio asset reachable via attachments or session attachments, each carrying its existing link or null |
+| POST / DELETE | `/:id/relations[/:relationId]` | `toTrackId` + `relationTypeId`, one of the project's own relation types (another project's is a 400, `assertRelationTypesInProject`); DELETE answers 204, no body |
+| POST | `/:id/move` | rate-limited (shared `moves` bucket); body `{projectId}`; editor in both projects required; 409 when one of its sessions is a dit set in a repo; answers the moved row with `droppedFields` and `priorityFallbacks`, as the collection and session moves do; a relation with only one side moving is dropped (`dropSplitRelations`), and a kept relation's type is re-pointed at the target project's type of the same name, added at the end of the target's list when it has none (`remapRelationTypes`, `ensureRelationType`) |
+
+### `/collections` extra routes (`entities/collection/routes.ts`)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/:id/status` | `{totalStatus, runtimeMs, runtimeComplete, trackCount, completeTrackCount, loudness, spectrum, tempo, keys}` |
+| GET | `/:id/tracks/summary` | id/title/trackNumber/artwork/`archivedAt`, for the sidebar |
+| GET | `/:id/tracks` | full rows; archived tracks stay listed and numbered, and count in `/status` |
+| PATCH | `/:id/tracks/:trackId/number` | swaps on conflict |
+| POST | `/:id/tracks/bulk` | body `{trackIds}` |
+| POST / DELETE | `/:id/tracks[/:trackId]` | POST 409s a duplicate; DELETE answers 204, no body |
+| GET | `/:id/audios/primary` | one audio per track, in track-number order; `?version=primary` (default) picks each track's primary, else its highest version, `latest` the highest; tracks with no audio are omitted |
+| POST | `/:id/move` | rate-limited; tracks exclusive to the source project move with it, shared ones stay and are dropped from the collection; 409 when a moving track holds a session that is a dit set in a repo |
+
+### `/sessions` extra routes (`entities/session/routes.ts`)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/:id/move` | rate-limited (shared `moves` bucket); clears the track link, exclusive attachments move too; 409 when the session is a dit set in a repo (`assertNoRepoSessions`), which holds for every move that carries a session |
+| GET | `/:id/saves` | newest first, `limit` query (default 100, max 500) |
+
+Every bulk route's scope check (`assertCreateScope`/`assertAttachScope`/`assertDetachScope` in
+`entities/session/routes.ts`) is a no-op on an empty array — nothing named, nothing to scope. The MCP
+`link_sessions` tool has no route-level check: `bulkMoveSessions(moves, projectId, actorId)`
+(`entities/session/queries.ts`, called by that tool alone) 404s any session or track outside the project itself, under the
+locks `db.md` describes (**move.ts**, Locks), and an empty `moves` writes nothing.
+
+### Sessions list (`GET /projects/:id/sessions/paginated`, `list_sessions`)
+
+`getSessionsPage` (`entities/session/queries.ts`) takes `sessionQuerySchema`: the pagination params plus
+`daw`, `track`, `inDit` and `archived`. The listing drops `notes`, `notesText` and `structure` twice by hand, with no shared
+constant: `listSessionSchema`'s `.omit()` and `getSessionsPage`'s relational `columns` mask; the detail keeps
+`structure`, and `get_session` over MCP returns the full detail since `session` sets no `mcpDetail`.
+
+**`inDit`.** Every row carries `inDit` (`repoId is not null`: a repo holds the session's set), and the list filters by
+`inDit=true|false` (`z.stringbool()`, as tracks' `explicit`), sorts by `inDit` and returns an `inDit` facet
+(`{true: n, false: n}` through `facetCounts`, which takes a column or an expression) that leaves its own filter out like
+the others. `inDitFilterSql` feeds the page, its facets, `sessionsWhere` (bulk writes and summaries) and an `all: true`
+selection (`inDitFilterValue`). `list_sessions` over MCP takes the field and the filter with no tool code.
+
+**Backfill candidates (`GET /projects/:id/sessions/dit-candidates`, viewer; `getDitCandidates`, mounted in
+`entities/project/routes.ts` beside `/sessions/daws`).** `{sessions: [{id, name, trackId, trackTitle, localFilepath,
+localFileMachineName, fingerprints, lastSaveAt}]}`, unpaginated, in id order: the project's `daw = 'ableton'` sessions with
+`repoId` null, which are the ones `POST /repos/:id/sets` can still link. `fingerprints` are the distinct non-null
+`sessions.fingerprint` and fingerprints of the session's `scan` saves (backup saves carry none), so a set saved since the
+last scan still matches through an older copy; the hub stores the string and never reads it. `lastSaveAt` is the newest
+save's `fileUpdatedAt`. A session of an archived track is listed too.
+
+### Custom fields (`routes/custom-fields.ts`, `db/queries/custom-fields.ts`, `custom-field-types.ts`)
+
+A project defines its own typed fields on tracks and collections (tables in `db.md`, "Custom fields"). The
+routes mount inside the project router (`app.route("/", customFieldRoutes)` in `entities/project/routes.ts`),
+so the project mount's gate applies: viewer reads, editor and above writes. OpenAPI tag "Custom fields".
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/projects/:id/fields?kind=` | `kind` (`track` / `collection`) optional; every field of the kind in rank order (both kinds, kind first, without it), each `{id, projectId, kind, name, type, options, rank, createdAt, updatedAt, valueCount, optionCounts?}`; a select's `optionCounts` maps option id to the entities holding it (an option nobody holds is absent), both counts from one grouped query |
+| POST | `/projects/:id/fields` | body `{kind, name, type, options?}` → 201 the field; rank after the kind's last; `options` only on a select (400 otherwise), an option without `id` gets an 8-char one; duplicate option labels 400; a name the kind has is 409 |
+| PATCH | `/projects/:id/fields/:fieldId` | body `{name?, options?}` (strict: `type` or `kind` is a 400, a field's type is fixed); `options` is the full list, a named `id` must be one the field has; values holding a removed option keep its raw id; 404 for another project's field, 409 on a taken name |
+| PUT | `/projects/:id/fields/order` | body `{ids}`: every field of one kind exactly once (400 otherwise, 404 for a foreign id) → the kind's fields reordered |
+| DELETE | `/projects/:id/fields/:fieldId` | 204; values cascade; saved views keep their `cf_<id>` params, which lists ignore |
+| POST | `/<kind>s/:id/move/preview` | every movable entity (`genericRoutes`, `m.move`); body `{projectId}` (the target, as `POST /:id/move`) → `{droppedFields}`; the move's own checks (403 unless editor in the target, 400 into the same project); not rate-limited |
+| POST | `/<kind>s/bulk/move/preview` | every movable listed entity (`genericBulkRoutes`); body as `POST /bulk/move` → `{droppedFields}`; an empty resolved selection is `[]` without the checks |
+
+**The `fields` bag.** Keyed `cf_<id>`. List rows and detail bodies of tracks and collections carry
+`fields: {cf_<id>: value}` for the fields that hold a value (absent = unset): text, url, date
+(`YYYY-MM-DD`) and select (the option id) as strings, number as a number, checkbox as a boolean. Create
+bodies, `PATCH /:id` and `PATCH /bulk`'s `patch` take `fields?: {cf_<id>: value | null}`; `null` deletes the
+value row. The edit schema stays strict (`withFieldWrites` adds the one `fields` key); a create or patch
+answers the row with its whole bag (the row schema's optional `fields`). A key naming no field of the
+entity's project and kind is a 400 `unknown_field` with `details: {field}`; a value its type refuses is a 400
+`invalid_field_value` with `details: {field, name, type}`. Writes coerce: a number from `"12"`, a checkbox from
+`"true"`, a select from the option's exact label; text and url are trimmed, an empty one clears, and each is
+capped at 2000 UTF-8 bytes (the typed btree index's ceiling); a url must be an absolute http or https
+URL (clients render it as an `href`, so `javascript:` and `data:` are refused).
+
+The bag is a module capability, not route code: an entity declaring `customFields: "track" | "collection"`
+(`EntityModule`) is wrapped by `defineEntity` (`withCustomFields` in `entities/shared.ts`) so `assertWritable`
+checks the bag, `create`/`update` strip it, write the row, then `setValues`, and `row`/`create`/`update`
+answer with the bag; the listing's `bulkUpdate` resolves the selection to ids once, writes the columns by
+those ids, then the values, and records one `updated` activity row per entity for the value changes (a bulk
+patch carrying both columns and values therefore records two rows per entity). REST and MCP writes all go
+through these. A value-only patch writes no column, so `updatedAt` does not move.
+
+**Activity.** `diffFields` (`db/queries/activity.ts`) diffs a `fields` bag present on both sides key by key:
+a custom value change is `changes.cf_<id> = {from, to}` with raw values, a cleared one `to: null`, beside
+any built-in column changes of the same patch.
+
+**The `cf_` query grammar** (paginated track and collection listings, `all: true` bulk selections, and
+MCP `list_tracks` / `list_collections`). The two query schemas are `.loose()`, so `cf_<id>` params reach
+`getTracksPage` / `getCollectionsPage` without appearing in the generated query types; the page builds a
+`FieldListing` (`fieldListing(kind, projectId, query)`) from the project's fields, and a key naming none of
+them (another project's field, a deleted one) is ignored like an unknown built-in key.
+
+| Type | Filter `cf_<id>=` | Sort `sort=cf_<id>.<dir>` | Group `groupBy=cf_<id>` | Facet `facets.cf_<id>` |
+|---|---|---|---|---|
+| number | `<from>..<to>`, either end empty; both empty, no `..` or an unparseable end is no filter; `from > to` matches nothing | value | — | — |
+| date | same, `YYYY-MM-DD` ends | value | — | — |
+| select | option ids, comma-separated; an id the field no longer lists matches nothing | option position | by option, in option order, labelled by option label (a removed option by its raw id) | `{optionId: count}` |
+| checkbox | `true`, `false` (a stored false) or `unset` (no value row) | false before true | `true` "Yes", `false` "No" | — |
+| url | `set` or `unset` | value | — | — |
+| text | the literal, a case-insensitive contains (LIKE wildcards escaped) | value | — | — |
+
+Every sort puts unset rows last. A grouping's none bucket is `__none__`, labelled "Not set". A field filter
+is an `EXISTS` (or, for unset, `NOT EXISTS`) over `custom_field_values`, so `facetCounts`' single-table rule
+still holds; a sort left-joins the field's value row, aliased `cf_sort`, and hands the join to the page as a
+built-in key's `sortJoins` (so the grouped pages apply it too): one scan of the field's rows through a
+`(field_id, …)` index hashed against the page, where a correlated subquery probed the value table once per
+row (about 15 ms against 90 ms for 20k tracks); a grouping joins the value table once, aliased `cf_group`, so
+its key is a real column, with order and label as expressions over that column alone (why
+`GroupKey.orderColumn`/`labelColumn` accept `SQL`). Every built-in facet applies the
+field filters; each select facet applies the built-in filters and every other field filter, not its own.
+
+**Moves.** `applyMove` calls `remapCustomFieldValues` over the closed move set (a collection's exclusive
+tracks included): each source field's values carry onto the target project's field of the same kind, name and
+type, the type's `carry` mapping the stored value (a select maps option id → the target option of the same
+label, else drops it); the rest are deleted. `planFieldRemap` computes the plan and the drop report, and both
+the move and `previewMove` read it. `droppedFields` is `{fieldId, kind, name, type, count}[]` per source field
+that loses values, one half of the move's report (`moveReportSchema`, beside `priorityFallbacks`): the single
+move routes answer the moved row with the report merged on (`movedRowSchema`), the bulk move answers it
+beside `moved`, and `move_to_project` returns it on the row. Both previews answer `{droppedFields}` alone. A
+session move's is always empty.
+
+**MCP.** `set_field` (`mcp/tools/organise.ts`, write) takes `{kind, id, field: <exact name>, value}` and goes
+through `patchEntityAs`, so it validates and logs as `PATCH /:id` does. `update_<kind>`, `create_<kind>` and
+`bulk_update` take the `fields` bag through the module. `list_<kind>s` takes `sort` and `groupBy` as strings,
+checked per call against the built-in keys plus the project's `cf_<id>` keys (`assertListKeys` in
+`mcp/tools/read.ts`), answering 400 with the accepted values; its description states the `cf_` grammar.
+`get_project` carries `customFields`.
+
+**Generated filter keys.** Each listed entity declares its column filters in `entities/<kind>/filters.ts`
+(`trackFilterSchema`, `collectionFilterSchema`, `sessionFilterSchema`); the query schema spreads it, and the
+list's `filterParams` (`EntityList`) is its keys. `scripts/generate-api.ts` emits `TRACK_FILTER_PARAMS`,
+`COLLECTION_FILTER_PARAMS` and `SESSION_FILTER_PARAMS` (with `TrackFilterParam`, … types) into
+`packages/api/src/enums.ts` from `FILTER_PARAMS`, its own block after `ENUMS`. `packages/api/src/enums.test.ts`
+compares them with the filter schemas; `scripts/generate-api.test.ts` checks each is a param of its query
+schema. `archived` is a scope, not a filter, and is not listed. A parser the listings share (`idListParamSchema`,
+the `priority` list) lives in `entities/filters.ts`, which, like the kind files, imports nothing from the query
+layer, so the drift guard can load them.
+
+### Session samples on the detail and the writes
+
+A session's samples live in `session_samples`, not on the row. `getSession` merges
+`samplesForSessions([id])` into the detail as `samples: { path, kind, status }[]` in position order (`[]` for none);
+listings and `get_track`'s session summaries carry none. `sessions` has no `sample_paths` column.
+`newSessionSchema` and `editSessionSchema` take `samples` (`sessionSampleSchema`, at most `MAX_SAMPLES` = 500,
+nullable, optional) through `sessionWireFields`; a 501st entry is a 400. `samples` is not a column, so the write
+functions take `WithSamples<…>` (`db/schema/sessions.ts`) and split it off before the row write:
+
+- `createSession` inserts the row and calls `replaceSessionSamples` in the same
+  transaction when `samples` is given.
+- `updateSession` runs the row update, the replace and the save record in one `db.transaction`: `samples`
+  replaces the rows, `null` empties them, absent leaves them, and a failure inside leaves no row update, no sample
+  rows and no save. The bulk PATCH (`list.patchSchema`) omits `samples`.
+- A save recorded from a session copies the rows' paths, in position order, into `meta.samplePaths`
+  (`saveFromSession` takes them; `updateSession` reads them through its `tx`). `sourceOfPatch` counts `samples` as a scanned field.
+
+The table sits outside `diffFields`, so a `samples` change does not reach the activity feed.
+A session is archived exactly when its track is: `sessionArchived` is a
+self-contained `EXISTS` on `tracks` (so `facetCounts` can read it with no join), false for a session with
+no track. `sessionArchivedScope(archived)` narrows `base` (rows, `rowCount`, facets and groups) and
+`sessionsWhere` (the selection side): absent is sessions of live tracks plus unlinked ones, `only` is
+sessions of archived tracks, `include` is all; any other value is a 400. A `track` filter with no `archived`
+reads as `include`, so a named track's sessions list whether it is archived or not (`sessionArchivedOf`).
+An `ids` selection is scoped `include`; an `all: true` selection follows its own `archived` and `track`
+filters the same way, a malformed `archived` reading as absent.
+The detail also carries `history: {commits, saves, machines, firstSeenAt, contentRetentionDays}` (the last is the instance's save-content retention days, told to every member for the pruned-save message) (`getSessionHistory`,
+`db/queries/commits.ts`): the session's whole dit history counted over every commit and save (distinct non-null
+save machines, the oldest save's file time, null before any save), whatever page of commits a reader loaded.
+Each row carries `archived`, `lastSaveAt` (the session's newest `saves.file_updated_at`, null
+when it has none) and `saveCount` (its saves); `sessionSaveStats(sessionIds)`
+(`db/queries/saves.ts`) fills the pair for the page in one grouped query. The sort keys
+`lastSaveAt` and `saveCount` are correlated subqueries over the session's own saves. Like every
+paginated list's sort, a never-saved session's null `lastSaveAt` sorts last in both directions; `track`
+sorts through `trackJoin`, grouped or not.
+
+### Other mounts
+
+| Mount | Method | Path | Auth | Notes |
+|---|---|---|---|---|
+| `/track-audios` | PATCH | `/:id/primary` | editor | makes this version primary and pins it: a later link keeps a pinned primary, and promotes the newest version only when the primary is unpinned (see `db.md`, the pin rule) |
+| | DELETE | `/:id` | editor | unlinks and resequences; also removes the row's spectrogram PNG, and repairs the diff chain across the gap left between its old neighbours; 204, no body |
+| | POST | `/:id/analysis` | editor | "analyse now": queues the version's `audio_analysis` whatever the project policy's `audio.autoAnalyse`, and answers 202 `{jobId}` (`queuedJobSchema`), the job already in flight if there is one; a version already current finishes at once |
+| | GET | `/:id/measures/:measure` | viewer | `{value}`, one lazily-served column named by `entities/track-audio/measures.ts`'s registry (`peaks`, `spectrum`, `sections`, `loudnessCurve`, `correlationCurve`, `clipping`, `pitchTrack`); 400 on a name outside the registry, 404 while still queued (and the 404 is what queues it); the only reader of these columns. `GET /:id/peaks` and `/:id/spectrum` were removed in PROJ-806 once the client moved onto this route |
+| | GET | `/:id/diff/:otherId` | viewer | the comparison of `:id` with `:otherId` (per second of `:id`, `offsetMs` where `:otherId` best matches it), with no row identity: the stored `track_audio_diffs` row for that direction when there is one, otherwise computed on request from both versions' current `track_audio_features` and not stored (a pair stored the other way round keeps its alignment, `offsetMs` negated); 404 when either version has no current features or the two are not versions of one track. `getTrackAudioDiff` in `db/queries/track-audios.ts`; stored and computed diffs share `compareFeatureSets` |
+| `/invites` | DELETE | `/:id` | admin | revoke; 204, no body |
+| | POST | `/:token/accept` | auth only (`unscoped` resolver) | token is the capability, and the caller's email must equal the invite's (case-insensitively) or the answer is 403 `invite_email_mismatch`; the 404/409/410 state checks answer first and a refusal writes nothing |
+| `/statuses` | POST | `/` | editor | `projectId` is required in the body (400 without it) and `newStatusSchema` enforces it; PROJ-847 closed the hole where an absent `projectId` silently created an instance-wide (null-project) status |
+| | GET | `/:id` | viewer on a project status, any signed-in caller on a global | one status, `statusSchema`; `resolveStatusRoute` alone gates it — an id naming no row, and a project status a non-member asks for, both 404 before the handler runs |
+| | PATCH / DELETE | `/:id` | editor on a project status; a global is refused for everyone (403 "Cannot change global statuses" / "Cannot delete global statuses", from `resolveStatusRoute`, before any admin check) | `editStatusSchema` is a partial update, so PATCH not PUT; no `GET /statuses` list — `GET /projects/:id/statuses` is the list; DELETE answers 204, no body |
+| `/me` | GET | `/` | auth only, no project gate | signed-in user + the caller's own `instanceRole` (`meSchema` picks it from `userSchema`, unlike `publicUserSchema` which omits it — a caller's own role is not a collaborator's business, but it is theirs). The caller's settings are `/settings`' (`GET /settings/effective`, `PATCH /settings/user/:id`) |
+| | PATCH | `/email` | auth only, no project gate | only present when `emailEnabled` is false (404 otherwise); body `{newEmail, currentPassword}`, applies at once after `auth.api.verifyPassword`; 409 if the address is taken. With mail, Better Auth's own `changeEmail` (confirmation-mailed) is the path instead |
+| | GET | `/deletion-plan` | auth only, no project gate | `{blocking, deleted}` project lists — what deleting the caller's own account would do, from `deletionPlan` (`db/queries/account-deletion.ts`); same lists a `POST /delete-user` refusal's `blocking` carries |
+| | GET | `/heatmap` | auth only | across every project the caller is a member of |
+| | GET | `/projects` | auth only | every project row plus `trackCount` (live tracks only), `archivedTrackCount` and `lastActivityAt` (newest `activity.createdAt` for the project, `null` with none), both correlated scalar subqueries in `getProjectsForUser` (`db/queries/user.ts`) rather than a join, so neither fans the other's row count out |
+| `/settings` | GET | `/effective?project=` | any member of the named project (none: the caller alone) | `{values, version}` — every setting the caller receives, resolved user > project > instance > env > default with the project's and instance's locks (`effectiveFor`); `audience: "admin"` keys only for an instance admin. `version` is a digest of `values`, so it changes whenever a value does, a cleared row included |
+| | GET | `/?project=` | as above | the hub read (`hubRowsFor`): per key `{effective, source, lockedBy?, writable, lockable, values, updatedAt, running?, deploymentOff?}`, `writable`, `lockable`, `values` and `updatedAt` each keyed by scope — where the caller may write the key now (role and `minRole`, instance admin, and no lock below pinning it in this context), where they may set, lift or clear a lock (the target's `mayLock`: a project admin or owner, an instance admin; whatever the key's `minRole`), the valid value each scope holds, and when that scope's row was last written (present at exactly the scopes `values` holds one for); `running`, on a `restartRequired` key only, is the value this process runs with (`runningInstancePolicy()`), which the effective value replaces at the next restart; for `instance-integrations.mcpEnabled` it is what the process serves (`false` while `env.ts`'s `mcpEnabled` is off), and `deploymentOff: true` then says a restart will not apply the effective value |
+| | PATCH | `/:scope/:id` | `user`: the caller's own id; `project`: any member, then each key's `minRole` (default `admin`) in `writeSettings`; `instance` (id `instance`): an instance admin, 404 to anyone else | body `{[key]: value \| null, ifUnmodifiedSince?: {[key]: string \| null}}`, strict per scope (`patchSchema(settingsFor(scope))`, 400); `null` deletes the row; 403 below a key's `minRole`, and for a `null` clearing a row locked at this scope by a caller who may not lock there (clearing lifts the lock); 409 `setting_locked` with `details: {scope, by, key}` for a value of a key the instance locks, nothing written (a `null` clearing it is allowed: the row is inert under the lock); 409 `setting_modified` with `details: {scope, key}` when `ifUnmodifiedSince` names a key whose stored row's `updatedAt` (or absence, for `null`) no longer matches what the caller last saw, nothing written — a key the patch carries no precondition for is written unconditionally, as before; 400 when the target's `check` refuses the rows the patch leaves (instance: the policy they resolve to), nothing written. One transaction under a per-target advisory lock, an audit row per change at project and instance scope (a user's changes go unrecorded). Answers the hub rows of the keys sent. Rate-limited (`settings-write`, 60/120min) |
+| | PUT | `/:scope/:id/locks` | project owner or admin; instance admin | body `{[key]: boolean}`, strict over the scope's lockable keys (400 for a `lockable: false` key or one the scope does not accept); a scope that cannot lock (user) is a 404; locking a key with no row first writes the value it resolves to there; 409 under an instance lock; one audit row per lock change |
+| | GET | `/user/:id/export` | the caller's own id | `{version: 1, exportedAt, values}`, the caller's valid rows in registry order |
+| | POST | `/user/:id/import?dryRun=1` | the caller's own id | body = an export; `{applied, skipped: {key, reason}[]}` with reasons `unknown`, `scope`, `invalid`, `locked` — the file is never refused for its keys; `dryRun` writes nothing |
+| | GET | `/audit?scope=&id=&limit=&before=` | project owner or admin; instance admin (`scope=instance`, no `id`) | rows newest first with `actor: {id, name} \| null`; `before` is the last row's id; `limit` at most 100 |
+| `/notes` | GET / POST | `/` | auth only, no project gate | `loadNoteAccess` (not `authorizeProject`) is the real gate — a note belongs to its author whether or not it's linked into a project |
+| | GET | `/:id` | | 403/404 via `loadNoteAccess` |
+| | GET | `/:id/text` | | plain text, one line per block |
+| | PATCH | `/:id` | rate-limited (`notes-save`, 60/120min) | body carries `version`; stale version is 409 |
+| | POST | `/:id/link` \| `/:id/unlink` | | only the author may link; the author or a project editor may unlink, and a non-author gets `null` back |
+| | DELETE | `/:id` | | 204; only the author |
+| `/lyrics` | POST | `/analyze` | auth only, no project gate | rate-limited (60/120min); body `{words}`, answers about words only, never stored content |
+| | GET | `/rhymes` \| `/synonyms` | auth only | `Cache-Control: private, max-age=86400` |
+| `/comments` | POST | `/` | viewer, resolved via target | the mount's role policy lowers POST, PATCH and DELETE to viewer; 400 if the target belongs to no project |
+| | GET | `/:targetType/:targetId` | viewer | threaded; every comment (replies included) carries `resolver` (the resolving user, null while open) and `viewerCan: { amend, resolve }` for the caller, so POST and PATCH answer with both too |
+| | POST / DELETE | `/:id/resolve` | viewer, then author or editor+ in the query | resolve and reopen a top-level comment; both idempotent, 200 with the comment (`commentWithUserSchema`); 400 for a reply (checked before rights), 403 unless the caller wrote the comment or is editor+ (the mount lowers both to viewer, so the rule is `viewerCan.resolve`, held in the query), 404 for a missing or foreign comment. A second resolve keeps the first resolver and time. Logs a `resolved` / `reopened` activity row only when the state changed |
+| | PATCH / DELETE | `/:id` | viewer | only content is editable; author-only enforced in the query layer (ownership rides in the `where`, so a non-author gets 403 and a missing row 404 via `rejectUnownedComment`, no admin override whatever their role); DELETE answers 204, no body. POST writes a `commented` activity row through `logComment`; POST and DELETE `/:id/resolve` write `resolved` / `reopened` rows through the same function (its `action` parameter) and only when the state really changed, so a repeat logs nothing; PATCH, DELETE and the share-guest writes log nothing. `resolveCommentRoute` scopes every `/comments/:id/*` path by the comment's project, so a new sub-path needs no resolver change; a method the policy does not list (PUT) falls to its default, editor |
+| `/images` | POST | `/upload` | rate-limited (`image-upload`, 100/300min) | multipart; no `projectId` ⇒ `scope: "user"` (avatar); responds with the image plus `variantsJobId` (the queued resize job, `null` for an avatar) |
+| | POST | `/instance` | instance admin (404 for anyone else, `resolveImageRoute`); rate-limited (`image-upload`) | multipart `file` only; stored as `scope: "instance"` with no project — the branding settings' logo and icon — counted towards the uploader like an avatar, `variantsJobId` null (resized on demand); the shared body of both uploads is `acceptImage` |
+| | PUT / DELETE | `/parent/:kind/:parentId` | | the parent named in the path, gated on its project for either method; PUT body `{imageId}`; DELETE 204, no body |
+| | GET | `/project/:projectId` | | `?page&pageSize` (`paginationQuerySchema.pick({page,pageSize})`, no `q`/`sort` — it's a grid, not a table); answers `{rows, rowCount, page, pageSize}`; avatars carry no project id and never match |
+| | GET | `/:id` | | |
+| | DELETE | `/:id` | | unlinks the file (and its variants) after the row is gone; 204, no body. An instance image is `{kind:"instance"}`: anyone signed in reads the row, only an instance admin deletes it (403 otherwise) |
+| `/uploads` | GET | `/limits` | auth only, no project gate | `{ maxBytes, audioTypes, imageTypes }`, the cap and types `/assets/upload` and `/images/upload` enforce right now (the policy, read per request), for a client that checks a file before producing it (the Lab bounce) and the drop zones' hints |
+| `/assets` | POST | `/upload` | rate-limited (`upload`, 100/300min) | multipart; `localFilepath`/`fingerprint`/etc. for scanner-sourced files |
+| | POST | `/lookup` | viewer | body `{projectId, fingerprints}`, bulk fingerprint match for a scan; the mount's role policy grants viewer on this path alone, since it only reads |
+| | GET | `/:id` | | the bare `assetSchema` row (no uploader, no attachments), `localFilepath`/`localFileMachineName` included; 404 from `getAsset` |
+| | GET | `/project/:projectId` | | `?page&pageSize&q&sort` (`paginationQuerySchema.pick({page,pageSize,q,sort})`); `sort` is `id`\|`name`\|`size`\|`createdAt`, `q` matches the name case-insensitively; answers `{rows, rowCount, page, pageSize}` — `rows` is `assetWithContextSchema`, `rowCount` counts matching files, not the uploader/attachment joins |
+| | GET | `/project/:projectId/duplicates` | | answers `{groups: DuplicateGroup[]}` (`duplicateGroupsSchema`), each `{kept, remove, skipped}` of `{id, name, size}` files, `skipped` adding `reason: "in-use" \| "commented" \| "shared"`. `findDuplicateAudio` groups scanner-sourced audio (a web upload has no `localFilepath` and never groups) by machine, folder and case-insensitive name without extension, chaining files whose `localFileUpdatedAt` is within the project policy's `audio.sameBounceWindowMinutes` (2 by default) of the one before; a file on a path the group already holds starts a new group (the same file exported again is a new mix, not a format). Keeps by the policy's `audio.duplicateKeep`: `largest` (the default: the largest, a tie going to a lossless format) or `lossless` (a lossless format, a tie going to the larger), a final tie going to the path that sorts first. The grouping and the keep order are `@workspace/media`'s `groupBounces` and `preferredFirst`, the same the scanner's `pickBounceFormat` uses. A copy is `in-use` when any entity module's `assetSources` join reaches it at an entity that join does not reach the kept file at, `commented` when a comment targets one of its `track_audio` rows, and `shared` when a snapshot share link that is not revoked pins one of them (`sharelink_snapshot_track_audios`, which the delete would cascade; a revoked link keeps its pins but holds nothing, since no one can read them again); computed for the whole project, the pairs chunked under `bindParamLimit()`. A group whose copies are all skipped is still listed |
+| | POST | `/project/:projectId/duplicates/remove` | | body `{ids}` (1–500), answers `bulkDeletedSchema` `{deleted}`. `removeDuplicateAudio` locks the requested files, their tracks and their versions (`db.md`, Lock order), so an attach, comment or snapshot pin racing it waits and then fails on the deleted row, re-runs the audit inside the deleting transaction and deletes only requested ids it still lists in `remove`, so a stale preview, another project's id or a kept file is skipped, neither deleted nor counted. Where a removed copy held its track's primary, `setPrimaryWithin` moves it to the kept file's version first. Unlinks after the commit, as `DELETE /bulk` does |
+| | DELETE | `/bulk` | | body `{projectId, ids}` (1–500 ids, no `all: true` form — files are picked by id), answers `bulkDeletedSchema` `{deleted}`. Registered **before** `/:id`, which matches `bulk` too and would refuse it from `idParam()` with a 400. `deleteAssetsInProject` scopes the delete to `projectId`, which is the route's whole authorization: the mount only proves the caller may edit that project, so an id naming a file in another project — or no file — is skipped, neither deleted nor counted. Unlinks each deleted file and the spectrograms of the track audios cascading away with it, after the rows commit |
+| | DELETE | `/:id` | | unlinks the file after the row is gone; 204, no body |
+| | POST | `/:id/convert` | rate-limited (`convert`, 10/10min) | 202, queues a transcode job |
+| `/admin` | GET | `/storage` | instance admin | `{usedBytes, projects, users, sharing, lastAudit, lastSweep}` — every project's (each with `repositoryBytes`, the repo objects it pays for) and every user's counter, the instance total, `sharing: {projects, savedBytes}` (projects holding an object another project also holds, and the bytes storing it once saves) the last `storage_audit` result and `lastSweep: {finishedAt, status: done|failed, bytesFreed} | null`, the last finished `save_content_sweep` job (`lastSaveContentSweep`). `middleware/instance-admin.ts` is the gate and answers **404** (not 403) to anyone else, so the route does not advertise itself |
+| | GET | `/machines` | instance admin | `?page&pageSize`, most recently seen first: `{items: {id, name, platform, appVersion, lastSeenAt, owner: {id, name}}[], total}`; removed machines are left out; 404 for a non-admin |
+| | GET | `/users` | instance admin | `?page&pageSize` (the two `paginationQuerySchema` keys), oldest account first: `{rows, rowCount, page, pageSize}` with `id`, `email`, `name`, `instanceRole`, `createdAt`, `lastSeenAt`, `storageBytes`, `projectCount`, `disabled` |
+| | PATCH | `/users/:id` | instance admin | body `{instanceRole?, disabled?}`; `:id` is a Better Auth string id, not a row id. **409** when the change would leave the instance without an admin who can sign in; disabling revokes the account's sessions, and so does demoting an admin (a promotion never does — see the note under **Sessions and the cookie cache**); each distinct change (role, disabled) writes its own `admin_audit` row |
+| | POST | `/users/:id/reset-link` | instance admin | mints a one-hour, one-time password reset link (same shape as a mailed one) and returns `{url}` **once** rather than mailing it; also clears the target's sign-in lockout and writes an `admin_audit` row. See **Mail** above |
+| `/jobs` | GET | `/:id` | viewer | polled by whatever queued it |
+| | POST | `/:id/retry` | editor | 409 unless the job is `failed` |
+| | POST | `/:id/cancel` | editor | queued → `cancelled` at once; running → `cancelRequested` until the run ends `cancelled`; 409 once finished |
+| `/machines` (`routes/machines.ts`, authenticated) | GET | `/` | the caller's own | `{ machines: {id, name, platform, appVersion, lastSeenAt, online, openSessionId, repoIds, openSession: {id, name} \| null, pushedRepos: {id, name, projectId}[], neverHere: {id, folder}[]}[], notABounce: {id, fingerprint, fileName, createdAt}[] }`, most recently seen first, removed machines left out; `online` is a beat within 90 s; `openSession` is set only while the machine is online and the caller is a member of the session's project; `pushedRepos` come from the machine's commits and saves, only repos of projects the caller is a member of; `notABounce` is the user's, shared by every machine |
+| | PUT | `/:id` | the machine's owner | body `{ name, platform, appVersion, openSessionId \| null, repoIds }` → 200 `{ id, name, platform, appVersion, lastSeenAt, online: true, openSessionId }`; the first beat of an id registers it, and each beat stores the caller's auth session as `authSessionId`; `openSessionId` is kept only while the caller is a member of that session's project; 403 for another account's id; **401** for the caller's own removed id (the answer a signed-out app acts on); 409 `{ code: "machine_name_taken" }`; rate-limited by `device-heartbeat` |
+| | DELETE | `/:id` | the machine's owner | 204; soft: the row is kept marked removed with every save, commit and segment naming it, its name is free to reuse, its `authSessionId` session is deleted (its next request is a 401) and its never-here rows are deleted; 403 for another account's id, 404 for an unknown or already removed id |
+| | GET | `/rejections` | the caller's own | `{ notABounce: {id, fingerprint, fileName, createdAt}[], neverHere: {id, machineId, folder}[] }`, oldest first; a removed machine's folders are not listed |
+| | POST | `/rejections` | the caller's own | body `{ items: ({kind: "not-a-bounce", fingerprint, fileName?} \| {kind: "never-here", machineId, folder})[] }` (at most 1000) → 200 `{ items: [{kind, id, ...}] }`, the stored rows of the items named, in order, with integer ids. Idempotent: a rejection already held is kept (a file name it lacked is filled, one it has is kept). A folder of another account's machine is 403 and of an unknown or removed machine 404, and refuses the whole write |
+| | DELETE | `/rejections/:id` | the caller's own | 204; 404 for another account's rejection or none |
+| `/sessions` (`sessionPresenceRoutes`, under session entity gating) | GET | `/:id/presence` | the session's readers | `{ machines: {id, name, tracksRepo, openingThis}[] }`: the caller's online machines, `openingThis` first, then `tracksRepo`, then `lastSeenAt` desc |
+| `/sessions` (`sessionRenderRoutes`, gated like the session routes) | POST | `/:id/renders` | editor | accept a render: body `{assetId, bouncedFromSaveId}` (`bouncedFromSaveId` null when none). Attaches the audio asset to the session, links it as a version of the session's track (`linkTrackAudios`, so analysis queues per the project's `audio.autoAnalyse`), and sets its `bouncedFromSaveId`. A replay converges on one version. 201 `renderAcceptedSchema` (`{audios, analysisJobIds, trackId, attached: true}`); 409 `session_has_no_track`; 400 `not_audio` or `save_not_in_session`; 404 for a session or asset outside the project. Implemented in `entities/session/renders.ts` |
+| `/share` (`sharelinks.ts`, the link's own management) | GET | `/` \| `/options` | `authenticated` per-route | list/build-options for a share, keyed by `entityType`+`entityId` |
+| | POST | `/snapshot` \| `/connected` | `authenticated` | create a share (frozen vs. live); an omitted `expiresAt`, `privateComments` or `downloadsEnabled` is the project policy's `sharing.shareExpiresDays` (null: the column's far-future expiry), `shareCommentPrivacy` and `shareDownloads` (`createSharelink`) |
+| | PATCH | `/:token` \| `/:token/tracks` | `authenticated` | |
+| | POST | `/:token/convert` | `authenticated` | switch snapshot ↔ connected |
+| | DELETE | `/:token` | `authenticated` | 204 |
+| `/share` (`share-guest.ts`, the guest-facing surface — signed out, or a share page's anonymous session) | GET | `/:token` \| `/:token/stream` \| `/:token/cover/:id` \| `/:token/comments` | public, rate-limited (`share-read` 60/120min for the reads, `share-stream` 20/60min for stream/cover) | 410 on an expired/revoked link; stream/cover serve bytes directly; cover takes `w` (64/256/1024) and `format` (`webp` default, or `jpeg`; anything else is a 400), each format cached as its own variant file |
+| | POST/PATCH/DELETE | `/:token/comments`\[`/:id`\] | `guestOrMember`, rate-limited (`share-comment`, 5/10min) | a comment's gate is the token plus authorship, never project membership — a guest wrote it, so a guest edits or deletes it; DELETE answers 204. A POST is a 403 while the project policy's `sharing.guestComments` is off (`createShareComment`); reading, editing and deleting are untouched. Comments come back with `resolver` and `viewerCan` as under `/comments`, with `resolve` always false (a guest has no role) and `amend` true on the guest's own |
+| `/auth` | * | `/*` | none | `auth.handler(c.req.raw)` — Better Auth catch-all, unguarded, mounted last |
+| | POST | `/oauth2/register` | none | rate-limited (`oauth-register`, 5/min); open RFC 7591 dynamic client registration. The OAuth provider (`mcp()` plugin with `jwt()`, scopes `read`/`write`, login page `/sign-in`, consent page `/consent`) also serves `/oauth2/authorize`, `/oauth2/token` and `/jwks`; `/api/auth/token` (the JWT plugin's session exchange) is always in `disabledPaths`, and `/api/auth/request-password-reset` joins it when `emailEnabled` is false — see **Mail** above |
+| | POST \| GET \| POST | `/device/code` \| `/device/token` \| `/device`, `/device/approve`, `/device/deny` | code, token and a signed-out lookup none; claiming, approve and deny a session | The RFC 8628 device grant for the `dit` CLI (Better Auth's `deviceAuthorization` plugin, table `device_codes`). `POST /device/code` takes `client_id` `dit` (any other is `invalid_client`) and answers the codes, `verification_uri` (`<BETTER_AUTH_URL>/device`, the web client's page) and its `_complete` form carrying `user_code`, `expires_in` 1800, `interval` 5. `GET /device?user_code=` answers a signed-out caller `{user_code, status}` without claiming anything; signed in, it claims a pending code for them and `POST /device/approve` or `/deny` decides it; a code claimed by one account is 403 to another. A share-page guest is 403 on all three (`assertNotGuestReviewingDevice` in `auth.ts`). `POST /device/token` (`grant_type` `urn:ietf:params:oauth:grant-type:device_code`, `device_code`, `client_id`) answers `authorization_pending`, `slow_down` (a poll inside the interval), `expired_token` or `access_denied` as 400s, and once approved an ordinary session token (`access_token`, usable as `Authorization: Bearer` through `bearer()`), redeemable once. The session's `deviceName` comes from `X-Device-Name` on that poll, through `databaseHooks.session.create.before`. `/device/code` and `/device` are metered by `device-signin`; the poll is not. No other plugin, the OAuth provider included, serves a `/device` path |
+
+### Repos (dit hub) (`routes/repos.ts`, `db/queries/repos.ts`)
+
+A repo is the history of one Live project folder, held by a project. Repos are not an entity kind (no registry
+entry); a set is a session carrying the repo's `repoId` and a `ditSetId`, unique together. `routes/repos.ts` exports
+two routers, each behind exactly one gate:
+
+| Mount | Method | Path | Auth | Notes |
+|---|---|---|---|---|
+| `/projects` (`projectRepoRoutes`, mounted after `mountEntities`) | POST | `/:id/repos` | editor | body `{name}` (trimmed, 1–200); 201 with the new repo, 200 with the existing one of that name (`createOrGetRepo`: insert `onConflictDoNothing` on `(projectId, name)`, then select). `repoWithSetsSchema`: the repo row plus `sets: {ditSetId, sessionId, sessionName, branches: {name, tip: {commitId, message, committedAt} | null}[]}[]`, `main` first among a set's branches and `tip` null for a branch with no head plus `pushSamples` (effective), `pushSamplesForced` and `storage: {setBytes, sampleBytes, sharedBytes}` (contract C3: the one shape `GET /repos/:id`, the project, track and collection lists, `PATCH /repos/:id`, a repo create and MCP `list_repos` all answer; the storage of every repo of a list comes from one batch `repoStorages` call, never one per repo) |
+| | GET | `/:id/repos` | viewer | the project's repos, oldest first, each with its adopted sets |
+| | POST | `/:id/repos/storage-check` | editor | body `{objects: [{hash, size}]}` (at most 10,000, each `isObjectHash` and a non-negative integer size, else 400; no repo needed, so the Check step can ask before any exists); 200 `{bytes, held, remainingBytes}` (`checkStorage`). `bytes` is the summed `size` of the distinct hashes that no repo of a project the caller is a member of holds (`heldByMembersOf`, the read `missingObjects` claims through), `held` is how many distinct hashes did, and `remainingBytes` is `remainingAllowance([project, caller])`, null when neither scope has a cap. A hash only another project holds counts as unheld, so the total can only overstate what the charge rule bills and never says whether a hash exists elsewhere. Nothing is linked, stored or charged; a folder sends its objects in requests of 10,000 and adds the answers. The size is the object's frame length, which dit knows and the hub cannot for an object it lacks |
+| `/tracks`, `/collections` (`entityRepoRoutes`, mounted after `mountEntities`) | GET | `/:id/repos` | viewer | the repos holding a set whose session's `trackId` is the track, or one of the collection's tracks (`collection_tracks`); each repo in full, all its sets. Gated by the entity's own mount, so another project's track or collection is 404 |
+| `/repos` (`repoRoutes`) | GET | `/:id` | viewer | one repo with its sets, plus `pushSamples` (effective: the repo's switch, or on while the instance forces it), `pushSamplesForced` and `storage: {setBytes, sampleBytes, sharedBytes}` (`repoStorages`); 404 for an unknown id and for a repo of a project the caller is not a member of |
+| | PATCH | `/:id` | editor | body `{pushSamples}`; stores the repo's switch and answers the repo shape. While `limits.pushSamplesEverywhere` is on, turning it off is a **409** (the switch is locked on); turning it on is stored. Viewer 403, a repo of another project 404 |
+| | POST | `/:id/sets` | editor | adopt a set (below); 201 when it created a session, 200 when it linked one or the set was already adopted; answers `{ditSetId, sessionId}` |
+
+**Gates.** `/projects/*` is already behind `authenticated` and the project policy from `mountEntities`, which gives the
+two `/projects/:id/repos` routes viewer for reads and editor for writes from the path's project id; they have no
+resolver of their own. `/repos/*` has its own block in `app.ts`: `authenticated`, `authorizeProject(resolveRepoRoute)` with the default policy, then `packBodyLimit` and the `repo-objects` rate bucket
+on `POST /:id/objects` and the `repo-archive` bucket on `GET /:id/archive`, then `app.route("/repos", …)` for
+`repoRoutes()`, `repoArchiveRoutes()`, `repoHistoryRoutes()` and `repoObjectRoutes()`. A repo of another project 404s through the gate, never 403.
+
+**Adoption (`adoptSet`).** Body `{ditSetId, fileName, sessionId?, trackId?, quiet?}`; `sessionId` and `trackId` together are
+a 400, and a `fileName` that is nothing but `.als` is a 400.
+
+- A set already adopted under `ditSetId` answers its session (200) when the body names no `sessionId` or the same
+  one; a different `sessionId` is a 409.
+- With a `sessionId`: `ENTITIES.session.assertInProject` (404 for a session outside the repo's project), then one
+  `UPDATE sessions SET repo_id, dit_set_id WHERE id = ? AND repo_id IS NULL`. No row updated means another repo, or this
+  repo under another `ditSetId`, holds the session: 409. A unique violation on `(repoId, ditSetId)` from a racing
+  adoption is re-read the same way.
+- Without one: `ENTITIES.session.assertWritable` (404 for a `trackId` outside the project), then `ENTITIES.session.create`
+  (`createSession`: default priority level and main-session default) with `daw: "ableton"`, `dawName: "Ableton Live"`,
+  the file name without `.als` as the name, `localFilepath` unset, and `repoId` and `ditSetId` set; `logCreate` records the
+  session unless the body says `quiet: true`, which a backfill sends so hundreds of adopted sets write no entries.
+  `createSession`'s 409 for any unique conflict is caught and re-read by `(repoId, ditSetId)`: the racing
+  session answers 200, and the 409 stands when there is none.
+- `GET /sessions/:id` answers `repoName` beside `repoId`: the folder name of the repo holding the session's set, null for a session in no repo (read in the session's own query through its `repo` relation).
+- `repoId`, `ditSetId` and `currentBranchId` are not in `newSessionSchema` or the session edit schema; only these routes
+  set them.
+
+#### History (`routes/repo-history.ts`, `db/queries/commits.ts`)
+
+`routes/repo-history.ts` exports two more routers. A body never names a `branchId`, `repoId` or `sessionId`: the session
+is the one holding `ditSetId` in the repo (`sessionOfSet`, 404 `Set not adopted in this repo`) and the branch is a name.
+Every hash in a body (save, xml, tree, side, commit, parent, object) must pass `isObjectHash`, else 400.
+
+| Mount | Method | Path | Auth | Notes |
+|---|---|---|---|---|
+| `/repos` (`repoHistoryRoutes`, mounted right after `repoRoutes()`, so the same gate) | POST | `/:id/saves` | editor | header `X-Machine-Id` (the pushing machine; on all three push routes, checked after the set so a never-adopted set is still a 404): 409 `machine_not_registered` for an id no machine holds or none sent, 403 for another account's machine, 401 for a removed one; a row whose `machineName` is that machine's name is stored with its `machineId`, any other row with none. Body `{ditSetId, branch, saves: [{hash, xmlHash, tree, side, raw?, fileUpdatedAt, machineName, meta, viewOnly, unreadable, samples?}]}`; 200 `{saved}`. `xmlHash`, `tree`, `side` and `machineName` are nullable; `raw` (hex, optional, never null) is the hash of the bytes of a file dit could not read, the save's only object, sent with `xmlHash`, `tree` and `side` null; `meta` is `newSessionRevisionSchema.shape.meta`, the scanner write's; `samples` is `[{path, kind: project\|outside\|library, relative?, object: hex\|null, size: int\|null}]` (`sampleRefSchema`), omitted by a dit that does not report samples (the stored references are then left alone), kept in `saves.meta.samples` and mirrored into `session_samples` (see `db.md`, **Session samples**) |
+| | POST | `/:id/segments` | editor | body `{ditSetId, segments: [{branch, machineName, startedAt, endedAt, source}]}` (1 to 500 spans; `startedAt` and `endedAt` epoch ms with `endedAt >= startedAt`; `source` `script\|log\|title\|saves`; `machineName` non-empty after trim, and a longer name is cut rather than refused by `cutMachineName` (`db/schema/machines.ts`): trim, then the longest prefix of whole characters of at most 64 UTF-16 code units, so a surrogate pair is never split. A machine beat's `name` is cut the same way, and dit cuts a name the same way before sending). Each span upserts on `(session, branch, machineName, startedAt)` keeping the later `endedAt`, so a re-push is idempotent and never shrinks a span; spans in one body that share a key are merged first. 200 `{recorded}` (the body's span count); 404 for a set not adopted in this repo. Writes `time_segments` (see **Time in set** below) |
+| | POST | `/:id/commits` | editor | body `{ditSetId, branch, commits: [{hash, saveHash, parentHash, message, kind, committedAt, machineName, saves: [{hash, objects}], sampleObjects?}]}`; `sampleObjects` (hex ids, the leaves of the commit's own save's samples) is linked in `save_sample_objects` for those the repo holds, with no part in the commit gate, and a replay of a commit the repo already has links the ones that landed since; 201 `{inserted}`, 200 `{inserted: 0}` when every commit was already there. `saveHash` must be one of the item's `saves` (400) |
+| `/sessions` (`sessionHistoryRoutes`, mounted after `mountEntities`, so the session entity's mount gates it on the path's session) | GET | `/:id/branches` | viewer | the session's branches in creation order, `{name, headCommitHash}` (null until a first commit) |
+| | GET | `/:id/commits` | viewer | newest first by `committedAt`, `limit` as `GET /:id/saves` (`savesQuerySchema`, default 100, max 500), `branch` keeps one branch's commits (an unknown name answers `[]`); each `{hash, branch, parentHash, saveHash, message, kind, committedAt, machineName, machineId, authorId, authorName, samplesReferenced, samplesHeld, saves}`. `authorName` is the committer's account name (null once the account is gone); `samplesReferenced` is how many references the commit's own save carries, of any kind, and `samplesHeld` how many of those the hub holds (linked in `save_sample_objects`) |
+| | GET | `/:id/diff` | viewer | `?from=&to=`, each `save:<id>` or `commit:<id>` (a commit stands for the save it names; anything else 400): the diff of `@workspace/session-diff`'s `diffSave` (`from` against `to`, across branches, in the session's DAW capabilities and the default format) as `{from, to, first, changed, chips, readouts, structure, samples, colors}`, `from`/`to` being the save ids. A ruler readout carries its geometry (`min`, `max`, `stops`, `unit`), not its formatting functions. A reference that is not the session's is 404; a save recorded with no `meta` is 409. `lib/save-diff.ts` (`diffStates`, `saveDiffSchema`) |
+| `/saves` (`saveRoutes` in `routes/saves.ts`; `app.ts` block beside `/commits`: `authenticated`, `authorizeProject(resolveSaveRoute)`, then the route) | GET | `/:id/set` | viewer | the save's set, the same file as a commit's (`lib/set-download.ts`'s `setFileResponse`); 404 for an unknown save or one of a project the caller is not a member of, 409 when `contentState` is not `stored` (a pruned save; the message names it), 500 as a commit's |
+| `/commits` (`commitRoutes` in `routes/commits.ts`; `app.ts` block beside `/jobs`: `authenticated`, `authorizeProject(resolveCommitRoute)`, then the route) | GET | `/:id/set` | viewer | the commit's set as `application/gzip`, `attachment` named `<session name>.als`; 404 for an unknown commit or one of a project the caller is not a member of, 409 when the commit's save `contentState` is not `stored` (the message names it), 500 when an object file is missing or corrupt |
+| | GET | `/:id` | viewer | the commit record `{id, hash, parentHash, saveHash, message, kind, committedAt, branch, ditSetId, repoId, sessionId, sessionName}` (`commitRecordSchema`); `saveHash` is null when the commit's save has no hash (a scanner save). 404 for an unknown commit or one of a project the caller is not a member of |
+| | GET | `/:id/archive` | viewer | the commit as `application/zip` (`attachment`, `<session name>.zip`), metered by `repo-archive` after the gate: the set (the gzip bytes of `GET /:id/set`, entry `<session name>.als`), every sample the hub holds at its `relative` path under `Samples/`, `MANIFEST.txt` last. 404 and 409 as `GET /:id/set`, 429 over the bucket. See **Archives** below |
+| `/repos` (`repoArchiveRoutes` in `routes/repo-archive.ts`) | GET | `/:id/archive` | viewer | the repository as `application/zip` (`attachment`, `<repo name>.zip`), metered by `repo-archive`: each set at the tip of its `main` branch (`mainTips`: branch `main`, its head commit's own save) then its samples, one `MANIFEST.txt` last. 409 when no set has a `main` commit or a tip's content is not `stored`, before any byte is sent. A set is rebuilt when its turn comes, one in memory at a time (async gzip), so one that cannot be rebuilt ends the response |
+| `/samples` (`sampleRoutes` in `routes/samples.ts`; `app.ts`: `authenticated`, `authorizeProject(resolveSampleRoute)`, which resolves the `repo` query to its project) | GET | `/:hash?repo=<id>` | viewer | one held sample, `application/octet-stream`, `attachment` named after its reference's file name. 404 for a repo of a project the caller is not a member of, a `repo` that is missing or unknown, and a hash the repo does not hold as a sample (an object a commit's save lists in `save_sample_objects`, whose reference names it, and the repo still holds); 400 for a hash that fails `isObjectHash`; 500 before the first byte when a chunk's file is gone. Streamed leaf by leaf (`lib/sample-objects.ts`: `sampleLeaves`, `leavesPresent`, `sampleBytes`) |
+
+**Lineage objects (`db/queries/commits.ts`, `linkLineageObjects` in `db/queries/objects.ts`).** A commit may carry `lineageObjects`, up to two hex ids: its own save's id and its commit object's id. Each is linked into the repo's `repo_objects` the way a claim is: a hash the repo already holds is left alone, a hash held by a repo of a project the pusher is a member of is linked with no upload, and any other is refused. A refused hash fails the push with 400 `lineage_not_held` and names the refused hashes in `details.hashes`, before the commit is stored. A replayed commit applies the same rule. A dit that predates the field omits it and nothing is linked. `recordCommits` takes the object locks (`lockObjects`) of every lineage object of the whole push, replayed commits' and fresh ones, in one statement right after the branch row lock, and `linkLineageObjects` takes none of its own: a transaction takes all its object locks together, in key order, and none after.
+
+**Time in set (`db/queries/segments.ts`).** A commit's `timeInSet` (`GET /sessions/:id/commits`, MCP `list_commits` and `get_commit`) is the whole seconds of its branch's segments that fall in the commit's window, `(parent save's fileUpdatedAt, own save's fileUpdatedAt]`; the first commit's window is unbounded below. Segments that overlap across machines count once, a segment crossing a window's edge is clipped to it, and a segment on another branch never counts. It is `null` when no segment time falls in the window, and when the commit's save is not newer than its parent's (a clock that stepped back): that commit has no window, and reading it never fails. A session's `history.timeInSet` (`GET /sessions/:id`, MCP `get_session`) is the union of every segment of the session across branches and machines, `0` when there are none.
+
+**Archives (`lib/archive.ts`, `lib/zip.ts`, `lib/sample-objects.ts`).** `zipChunks(entries)` is an in-tree store-only
+streaming ZIP writer (audio is already compressed): a `Uint8Array` entry is written with its size and `node:zlib`
+`crc32` in its local header; an entry that streams (an `AsyncIterable`) leaves both out (flag bit 3), is written ZIP64
+throughout (an empty ZIP64 extra in the header, 24-byte data descriptor with 8-byte sizes) with the CRC chained over its
+chunks, and the central directory at the end gains ZIP64 records past 65,534 entries or 4 GiB. `streamOf(generator)`
+(`lib/stream.ts`) pulls it as the client reads; a throw errors the stream, so the connection ends as a failed download,
+never a clean close on a truncated file. `archiveEntries(sets)` makes the entries: each set (the commit route passes the
+`.als` bytes it already holds, the repo route none, so `saveFile` and its async gzip run when the set's turn comes),
+then for each reference of the set's own save: `outside`/`library` kinds are `outside the project folder`; a `project`
+reference is `included` when `relative` is a safe path (`archivePath`: `\` read as `/` and leading `./` segments dropped first, as dit reads them, then it must start `Samples/` with no `..`, `.`, empty segment or control character), its object is linked in `save_sample_objects` (`linkedSampleKinds`), its leaves can be
+listed (`sampleLeaves`: a Blob is its one leaf, a Chunked object its chunk ids in order) and **every leaf's file is
+there** (`leavesPresent`, one `stat` each, so no descriptor is held); otherwise `not pushed`. That check runs before the
+entry's local header, which is the only point a failure can still be reported; a leaf that vanishes after the entry began
+(`sampleBytes`, one `storedBody` at a time) throws and ends the response. Two sets naming the same path with the same object add the file once. A folder holds one file at a path, so when
+the objects differ the set with the newest tip `committedAt` (the later set on a tie) decides which is written, and the
+other references are listed `older version, not included`: the hub holds that file, the archive has no place for it.
+The wire `sampleObjects` of a commit is linked only for objects the commit's own save's `meta.samples` names (and their chunks). `MANIFEST.txt` is last, one `<state>\t<path>` line per
+distinct reference, `path` as the set writes it. `GET /samples/:hash` uses the same reader. `test/zip-reader.ts` reads a
+zip by its central directory and runs `unzip -t` when the tool exists, which the archive tests use on real responses.
+
+**Set download (`lib/dit.ts`).** `resolveCommitRoute` resolves the path's commit to its project in one select
+(`projectIdForCommit`, commits join repos), and `resolveSaveRoute` the path's save through `saves.projectId`
+(`projectIdForSave`); both routes answer through `lib/set-download.ts`'s `setFile`. `saveFile(saveId)` gives the save's `.als` as dit writes it on checkout. A save with a `raw` object (a file the reader could not decode) is that file verbatim, never gzipped again: `sampleLeaves`/`sampleBytes` (`lib/sample-objects.ts`) reassemble it, since a raw file over 256 KiB is stored as a Chunked object (an index of Blob chunk ids) rather than as the file. Any other save is rebuilt: `saveFile` reads the save's `tree` and `side` and the objects
+linked through `save_objects` (`saveContent`), reads each object's stored file (zstd of `kind byte ‖ body`), checks the
+kind byte against `objects.kind`, strips it, and lays the `[id][kind][length][body]` records out in one buffer of the
+exact pack length for `@workspace/dit/wasm`'s `materialise`. Each call takes a fresh `Dit` from `loadDit()` (the
+module is compiled once per process, the instance is per call) and lets it go, so the memory one large set grows the
+instance to is reclaimed with it instead of staying as the process's footprint. The rebuilt XML is gzipped whole
+before answering, so a failure at any step (a file gone, a kind mismatch, `Corrupt` from the module) is a logged 500
+with no part of the set in the body.
+
+**Branches.** The first save or commit that names a branch creates it (`branchIdOf`: insert `onConflictDoNothing` on
+`(sessionId, name)`, then select), with `headCommitId` null until its first commit.
+
+**Saves write (`recordSaves`).** One transaction. Per save, the row at the same `(sessionId, fileUpdatedAt)` decides:
+
+- None, or one with the same hash: upsert on `save_session_hash` (a partial index, so `targetWhere: hash is not null`),
+  source `dit`, `contentState` `none`, `projectId` from the session. A repeat refreshes `meta`, `unreadable`,
+  `xmlHash`, `tree`, `side`, `viewOnly`, `machineName` and `branchId` and never touches `contentState`; once a row
+  is `stored`, its `xmlHash`, `tree`, `side`, `viewOnly` and `unreadable` stay as they are, since the objects stored
+  for it rebuild exactly those.
+- One with a null `hash` (the scanner saw the file): claimed. It takes `hash`, `xmlHash`, `tree`, `side`, `viewOnly`,
+  `unreadable` and `branchId`, and `machineName` and `meta` only where its own are null; it keeps its id and source.
+  One precedence holds on the claim and on every later upsert of the same save: a row the scanner recorded (source not
+  `dit`) keeps its `machineName`, and its `meta` unless that is null; a row dit recorded takes dit's latest metadata.
+- One with a different hash: 409 naming the hash and the time. A unique violation from a racing push is a 409 too.
+
+Then `sessions.currentBranchId` is set to the branch of the session's newest save that has one (`fileUpdatedAt desc`,
+the whole session, not the request), and the repo's `lastPushAt` and `lastPushMachineId` (the machine, when the last item's `machineName` is its name, else null)
+are stamped.
+
+After the saves land and before that stamp, two more writes run in the same transaction:
+
+- **Supersede (`supersedeBackups`).** A `backup` save the scanner recorded (null `hash`) goes when the row just before it in
+  the session, any source, is a save that arrived in this push with content: one claimed or inserted by it, not one a
+  replay found already stored. Live names a `Backup/` copy by the moment it replaced the file, so the scanner's row sits
+  after the copy's own file time that dit records, and no millisecond meets to claim it; with nothing between them the copy
+  has nowhere else to be, and keeping both would count the revision twice. A row with another row between stays (a copy
+  deleted from disk, a save dit has yet to record, a second stamp after one copy), and a push that arrives with none of
+  its saves new deletes nothing, so a repeated push never cascades through the stamps behind a deleted one. The rule
+  reads the stored rows, so it holds in any push order. It reads the rows after the push landed, so a pushed save that
+  falls between a copy and a stamp keeps the stamp.
+- **Session facts (`newestFacts`).** When the session's newest save (`fileUpdatedAt desc`, any source) is one of those in
+  this push and has a `meta`, the session's `tempo`, `timeSignature`, `rootNote`, `scale`, `tracksCount`, `scenesCount`,
+  `dawVersion` and `structure` (so its plugins: `/projects/:id/plugins` reads `structure`) become that save's `meta`
+  (`saveMetaFields`, a field the meta lacks becomes null), in the one `sessions` update that sets `currentBranchId`. Facts
+  come from the stored row, so a claimed scanner save keeps the meta it had. An older save pushed later, and a newest save
+  with no `meta`, change nothing. Migration `session_facts_from_saves` does the same once for every session whose newest
+  save has a `meta`.
+
+**Commits write (`recordCommits`).** One transaction. The branch row is locked `for update` first, and only then are the
+pushed hashes looked up: commits whose `(repoId, hash)` exist are replays and are skipped, so a push that just committed
+the same commits under the lock makes this one a replay too (two concurrent pushes of one new commit answer 201 and
+200), and a commit equal to the locked head or behind it is one. A body of replays answers 200 and changes nothing,
+not even `lastPushAt`. Each other commit in order must have `parentHash` equal to the head's hash (both null for a
+first commit), else 409 `not a fast-forward`. A branch with no head yet also takes a first commit whose `parentHash` is a commit of the
+same session on another branch: `dit checkout` starts a branch on the commit it was checked out from, and that commit
+becomes the new commit's `parentId`. Every listed save must already be a save of the session (409 naming the missing) and
+every listed object must have a `repo_objects` row for this repo (409 naming the missing; an object only in `objects`
+does not count). Every covered save must also list the objects it rebuilds from among its `objects`: its own non-null `tree` and `side`, or its `raw` when it has one, else 409
+`Save <hash> does not list its tree and side objects` (`Save <hash> does not list its raw object` for a raw save; a save without them would be marked `stored` and could not be
+rebuilt). Each save then gets its `save_objects` rows (`onConflictDoNothing`) and `contentState` `stored`; the
+commit is inserted with `saveId` of its own save, `parentId` of the head and `authorId` of the caller; the branch head
+moves. Every statement whose bind count grows with the body is chunked, so a commit may list any number of objects:
+the `save_objects` insert at `bindParamLimit() / 2` rows per statement, and each `inArray` lookup (the saves' times and
+hashes, the pushed commit hashes, the listed objects) at `bindParamLimit()` less its fixed binds, so
+`setBindParamLimitForTest` crosses a chunk with a handful of rows.
+
+**Reading a commit's saves (`getSessionCommits`).** There is no stored link: a commit's saves are the saves on its branch
+with a `fileUpdatedAt` after its parent commit's save (all of the branch's, for a first commit) up to and including its
+own, ordered by `(fileUpdatedAt, machineName)`. One query derives them for the whole page.
+
+#### Objects (`routes/repo-objects.ts`, `db/queries/objects.ts`, `lib/object-pack.ts`)
+
+dit asks which objects a repo lacks, then uploads those in packs, and a restore fetches them back. The routes are `repoObjectRoutes()`, mounted after
+`repoHistoryRoutes()` behind the same gate.
+
+| Mount | Method | Path | Auth | Notes |
+|---|---|---|---|---|
+| `/repos` (`repoObjectRoutes`) | POST | `/:id/objects/missing` | editor | body `{hashes}`, 1–10,000, each `isObjectHash` (else 400); 200 `{missing, claimed}` (`missingObjects(repoId, hashes, userId)`): `missing` is the hashes to upload — no `repo_objects` row for **this** repo and none in a repo of a project the caller is a **member** of (any rank) — in request order, deduplicated; `claimed` is the hashes another repo holds in such a project, which the hub **links into this repo without an upload** (`claimGroup`: advisory object locks, `objects` rows read `for key share`, membership read after the locks, the `repo_objects` insert; no file, and no cap check or charge since a row exists, so the first pusher still pays). An object held only by projects the caller is not in stays `missing` and is uploaded again — a hash alone never links or reveals another project's bytes. A hash whose holder was unlinked or whose object was reaped before the claim's locks stays `missing`. The commit gate (`recordCommits`) is unchanged: it still wants a `repo_objects` row for this repo, which a claim writes. Held to the fixed body cap |
+| | POST | `/:id/objects` | editor | the pack (`application/octet-stream`); 200 `{stored, known}`. After the gate, `packBodyLimit` (411 `length_required` with no `Content-Length`; 413 `pack_too_large` past the instance's upload limit, before anything is stored), then the `repo-objects` bucket |
+| | POST | `/:id/objects/fetch` | viewer | body `{hashes}`, 1–10,000 (else 400); 200 `application/octet-stream`, every asked hash as a pack record in request order, deduplicated, each laid out as under **Pack format** (the 37-byte header, then the stored frame). When the repo does not hold every hash, nothing is streamed and the answer is 409 `{error, code: "objects_missing", details: {hashes}}`, `hashes` being every missing hash in request order (so a 200 never has a header naming missing objects). The gate is a viewer's read via the `/repos/*` policy in `app.ts`, so a stranger gets 404; metered by `repo-archive` |
+
+**Pack format.** A run of records, `[id 32][kind u8][length u32 LE][zstd frame of length bytes]`. The frame is the
+object's file in dit's store (`.dit/objects`) unchanged: zstd level 3 of the kind byte followed by the body, and `id` is
+the raw SHA-256 of those decompressed bytes. The header's kind repeats the frame's first byte, so the hub's stored
+files are byte-identical to dit's. An empty body is an empty pack. `packRecords`
+reads the body as a stream (`lib/byte-reader.ts`'s `byteReader`, exact reads over the request's chunks), holding one
+record's frame and its decompressed body at a time, and yields each record once it has verified it, in this order:
+
+| Check | Answer |
+|---|---|
+| body ends inside a 37-byte header or inside a frame | 400 `Pack is truncated: …` |
+| `length` > 64 MiB | 413 |
+| kind not 1–5 | 400 `… unknown kind …` |
+| frame is not exactly one zstd frame (`lib/zstd-frame.ts`'s `readZstdFrame` walks the RFC 8878 structure: magic, header, every block, the checksum; a dictionary id, a reserved bit or block type, truncation, trailing bytes, a second or a skippable frame all fail), or it fails to decode, or its output is not the content size its header declares | 400 `Object <hash> is not one zstd frame` |
+| header declares a content size past 64 MiB, or the frame decompresses past it (`zstdDecompressSync`'s `maxOutputLength`, `ERR_BUFFER_TOO_LARGE`) | 413 |
+| decompressed bytes do not start with the header's kind | 400 `… does not start with its kind byte …` |
+| `sha256(decompressed bytes)` ≠ `id` | 400 `… does not match its content` |
+
+The first failing record stops the pack; **the records before it stay stored**. A truncated pack is usually a body cut
+short by a proxy over its own body limit (Next's proxy truncates past `proxyClientMaxBodySize` with only a logged
+warning), which is why the 400 names truncation: dit re-asks `missing` and sends the rest.
+
+**Taking the records (`acceptObjects`).** The route hands `packRecords` to `acceptObjects`, which takes the records
+100 to a transaction (`acceptGroup`), under the group's advisory locks and with its `objects` rows read
+`for key share` in one select (see `db.md`, `objects.ts`: a row and its file never part). The stored bytes are the
+frame dit sent, unchanged, and `objects.size` is the committed row's size. Per record, in pack order:
+
+- This repo already has the `repo_objects` row, or the record repeats one earlier in the group: `known`, nothing
+  written.
+- Another repo has it (an `objects` row exists): `linkObject` — `newRepoObjectScopes`, `assertStorageAllows` with the
+  row's `size`, insert `repo_objects`. No file. `known`.
+- Neither: `recordObject` — `newRepoObjectScopes`, `assertStorageAllows` with the frame's length, insert `objects` and
+  `repo_objects`. `stored`, or `known` when a row landed beside it anyway (and then no file is written).
+
+Then the group's `stored` frames are made durable together (`storeObjects`), its usage is added with one `addUsage` per
+scope (projects first), and it commits. The bytes a link adds go on the group's tally (`GroupUsage`) at the committed
+row's size, and every cap check in the group counts the tally on top of the counter. `newRepoObjectScopes` runs before
+the `repo_objects` insert, in its transaction, so usage moves only for the first pusher of a hash onto the instance (their
+project and account pay; every later link costs nothing and is never refused by a cap). Both inserts are `onConflictDoNothing`; a `repo_objects` insert that inserted nothing adds nothing. A
+cap overrun is the 413 `storage_limit` `assertStorageAllows` throws before anything of that record is written: the
+group's records before it commit with their files and bytes, and the refusal is answered after. A record that fails
+verification ends the pack the same way: the group read before it commits first. A filesystem failure inside a group
+rolls back that whole group; the groups before it stay.
+
+## New route-file template
+
+```ts
+import { Hono } from "hono";
+import { z } from "zod";
+import type { AuthedEnv } from "../auth.js";        // AuthedEnv: user/session are non-null past `authenticated`
+import { createX, getX } from "../db/queries/x.js";
+import { newXSchema, xSchema } from "../db/schema/x.js";
+import { describer, idParam, respond, validator } from "../lib/http.js";
+import { gatedProject } from "../middleware/authorize-project.js";
+
+const { describe } = describer("Xs");   // the API reference group every route below is listed under
+
+const app = new Hono<AuthedEnv>();
+
+app.post(
+  "/",
+  describe(
+    "Create an x",
+    { status: 201, schema: xSchema, description: "X created" },
+    400, 404                      // trailing args are the error codes this route can answer
+  ),
+  validator("json", newXSchema),
+  async (c) => {
+    const data = c.req.valid("json");
+    const row = await createX(data, gatedProject(c));
+    return respond(c, xSchema, row, 201);   // validates against xSchema outside production
+  }
+);
+
+export default app;
+// then in app.ts: app.use("/x/*", authenticated); app.use("/x/*", authorizeProject(resolveXRoute));
+// app.route("/x", x);  →  run `bun run typegen` from the repo root
+```
+
+`src/lib/http.ts` is what every route file reaches for. `describer(tag)` hands a router its
+route-description helpers, bound to the API reference group (OpenAPI tag) its routes are listed under:
+each router file takes one at module scope, `app.ts`'s health check and invite preview borrow
+`instanceDocs`/`inviteDocs` from `routes/instance.ts`/`routes/invites.ts`, and the entity routers and
+`routes/generic.ts` take `describer(entityTag(module))` (`entities/shared.ts`: the label pluralised, so
+an entity's shared and own routes land in one group). `describe(desc, ok, ...errorCodes)` wraps
+`describeRoute` with the shared `{error, code?, requestId?}` envelope on every listed failure code;
+`describeRaw` is the same for a non-JSON response (a byte stream, 204); `route(options)` is the raw
+`describeRoute` in the group, for responses neither fits (`/api/health`'s 503 carries the health body).
+Every operation's `summary` is the first sentence of its description (`summarise`: up to the first `.`,
+`:` or `;` before whitespace), which is what the reference lists it by, so **a description leads with a
+short label** and puts the detail in the sentences after it; the description is left out when that one
+sentence is all there is. `scripts/generate-api.test.ts` fails on an untagged route or a summary over 60
+characters or holding a backtick. `idParam()`/`idParams(...names)`
+validate path params as positive integers, 400 on failure. `params(shape)` validates arbitrary path
+params. `respond(c, schema, data, status?)` — **outside production, re-parses `data` against `schema`
+and throws if it doesn't match**, so a handler's payload drifting from its own documentation fails a
+test rather than silently shipping a wrong shape to the generated client; the check is skipped in
+production. `respondMessage(c, text, status?)` is `respond` with the shared `{message}` schema.
+`gatedProject(c)` / `gatedRole(c)` (`middleware/authorize-project.ts`) throw 403 on a mount with no
+project gate — reach for these instead of re-resolving a project in a handler.
+
+Conventions: path params via `idParam()`/`idParams()`, never bare `Number(c.req.param("id"))`; JSON
+bodies via `validator("json", zodSchema)`; multipart via `validator("form", schema-with-z.file())`;
+creates answer 201, everything else 200 (or 204/202 where documented above).
+
+`validator` is `lib/http.ts`'s wrapper of `hono-openapi`'s, never the library's own: a body, query or form
+that fails its schema throws an `ApiError` 400 `{error: "Invalid request", code: "invalid_request",
+details: {issues: [{path, message, code?, maximum?}]}}`, so validation failures share the one error envelope.
+`path` is the field's key path (strings and numbers); `code` is zod's issue code and `maximum` is carried only
+by a `too_big` issue (the upload cap the client reads). Path parameters go through `params()`, whose
+400 is a plain `Invalid path parameter: …` message.
+
+## Uploads
+
+`validator("form", z.object({ file: uploadedFile(...), projectId }))` → `storeUpload("assets"|"images", file)`
+(`uploadedFile`, `lib/multipart.ts`, checks the file against the policy's upload limit — and, for an image, its
+`imageTypes` — each time a request is parsed, answering with zod's own `too_big` (carrying `maximum`) or
+`invalid_value` issue in a 400; an asset whose name has an audio extension outside `limits.audioTypes` is refused
+with a 400 before the signature check, while any other file is an attachment the audio types do not govern)
+(`src/lib/storage.ts`, **awaited** — a failed write reaches `app.onError` as a 500, never a row pointing
+at nothing) → `createAsset`/`createImage`, and a failed insert unlinks the just-written file via
+`removeStoredFile`. The stored key is `crypto.randomUUID()` + an extension: the upload's own extension
+if it's a plain `[a-z0-9]{1,8}` token, else one derived from the MIME type, else `bin` — the client's
+filename never otherwise reaches disk. The row's `type` is the part's declared `Content-Type`, read back
+from the buffered body by `declaredFileType` (`lib/multipart.ts`): Bun's `FormData` parser ignores it and
+derives `File.type` from the filename extension. An image uploaded with no `projectId` is an avatar
+(`scope: "user"`); its palette is extracted (`lib/palette.ts`) and its resizes are queued
+(`enqueueImageVariants`, best-effort — a queue failure doesn't fail the upload, since the static handler
+resizes on demand anyway). Attachments are **not** uploads — `POST /:id/attachments` takes JSON
+`{ assetId }` into a join table. `attachedAssetSchema` is an asset plus a nullable `uploadedBy`
+(`uploadedBySchema`: `{id, name, image}`), read through the `assets.uploadedBy` relation
+(`db/relations.ts`) with the `attachmentsWithUploadedBy` `with` clause (`db/schema/assets.ts`, not the queries file: the entity
+reads importing `db/queries/assets.ts` would close an import cycle through `entities/index`). Deleting an asset, an image, or a whole project unlinks the bytes via
+`removeStoredFile`/`unlinkQuietly` **after** the row is committed gone, so a failed unlink leaves an
+orphan rather than a broken row. The same delete paths — plus a single track delete and a bulk one —
+also remove any spectrogram PNGs the track-audio rows they cascade away named: `deleteAsset`'s route,
+`deleteTrack`, `bulkDeleteTracks` and `deleteProject` each read the keys through
+`spectrogramKeysForAsset`/`spectrogramKeysForTracksMatching` (`db/queries/track-audios.ts`) before their
+own delete runs, and remove the files once it has committed. An asset delete (`deleteAsset`,
+`deleteAssetsInProject`, and the duplicate removal through it) also subtracts those rows' `spectrogramBytes`
+from the project's storage usage in the deleting transaction — the project scope only, never the uploader's,
+as `unlinkTrackAudio` does.
+
+**Storage accounting and caps.** Every path that writes bytes moves a `storage_usage` counter in the same
+transaction as the row that owns them (`db/queries/storage-usage.ts`): an asset upload and delete inside
+`createAsset`/`deleteAsset`, an image upload and delete in `routes/images.ts` around the create and the
+delete, a resize inside `ensureVariant`, a conversion's output inside the `convert` handler, and a
+spectrogram inside the analysis write. A file is counted twice on purpose — once against its project and
+once against the user who uploaded it (an avatar has only the user scope). The instance policy's
+`limits.projectCapGb` and `limits.userCapGb` (seeded from `MAX_PROJECT_GB`/`MAX_USER_GB`) cap those scopes; null
+means unlimited, read per check. A project's own `audio.storageCapGb` (project policy) can only lower its cap:
+`limitFor(scope)` answers the lesser of the two, the instance's where the project sets none or sets more.
+`assertStorageAllows` runs **before**
+`storeUpload` on both upload routes and before a `convert` job is queued, and refuses with a **413**
+`{error, code: "storage_limit", details: {scopeKind, usedBytes, limitBytes}}` — the one error envelope that
+carries a machine-readable `code`, thrown as `ApiError` (`lib/http.ts`) so `jsonErrorHandler` serialises
+`code` and `details`. A conversion is the one writer whose size is unknown up front: the handler watches
+the file it is encoding against `remainingAllowance` and aborts ffmpeg the moment the output passes it,
+failing the job rather than cancelling it. Cascade deletes (a project, a track, a bulk delete, a
+cross-project move) do not subtract per row — they call `recomputeUsage` for the scopes involved once the
+delete has committed.
+
+`STORAGE_DIR` (`src/lib/storage.ts`) also names an `"analysis"` directory the analysis funnel writes to
+directly rather than through `storeUpload` — `lib/spectrogram.ts`'s `writeSpectrogramPng` is the only
+writer, keyed by `newStorageKey("analysis", "png")` the same way an upload's key is built. The file is
+served by the same gated `/static/*` route as an asset or an image (below). The
+`static/{assets,images}` skeleton in the Dockerfile, CI and `.claude/hooks/worktree-setup.sh` carries
+`static/analysis` too, so a fresh container or worktree has somewhere to write before the first analysis
+runs.
+
+`STORAGE_DIR` also names an `"objects"` directory for dit's content-addressed objects. `objectKey(hash)`
+builds `objects/<hash[0:2]>/<hash>` (no extension) and throws unless the hash is 64 lowercase hex;
+`isObjectHash` is the one rule to validate an id against. `storeObjects([{ hash, bytes }])` writes each object's
+bytes unchanged (the zstd frame dit sent) and does not verify the hashes; its caller does. Each write is atomic: every
+object's temporary sibling `<key>.tmp-<uuid>` is written and fsynced, then every one is renamed onto its key, then each
+directory a rename landed in is fsynced once, every time: the caller holds the objects' locks and wrote their rows
+itself, so a file already under a key is an orphan to replace. A failed write or rename removes every temporary file
+and throws. The
+storage audit trusts the `objects` table: `referencedKeys` maps every `objects.hash` through `objectKey`, so
+an object file with no row, and a temporary file left by a crash, is an orphan reaped after `ORPHAN_AGE_MS`.
+
+## Static files (`src/static.ts`)
+
+Mounted at `/static/*`, ahead of `basePath`, sharing the root app's `resolveSession`. The row lookup comes
+first; an image of `scope: "instance"` (the branding's logo and icon) is served to anyone from there, signed
+out and share-page guests included. Everything else is deny-by-default (`assertMayRead`): a share-page guest's
+anonymous session is 403 (`user.isAnonymous`) whether or not the key exists, so a guest cannot tell a real
+private key from a fake one by whether a 404 or a scope check's 403 comes back. A fully signed-out caller:
+no row is a 404, and only a real row's `401` (`!user`) or `403` (failed scope) distinguishes a signed-out
+caller from a member past that point. `getStaticFileByKey` (keyed on the request path with `/static/` stripped) resolves an
+`analysis/<uuid>.png` key through `track_audios.spectrogramKey` the same way it resolves an asset or an
+image, `scope: "project"` on the track's own project; its `size` is not stored anywhere, so this is the
+one branch that `stat`s the file to build the record, safe to do because a key is never rewritten in
+place — a fresh analysis always writes a new one. `scope: "project"` gates on
+`isMemberAtLeast(user, projectId, "viewer")`; `scope: "user"` (an avatar) is readable by any signed-in
+user. `?w=64|256|1024` on an image serves a resize (`ensureVariant`, `lib/images.ts`); any other
+width is 400, and resizing anything but an image (including an analysis PNG) is 400. `?format=webp|jpeg|png`
+alongside `?w=` picks the encoding (default `webp`; a bad value is 400); ignored without `?w=` (the
+original is served as-is). Responses carry a content-derived `ETag`
+(`"<kind>-<id>-<size>[-w<width>-<format>]"`, no bytes read to produce it beyond the
+analysis branch's `stat`) and honour `If-None-Match` with a 304.
+The file itself is served by `fileResponse` (`src/lib/serve-file.ts`, a `Bun.file` response shared with
+the share-link stream route; no `serveStatic`, whose Bun adapter has no `Range` support): a single
+`bytes=` range, open-ended or suffix, answers 206 with `Content-Range`, one starting past the end 416.
+Serving policy: `audio/*` and `image/*` render inline under the row's stored MIME (the DB's MIME is
+authoritative over any extension guess); everything else is
+`application/octet-stream` + `attachment`; `?download` forces attachment on anything. Always
+`X-Content-Type-Options: nosniff`, `Cache-Control: private, max-age=3600`, `Accept-Ranges: bytes`.
+`Content-Disposition` names the row's `name`; a name with characters outside printable ASCII (a Lab bounce's
+em dash) gets `_` in `filename` and the full UTF-8 name in `filename*`, since a header value past Latin-1
+fails the whole response. CORS
+on `/static/*` uses the same `trustedOrigins` list as the API.
+
+## Jobs (`src/db/queries/jobs.ts`, `src/lib/jobs.ts`, `src/lib/job-events.ts`)
+
+`registerJobHandler(kind, handler, {label, maxAttempts?, steps?, subjectLabels?, outstanding?})` is called as an
+import side effect from the module that owns the kind (`db/queries/track-audios.ts` for
+`audio_analysis`/`audio_backfill`, `db/queries/assets.ts` for `convert`, `db/queries/images.ts` for `image_variants`,
+`db/queries/storage-audit.ts` for `storage_audit`) —
+`server.ts` relies on `import { app }` having already loaded all of them before `startJobRunner()` runs. Everything a
+kind knows about itself lives in that registration; the runner, the routes and `describeJobs` never branch on a kind.
+`enqueueJob`/`enqueueJobsOnce` push a row and hand it to `mediaQueue` (`TaskQueue`, `MEDIA_CONCURRENCY` slots, keyed
+`job:<id>` so the same job is never queued twice). `runJob` claims a row with a `status='queued'` guard (safe to call
+twice for the same id), runs the handler, and on failure either re-queues with a growing delay
+(`JOB_RETRY_DELAY_MS * attempt`, read at each retry) if attempts remain under the kind's `maxAttempts`, or marks it
+`failed`. `resumeInterruptedJobs` (boot only) re-queues anything left `queued`/`running` by a killed process.
+`pruneFinishedJobs` deletes finished rows older than the policy's `jobRetentionDays` (7 by default), at boot and
+then daily (`startJobPruning`), and again at once when the retention changes. `POST /api/jobs/:id/retry` resets a `failed` row to
+`queued` with a clean attempt count (409 if it isn't `failed`). The retry branch, resume and retry all reset
+`stepIndex`, `stepPercent`, `percent`, `queuePosition` and `cancelRequested`.
+
+**Steps and the reporter.** A kind declares a ladder `steps: {key, label, weight}[]` (weights relative; a kind with none
+climbs `[{key: "run", label: <kind label>, weight: 1}]`), and the claim copies it onto the row with `stepIndex = 0`. The
+handler receives a `JobReporter`: `step(key)` enters a step and writes at once; `progress(fraction)` is 0..1 within the
+current step, written at most once per 250 ms (calls inside the interval are held and the latest written when it ends);
+`child(steps?)` returns a reporter whose whole ladder maps into the parent's current step, for a handler that runs work
+of another shape; `signal` aborts on cancel. `percent` is only ever computed by `overallPercent(steps, index, fraction)`
+(finished weight plus the current step's share, one decimal). Every reporter write goes through `writeProgress(id,
+patch)`, guarded to `status='running'`, and once the handler settles the reporter writes nothing more, so a held write
+cannot land on a finished row. `done` writes the last step at 100.
+
+**Declared ladders.** `audio_analysis` (`analyseTrackAudio`) climbs `decode` (weight 80, real progress from
+`decodeInto`'s frame count against ffmpeg's own duration), `analyse` (15, one tick per offline estimator read) and
+`store` (5, the PNG, the row, the diffs and the duplicate flag); `audio_backfill` nests the same ladder inside each
+file's step of its own per-file ladder (`report.child()` twice: once for the file, once for that file's analysis), so
+the bar moves through decode, analyse and store within every file rather than jumping at each file boundary. `convert`
+(`convertAssetToAsset`) is a single `encode` step with `convertAudio`'s real percent, parsed from ffmpeg's
+`-progress pipe:1` `out_time_us` against the same duration parse decode uses (`parseFfmpegDurationMs` in `media.ts`).
+`image_variants` keeps the default single step, and so does `storage_audit`.
+
+**The instance-wide jobs.** `save_content_sweep` is the second kind with no project (see `db.md`'s Jobs, `save-retention.ts`): queued at boot, daily and when `saveContentRetentionDays` changes, skipped while one is queued or running; its row's `result` carries `{pruned, unlinked, reaped, bytesFreed}` and `GET /admin/storage` reads the latest finished one back as `lastSweep`. `storage_audit` is the other kind with no project: its row's `projectId` is null, which keeps it out of every project's job list and event stream (`GET /api/jobs/:id` 404s on it too, since that route resolves a project to authorize against). It is queued at boot and every `auditIntervalHours` (24 by default, re-armed when the policy changes it) by `startStorageAudits()` (`server.ts`, after `startJobRunner`), never by a request, and `enqueueStorageAudit` skips the enqueue while one is already queued or running. Its `result` is the `StorageAuditReport` `GET /admin/storage` reads back: files `scanned`, `foreign` files left alone, `deleted` orphans and `deletedBytes`, `reported` orphans and `reportedBytes` (counted and kept, while the policy's `orphanMode` is `report`), `sparedYoung` (orphans still inside the 24 h floor), `variantsReady` (images whose column it repaired) and `drift`, one entry per scope whose counter was wrong.
+
+**Names.** A job's kind name (`label`) and subject name (`subjectLabel`) are derived on read, never stored:
+`describeJobs(rows)` groups rows by kind and calls each kind's `subjectLabels(jobs)` resolver once (`labelsBySubject`
+builds one from a subject-id → name lookup). `convert` names the asset, `audio_analysis` the track audio's file,
+`image_variants` the image, `audio_backfill` the file count once `result.analysed` exists. A kind nothing registered
+reads its key as its label. Every job the API returns — the list read, `GET /jobs/:id`, the retry and cancel responses,
+the stream's snapshot and events — is described.
+
+**Queue positions.** `TaskQueue` exposes `position(key)`, `remove(key)` and `pendingKeys()`. Whenever the pending list
+changes (schedule, a task starting, a cancel removing one) the runner renumbers `queuePosition` for every waiting job
+in one `UPDATE … FROM (VALUES …)` statement, writing only rows whose place changed and only `queued` rows, and
+publishes each changed row. Places are process-wide, across projects. Renumbers are serialized and a call made while
+one is waiting collapses into it. A queued row waiting out a retry delay is not in `TaskQueue` and reads null.
+
+**Waiting on one key.** `idle()` resolves once nothing is pending or running; `settled(key)` resolves once that one key
+is neither, and at once for a key the queue does not hold. A key enqueued again while it runs is coalesced into the
+run, so its waiters resolve when the run ends; `remove(key)` resolves them at removal. A job runs under `jobKey(id)`
+(`job:<id>`, exported from `db/queries/jobs.ts`).
+
+**Cancel.** `cancelJob(id)` sets a `queued` row `cancelled` (guarded by `status='queued'`) and removes it from the
+queue; a row waiting out a retry delay is refused by its claim when the delay ends. For a `running` row it sets
+`cancelRequested` and aborts the run's `AbortController` (`runs`, a map the runner fills before the claim and empties
+in `finally`). A throw whose `name` is `AbortError`, or any throw while `cancelRequested` is true, ends the row
+`cancelled` with `finishedAt` set, attempts unchanged and no retry; the retry and failed updates refuse a row whose
+cancel landed meanwhile. A handler that returns normally after a cancel was asked for still ends `done`. Only
+`media.ts` spawns child processes, so a handler that should stop mid-work passes `report.signal` there.
+
+**Events.** Every row update in `jobs.ts` goes through `updateJobs`, which publishes the changed rows to the in-process
+bus `lib/job-events.ts` (`publishJob`, `subscribeProject(projectId, listener)` returning an unsubscribe,
+`projectListenerCount`). Only rows of a watched project are described, in parallel, then dispatched in write order.
+`GET /api/projects/:id/jobs/events` (Hono `streamSSE`) subscribes first, reads the snapshot
+(`getProjectJobs(id, {recentMs: 10_000})`: queued, running, every failed row, and done or cancelled rows finished in the
+last 10 s, at most `MAX_PROJECT_JOBS` of them), writes it as `snapshot`, then flushes any changes that arrived meanwhile and streams each change as a `job`
+event (`id` = job id), with a `ping` every half `IDLE_TIMEOUT_SECONDS` (5 s). The request's abort signal, the response body's cancellation and
+`shutdownSignal` (`lib/connections.ts`) each end the stream, which clears the ping and unsubscribes. `GET /api/projects/:id/jobs?status=a,b&recentMs=` is the same
+read for a client polling instead.
+
+**Outstanding-work finders.** A kind whose "not yet done" state persists on its own rows — rather than
+existing only because a request asked for it — registers an `outstanding` finder alongside its handler: a
+`() => Promise<{subjectId, projectId}[]>` that lists every subject still needing that kind of work.
+`queueOutstandingJobs()` walks every registered finder and queues only the subjects with **no job of that
+kind on record at all** — queued, running, done or failed — through `enqueueJobsOnce`. A finder reports
+state, not whether the work can succeed, so a subject whose job failed or finished without effect waits
+for its row to be pruned (`jobRetentionDays`) before a boot tries it again; Retry is the manual path.
+`bun --watch` restarts on every save, so without this rule one unreadable file became a failed row per
+restart. `startJobRunner` calls it once, after `resumeInterruptedJobs`, logging the counts queued per
+kind; one finder throwing is caught and logged so it cannot stop the others or the boot. **A finder
+excludes subjects whose input is gone** — work that cannot possibly succeed is not outstanding.
+`audio_backfill`'s finder (`findOutstandingAudioBackfills`) is one subject per project with an audio-named
+`track_audios` row whose stored file exists and whose `analysisVersion` is null or behind the package's
+`ANALYSIS_VERSION` — the same `outstandingAnalysis` predicate `projectAudioIds` filters on, so the two can
+never drift apart — leaving out a project whose policy has `audio.autoAnalyse` off, whose backfill waits
+for someone to ask (`POST /projects/:id/audio-backfill`, `queue_backfill`).
+`image_variants`'s finder (`findOutstandingImageVariants`) is every project-scoped image (an avatar has no
+project and resizes on demand instead) whose `variantsReady` column is still false and whose original is still on
+disk — one query and one stat for the few rows it leaves, instead of four stats per image at every boot. The job
+sets the column when it has written every width, and the nightly `storage_audit` repairs it for images whose files
+are all present already. `convert` and `audio_analysis` register no finder: a conversion only ever
+happens on demand, and `audio_backfill` already covers a project's outstanding `audio_analysis` work.
+Adding a job kind with persistent unfinished state means writing its finder at registration time — a boot
+pass is the only thing that will ever notice work nobody happened to request.
+
+**Testing gotcha:** do not use `vi.useFakeTimers()` in a test that also touches Postgres — it fakes
+enough of the timer surface to drop `pg` connections mid-test ("Connection terminated unexpectedly").
+Poll with `waitFor` from `@workspace/test/wait-for` and make the delay env-overridable instead.
+
+## Tests
+
+**117 files**, one per concern, no single `api.test.ts`. The `test` script runs `bun test` twice: first
+`--parallel` over everything except a serial list (`--path-ignore-patterns`), then that list one
+file at a time (`--isolate`) — `db/migrator.test.ts`, `db/queries/jobs.test.ts`,
+`jobs-outstanding.test.ts`, `storage-audit.test.ts`, `storage-limits.test.ts`, `save-retention.test.ts`,
+`db/queries/settings.test.ts`, `db/queries/instance-users.test.ts`, `db/queries/account-deletion.test.ts`,
+`routes/instance.test.ts`, `routes/settings.test.ts`, `routes/settings-device.test.ts`,
+`routes/settings-instance.test.ts`, `static.test.ts` and `entities/project/delete-order.test.ts`
+reach past their own rows or process-wide state (`migrator.test.ts` creates and drops whole databases on the
+server and applies every migration twice; `pruneFinishedJobs`/`resumeInterruptedJobs` take no filter; the
+audit walks the whole storage tree and recomputes every counter; the save content sweep reaps every
+`objects` row nothing links, instance-wide, which would race another file's insert-then-link seeding; the limits test stubs
+`MAX_PROJECT_GB`/`MAX_USER_GB`; the instance tests flip registration and instance roles, which the whole
+instance shares, and create databases of their own; the settings route test writes and locks instance rows
+and replaces modules for its run; the instance settings test seeds `MAX_UPLOAD_MB` before
+its imports, writes the Instance groups' rows, promotes its owner to instance admin and uploads instance
+images; the static test makes the upload directory unwritable; the project delete-order test re-creates `tracks`' key to `projects`, locking both tables)
+and would corrupt a run happening beside them.
+
+**Objects outlive the suite's projects.** A project's delete takes its repos' `repo_objects` and its saves'
+`save_objects` but never an `objects` row, so a file that seeds or stores objects removes the ones only it uses
+(`removeObjects`, `src/test/dit-objects.ts`, which drops the `save_objects` and `repo_objects` links first since
+their keys are `restrict`). A file that seeds through `seedObjects` takes `trackSeeds()` from
+`src/test/dit-history.ts` instead and runs its `removeSeeded` in an `afterAll`; `hashOf` is salted per test
+process so one file's removal never takes a hash a file beside it seeded. A server run on a truncated database
+leaves no `objects` rows.
+
+**Settings fixtures.** No registered setting yet takes a project value or needs an owner, so
+`routes/settings.test.ts` registers a `fixture` group beside the real ones (its `fixture.layered` stands for an
+env-seeded key that also takes user and project values; `routes/settings-instance.test.ts` drives the real
+seeded keys): `registerFixtureSettings()` (`src/test/settings-fixture.ts`) stands in for the registry's
+`groups/index.ts` and for `db/queries/settings-env.ts` with `mock.module`. The registry is built when it is
+first loaded, so the call comes first and everything that reaches `@workspace/settings` or the app is
+imported after it with `await import(...)`; a file doing this runs in the serial list, where `--isolate`
+gives it modules of its own. Leaving `migrator.test.ts` in the parallel pass is what pushed tests that settle
+a real ffmpeg job past bun's 5s default — the contention, not the budget, so it is serialised rather than
+given a longer timeout. Neither phase passes `--timeout`: 5s is the gate, and a test that legitimately
+needs longer carries its own override: a test that migrates a throwaway database of its own (`migrator.test.ts`,
+`saves-migration.test.ts`) passes `30_000`, since applying every migration runs past 5s under a loaded parallel
+pass. A timeout does not cancel the test's work: its queries keep their connections and locks while the next
+hook runs, so one slow test usually also shows up as a "beforeEach/afterEach hook timed out" right after it.
+Chase the first timeout, not the hook. Every test drives the app in-process via
+`app.request(path, init)` against a live DB — **no port is bound**, since `app.ts` never calls `serve()`.
+
+`src/test/fixtures.ts` — `setupSuite(label)` is what a route-test file calls once at module scope: it
+registers its own `beforeAll`/`afterAll` that create one project with an owner/editor/viewer/outsider
+(each file gets its own project, which is what lets files run in parallel — no list endpoint can see
+another file's rows) and clean it up after: its projects first, then every account it signed up (the four
+actors and each `throwawayProject`'s owner and editor) through `deleteSuiteUsers(userIds)` — `deleteAccount`
+then the `users` row, one account at a time, skipping one a test already deleted and leaving one
+`deleteAccount` refuses (the instance's last admin, a project a test left with other members). Returns `request(caller, path, init)` (caller ∈
+anonymous/outsider/viewer/editor/owner), `requestAs(actor, path, init)` for an ad-hoc actor,
+`expectAccess(method, path, expected, body?, assertBody?)` (asserts anonymous→401, outsider→404, plus
+the roles named in `expected` — with an optional body assertion so a 200 that leaks another tenant's row
+still fails), `seedMember(actor, role)`, `throwawayProject(name?)` (a second project + editor for
+cross-project checks, torn down with the suite), and fixture builders `mkTrack`, `mkCollection`,
+`mkSession`, `mkStatus` (auto-numbered names — a status name is unique per project), `uploadAsset`,
+`uploadTypedAsset`, `uploadAvatar`, `uploadImage`, `mkPrimaryAudioWithLoudness` (writes `track_audios`
+rows directly to fake a measured LUFS without running ffmpeg). A project the suite creates starts on the default
+priority scale (`createProject` seeds it); a query-layer test that inserts a project straight into `projects`
+gives it one with `seedScale(projectId)` (`src/test/priority.ts`, answering the default level), and every track,
+collection or session it inserts by hand names a level (`priorityId`, or `withDefaultLevel(values)`). The module-level `signInAsGuest()` signs in
+through the `anonymous()` plugin, for the guest-confinement tests. If suite setup itself fails,
+`setUpError` is recorded and `requireProject()` throws one clear error instead of every test cascading
+its own confusing one. `trustedOrigin` exports `trustedOrigins[0]` — every fixture and test file that
+POSTs `FormData` with a `Cookie` header names it as `Origin` too, the way a real browser does even on a
+same-origin request; `csrfProtection` (`middleware/trusted-origin.ts`) refuses a form post carrying
+neither. `signUpAndSignIn` gives each call a distinct simulated `requestIP()` (Hono's third `app.request`
+argument) so that a file signing up many actors — `setupSuite`'s own four, plus any `throwawayProject` or
+direct call a test makes — does not collapse them all into the one `clientAddress` bucket
+`auth-signin`/`auth-signup` meter unauthenticated callers by; a real deployment sees this diversity for
+free from distinct devices. `distinctCallerEnv()` is exported for a test that posts to `/auth/*` by hand
+rather than through `signUpAndSignIn` (`routes/instance.test.ts` signs strangers and invitees up directly). `src/test/database.ts` gives a test a database of its own: `withThrowawayDatabase(fn, label?)` creates and
+drops one on the same server (`migrator.test.ts` uses it), and `withMigratedDatabase(fn)` hands back a
+migrated drizzle instance — the only way to observe a first sign-up or a single-admin instance, which the
+shared development database left behind long ago. `src/test/media.ts` holds fixtures for the media-analysis tests.
+A file's `mediaQueue` (its own, since `--parallel` gives each file a fresh module registry) also holds the analyses
+its earlier tests queued and never waited for, so no test in the parallel half awaits `mediaQueue.idle()`, which
+would wait all of them out under its 5s; a test waits on the jobs it queued instead: `settleJobs(ids)` (the ids a
+response carried: `analysisJobIds`, `variantsJobId`, `jobId`), `settleSubjectJobs(kind, subjectIds)` (the in-flight
+jobs of those subjects, for work a lazy reader queued) or `settleProjectJobs(projectId)` (every in-flight job of
+the file's own project); `settledJob(suite, caller, id)` settles one job and reads it back. `src/test/sse.ts`
+`sseReader(body)` reads server-sent events one at a time under a deadline. `src/test/mcp.ts`
+`mintMcpToken(actor, scopes)` runs the real authorization-code flow with PKCE (a skip-consent native client
+from `auth.api.adminCreateOAuthClient` on the actor's session, `/oauth2/authorize` with the cookie,
+`/oauth2/token`) and returns the access token; `callTool(token, name, args)` posts one stateless
+2026-07-28 `tools/call` to `/api/mcp`. `beginShutdown()` cannot be undone, so the
+test that calls it is a file of its own (`entities/project/job-events-shutdown.test.ts`); the parallel pass gives every
+file a fresh module registry.
+
+**Testing an `env.ts`-derived singleton** (`lib/env.test.ts`, `lib/mail.test.ts`, `lib/auth-mail.test.ts`,
+`db/queries/invites-mail.test.ts`): `env.ts` and anything built on it (`mail.ts`'s transport, `auth-mail.ts`'s
+callbacks, `invites.ts`'s `emailEnabled` check) read `process.env` once at import time, so a test that wants
+a different value reloads the module against a stubbed environment rather than mutating the live one:
+`mock.module("dotenv/config", () => ({}))` keeps a reload from reading the real `.env` back in, `stubEnv`/
+`unstubAllEnvs` (`@workspace/test/env`) set and restore `process.env`, and `delete
+require.cache[require.resolve("./env.js")]` (plus every module built on it that the test needs fresh) forces
+the next `import()` to re-evaluate rather than hand back the cached instance. Only the leaf modules that
+actually depend on the stubbed value are busted — `db/index.js` and the rest of the app graph stay cached,
+so the test still runs against the one shared connection pool `--parallel` (which implies `--isolate`, a
+fresh module registry per file) already gives every file of its own.
+
+`scripts/generate-api.ts` builds the OpenAPI document **in-process** — `app.request("/api/openapi")` —
+so `bun run typegen` (root Turborepo task) needs neither a port nor a live DB connection; it runs
+`openapi-typescript` via `bunx` (pinned `7.13.0`) because that package's AST usage doesn't resolve
+under TypeScript 7, and mirrors every schema-owned value list (`rawMemberRoleEnum`, `rawJobKindEnum`, etc.,
+plus `AUDIO_EXTENSIONS` from `lib/media.ts`) into `packages/api/src` as a paired `const`/type export —
+add a new one there, never as a literal in `packages/api`. `daw` is not one of these: it is free text (a
+scanner module id, validated `/^[a-z0-9][a-z0-9-]{0,31}$/`, or `"manual"`), not a closed enum, so a new DAW
+needs no server release — `GET /projects/:id/sessions/daws` is how a client discovers which ones a project's
+sessions actually carry.
+
+## Gotchas
+
+1. `respond()` throws outside production if a handler's payload doesn't match its declared schema —
+   treat that error as a real bug in the route, not a test-only nuisance.
+2. `pathId(c)` reads path segment 2 (`/api/<resource>/<id>/...`) because a wildcard `app.use("/x/*")`
+   middleware cannot see a downstream route's `:id` param in Hono. Non-numeric leading segments
+   (`/api/assets/upload`, `/api/sessions/bulk`) yield `null`, which is why every entity-specific router
+   is mounted **before** `genericRoutes` — a static path must match first or `/:id` swallows it.
+3. `authorizeProject`'s resolver runs once per request and gates on **one** project; every other foreign
+   id a body names is the handler's job to check (`assertInProject`/`assertStatusUsable`) — a foreign
+   row answers 404 there, exactly like a missing one, rather than being probed by the resolver.
+3a. The session entity is the one exception with a body that can legitimately span multiple named rows
+   (`moves`/`attachments` arrays); its custom `resolveRoute` refuses outright (400) if the body carries
+   two different explicit `projectId`s, and otherwise gates on the first existing session/track it can
+   find one for.
+4. Rate limiters are in-memory, per-process token buckets — restarting the process resets every bucket,
+   and a multi-instance deployment would need to move this to shared storage.
+5. `statuses` has no list route of its own: `GET /statuses/:id` reads one, and the list is
+   `GET /projects/:id/statuses` (globals plus the project's own). A global status
+   (`projectIdForStatus` resolution `"global"`) is an `{kind:"instance"}` scope: any signed-in caller
+   reads it, and `resolveStatusRoute` refuses every write to it with a 403 before the instance gate
+   runs; `updateStatus`/`deleteStatus` keep the same refusal as a backstop.
+6. Deleting an asset or image removes the file **after** the row commits, so a crash between the two
+   leaves an orphan file rather than a broken row referencing nothing; the reverse ordering would risk
+   the opposite (a row pointing at bytes that are already gone).
+7. `assets.localFile*`/`fingerprint` exist for the scanner but are read by no client UI; don't assume unused
+   columns are dead schema.
+8. Server tsconfig is standalone (does not extend the shared preset), uses NodeNext modules (`.js`
+   import suffixes are mandatory even for `.ts` files) and `verbatimModuleSyntax` (type-only imports
+   need `import type`). `tsconfig.typecheck.json` additionally turns on `noUncheckedIndexedAccess`,
+   which `tsconfig.json` does not — a `Buffer`/array index read that looks fine in the editor can
+   still fail `bun run typecheck`. The build (`bun build`) checks no types at all.
+9. Collection track-number writes (`updateTrackNumberInCollection`) run inside `db.transaction` with a
+    fetch-all/clear-all/set-new pattern specifically to dodge the unique constraint on `(collection_id,
+    track_number)` mid-swap.
+10. Bulk session endpoints are idempotent by design: `bulkAttachToSessions` is `onConflictDoNothing`, so a
+    retried call must be a no-op, not a duplicate or an error.
+11. `epochDate` (`db/schema/sessions.ts`) is `z.preprocess(v => new Date(Number(v)), z.date())`, and
+    `preprocess` erases a schema's *input* type for OpenAPI generation purposes — without the `.meta({
+    type: "integer", format: "int64" })` override already applied to it, a generated request body for
+    any field using it would type as the `z.date()` output (an ISO string) instead of the epoch-ms
+    number the wire format actually is. Apply the same `.meta()` treatment to any future
+    `preprocess`/`transform` schema whose generated type looks wrong. One residual gap: `fileUpdatedAt`
+    still generates as optional in the client types, because the override doesn't reach the `required`
+    array.
+12. Notes live entirely outside the project-authorization system: `/notes/*` has no
+    `authorizeProject` mount, and `loadNoteAccess` (`db/queries/notes.ts`) is the actual gate — a note
+    belongs to its author whether or not it's currently linked into anyone's project as lyrics.
+13. `tracks.lyrics_text`/`notes_text` were dropped along with the plaintext `lyrics` column when notes
+    became envelope-encrypted; track search (`db/queries/search.ts`) matches on `notesText` only.
+14. The pronunciation dictionary (`cmu-pronouncing-dictionary`) and WordNet (`wordpos`/`wordnet-db`) are
+    loaded lazily and warmed from `server.ts`'s listen callback, not at module scope — every test file
+    and `generate-api.ts` import `app.ts`, and neither wants to pay a few hundred ms and tens of MB for
+    dictionaries it never queries.
+15. `lib/media.ts`'s `run` is `promisify(execFile)` with no options, and Bun's default `maxBuffer` is exactly
+    1 MiB (measured: 1 048 576 bytes resolves, one more rejects with `ERR_CHILD_PROCESS_STDIO_MAXBUFFER`) —
+    still true of `convertAudio`, the only remaining `run` caller with output of any size. `decodeInto`
+    reads a decoded stream instead (a six-minute file is 138 MB of interleaved stereo f32le PCM) through
+    `spawn`, copying each chunk's whole frames into an aligned `Float32Array` (a pooled Buffer starts at an
+    arbitrary offset) before `session.push`, carrying the remainder to the next chunk, so memory stays flat
+    and the event loop yields every chunk boundary whatever the file's length.
+16. One decode, one predicate. `analyseTrackAudio` (`db/queries/track-audios.ts`) decodes a track audio
+    exactly once, through `decodeInto` into one `@workspace/dsp` `AnalysisSession` opened with every flag
+    (peaks, loudness, spectrum and the whole offline set — tempo, key, sections, the spectrogram tile, the
+    loudness and correlation curves, clipping, silence, the pitch track and the quantised features), and
+    writes every measured/detected column plus `analysisVersion = ANALYSIS_VERSION`
+    (`packages/dsp/src/version.ts`) in a single update — a row is either fully current or fully
+    outstanding, never partial. `outstandingAnalysis` (`analysisVersion IS NULL OR < ANALYSIS_VERSION`) is
+    the one definition of "not yet analysed", read by `getTrackAudioMeasure`, `getTrackAudioDurations`,
+    `collectionPrimaryAudios`, `projectAudioIds` and `findOutstandingAudioBackfills`. `POST
+    /projects/:id/audio-backfill` takes no `all`/`recompute` flag: a package change that bumps
+    `ANALYSIS_VERSION` is what makes the whole catalogue outstanding again, and the boot-time
+    `queueOutstandingJobs` picks it up project by project without anyone requesting a backfill. After
+    storing, the same function writes the spectrogram PNG, upserts the version's quantised features, stores
+    the consecutive diff against the previous current version (and repairs the pair against the next one
+    when a deleted middle version would otherwise leave a gap), and sets `duplicateOfId` against every
+    other current version's fingerprint — see `docs/agents/db.md`'s `trackAudios`/`trackAudioFeatures`/
+    `trackAudioDiffs` rows for the columns and `@workspace/dsp/offline`'s `alignFeatures`/`diffFeatures` for
+    the pair maths, none of which the server reimplements. Before storing, `analyseTrackAudio` reads the
+    track's main session (`sessions.main = true`) and passes its `tempo`/`rootNote`/`scale` to two pure
+    helpers beside it, unit-tested without a decode — unless the project policy's
+    `audio.tempoKeyCorrection` is off, when it reads no session and stores what was detected:
+    `settleTempoOctave` stores double/half the detected bpm when the session's own tempo sits within the
+    policy's `tempoKeyCorrectionPercent` (4% by default) of it but the detected bpm itself doesn't (reducing
+    `beatOffsetMs` modulo the new period when doubling), and `settleKeyMode` stores the session's tonic/mode
+    when its `scale` (`Major`/`Minor`, case-insensitive free text) names the detected key's relative — same
+    notes, other mode, `(tonic + 9) % 12` for a major tonic and `(tonic + 3) % 12` for a minor one, the same
+    arithmetic `key.rs`'s confidence formula uses to exclude the relative from its own runner-up search
+    (PROJ-834). Confidence itself is untouched by either settle step.
+17. Upload validation reads magic bytes (`routes/assets.ts:72-77`), not ffprobe — ffmpeg is the only media
+    binary the server still shells out to (`ffprobe`/`audiowaveform` and their env vars are gone with
+    `probeDurationMs`/`computePeaks`/`measureLoudness`/`computeLtas`). Share snapshots freeze only id,
+    title, cover and position; every measurement is joined live from `track_audios` (`sharelinks.ts:291`),
+    so re-measuring a version changes what an issued link serves.
+18. The job stream and the queue are one process's: `lib/job-events.ts` and `mediaQueue` are in memory, so a second
+    API instance would stream only its own jobs and number only its own queue (moving the bus to Postgres
+    `LISTEN/NOTIFY` is the way out). `requestLog` writes the events route's line when the handler returns the streaming
+    response, at stream start, so its `ms` is time to first byte, not the connection's lifetime. Hono's `streamSSE`
+    watches the request's abort signal only on Bun below 1.2 and otherwise relies on the body being cancelled; the
+    route listens to `c.req.raw.signal` itself, which is what lets an in-process `app.request` aborted through an
+    `AbortController` end the stream and unsubscribe. `Bun.serve` closes a connection that sends and receives nothing
+    for `idleTimeout` seconds (default 10; the close lands on a coarse tick, about 12 s), and every write resets that
+    clock, so the ping runs at half `IDLE_TIMEOUT_SECONDS`. `server.timeout(request, 0)` did not lift the timeout
+    for a streamed response on Bun 1.4.2, whether called before the response or after the first write. Route tests go
+    through `app.request`, which never passes through `Bun.serve`, so none of them can see that close; the test that
+    guards it asserts a quiet stream pings inside `IDLE_TIMEOUT_SECONDS`. `server.stop()` waits for every response in
+    flight, and an event stream is in flight until its client leaves, so the route also ends on `shutdownSignal`,
+    which `server.ts` aborts before stopping; a stream aborted before its snapshot is written ends with no events,
+    because Hono's `abort()` cancels the body's reader. Next's `/api` rewrite gzips any response a browser accepts gzip
+    for, and a gzip stream sends nothing until its buffer fills, so the route sends `Cache-Control: no-cache,
+    no-transform`, which the compressor skips. It sets the header on the context after `streamSSE`, which writes
+    `no-cache` there itself. Caddy's `reverse_proxy` passes the stream through unbuffered. The collapsed
+    `?status=&recentMs=` read serves the same rows to a client that polls instead.
+19. Better Auth's request hook serves the OAuth discovery documents (`/.well-known/oauth-protected-resource`,
+    `/.well-known/oauth-authorization-server`) only for requests that reach `auth.handler`, hence the
+    root-level `/.well-known/*` mount in `app.ts`; the client needs a matching Next rewrite for them to be
+    reachable on the origin the resource names. The OAuth provider rejects plain-HTTP redirect URIs for
+    `web` clients even on loopback: a client with an `http://localhost` callback registers as
+    `application_type: "native"`.
+20. The organising writes log their own activity, following `moveEntity`'s precedent
+    (`db/queries/move.ts`) of recording inside the query function rather than the route: `setEntityLabels`
+    (`labels: {from, to}` name arrays), `createLabel`/`deleteLabel` (`label` on the project),
+    `createStatus`/`updateStatus`/`deleteStatus` (`status` on the project, formatted `"Name NN%"`),
+    `addTrackToCollection`/`bulkAddTracksToCollection`/`removeTrackFromCollection` (`tracks` on the
+    collection, titles in track-number order), `updateTrackNumberInCollection` (`trackOrder` likewise),
+    `addTrackRelation`/`deleteTrackRelation` (`relations` on the from-track), `bulkMoveSessions` (one row
+    per session, `trackId`/`main`), every `bulkUpdate*` (one row per patched id, via
+    `recordActivityDiffs` beside `recordActivityBatch` in `db/queries/activity.ts`), and `saveNote` on a
+    linked track (`lyrics: {from: null, to: "edited"}`, never the body). Each of these functions takes an
+    `actorId: string` its route passes as `c.get("user").id`. `setEntityLabels` (`db/queries/labels.ts`) 404s a label id from another project,
+    matching every other cross-project id, rather than filtering it out and answering 200.
+21. `activity.ts`'s `diffFields`/`recordActivity`/`recordActivityDiffs` take an explicit
+    `ignoredFields` list rather than looking one up by entity kind through the `ENTITIES` registry — the
+    registry eagerly imports every entity's `index.ts`, which imports that entity's `queries.ts`, and
+    those now call back into `activity.ts` to log their own writes; a lookup through the registry from
+    inside `activity.ts` would close that cycle into a `ReferenceError` at module load. The registry-aware
+    reads (`getProjectActivity`, entity name resolution) live in `db/queries/activity-feed.ts` instead,
+    imported only by routes, never by a query module. A session's machine-written columns
+    (`fingerprint`/`localFileUpdatedAt`) are exported as
+    `SESSION_ACTIVITY_IGNORED_FIELDS` from `entities/session/queries.ts` and threaded through by both the
+    entity module's `activityIgnoredFields` and the session query layer's own bulk write, rather than
+    duplicated. `notesText` (generated from `notes`/`description`) is in the shared `IGNORED_FIELDS` set
+    unconditionally, so a notes PATCH's `changes` never carries it — the client feed hides `notes` itself
+    but not `notesText`, which used to print the whole body.
+22. Registering a route without `describe`/`describeRaw` keeps it out of `/api/openapi` and the generated
+    client types (hono-openapi skips routes with no describe metadata); the MCP endpoint relies on this.
+23. `auditProjectAudio(projectId, trackIds?)` (`db/queries/track-audios.ts`) calls `getCandidateAudios` only for
+    tracks with at least one session. An audio file attached straight to a track with no session is therefore
+    never reported as an unlinked candidate; the trade avoids one candidate query per track across a whole
+    project. `audioFindings(audit)` raises content findings only for a current version, since an outstanding
+    row's measurements are stale. The audit never selects the lazy `clipping` array; its first statement
+    computes `clippedBins`/`clippedFrames`/`clippedOverBins` in SQL.
+24. `@modelcontextprotocol/server` 2.0.0 requires the SEP-2243 headers on every request: `Mcp-Method`, plus
+    `Mcp-Name` for a named call. `callTool` (`test/mcp.ts`) sets both; a hand-built MCP request in a test must
+    set them too, or the SDK refuses it.
+25. The OAuth provider inserts its `oauth_resources` row when the auth instance initialises, and its
+    duplicate-row check matches the Postgres error message, which Drizzle wraps. Processes that start together
+    on a fresh database race, and all but one throw. `db/migrate.ts` therefore imports `auth` after migrating
+    and awaits `auth.$context`, so the row exists before the server or the tests start. Without a database the
+    seed rejects, which is why typegen runs with `MCP_DISABLED=1`.
+26. Claude Code truncates an MCP tool result above 25,000 tokens. A listing tool paginates, and `audit_audio`
+    takes `trackIds` so a large project is audited a page at a time.
+27. A resolver used to answer a request's project with a `ProjectResolution | "skip"`, and both "this route
+    isn't project-scoped at all" and "the body simply named no project" answered `"skip"` the same way —
+    which is how `POST /statuses` with no `projectId` used to fall through to auth-only and silently write
+    an instance-wide (null-project) status that every project then read and that the old resolver refused
+    (403) to ever change or delete (PROJ-847). `Scope` (`db/queries/authorization.ts`) gives each case its
+    own value — `project`, `user`, `instance`, `none`, or `null` — instead of overloading one, and
+    `newStatusSchema` now requires `projectId`, so that create is a 400 without one, not a silent write. A
+    `Scope`-returning resolver is a compile error if it answers `"skip"` (see `project-resolvers.test.ts`'s
+    `@ts-expect-error` assignment) rather than a runtime hole reopening quietly.
+28. `authenticated` used to check only that a session existed, so the `anonymous()` plugin's guest session
+    (the share page's commenting) passed every mount that used it — a guest could create projects, upload
+    files, queue ffmpeg jobs, read any avatar, all confined only by the client's `proxy.ts` matcher
+    (PROJ-848). `authenticated` now also rejects `user.isAnonymous` with 403; `guestOrMember`
+    (`middleware/authenticated.ts`) is the one mount a guest still passes, on the routes
+    `share-guest.ts` gates with it. `guest-confinement.test.ts` reads every `authenticated` mount off
+    `app.routes` (by function identity) rather than a hand-kept list, so a mount added later is swept
+    automatically. Better Auth's own `rateLimit` plugin is disabled — `/auth/sign-in/email`, `/auth/sign-up/email` and
+    `/auth/sign-in/anonymous` are metered by `clientAddress` instead (see **Middleware** above), which
+    throttles a burst from one caller but is not a per-account lockout.
+29. Every `spawnFfmpeg` child (`lib/media.ts`) runs under a deadline, combined with the caller's cancel
+    `signal` through `AbortSignal.any` — a deadline firing kills the child exactly as a cancel would, and
+    `spawnFfmpeg` returns the combined signal for callers to check afterwards. `decodeInto` and
+    `convertAudio` size the deadline from a duration: a `durationSeconds` the caller already has (an
+    `analyseTrackAudio` re-analysis reads `trackAudios.durationMs` from the row's last pass) skips the probe
+    entirely; otherwise they probe the input first (`probeMediaSeconds`, `PROBE_TIMEOUT_MS` = 20s) to read
+    its declared duration without decoding a frame — ffmpeg is run with no output, which makes it print the
+    `Duration:` banner and stop. Either way `mediaDeadlineMs` (60s floor plus a tenth of the duration,
+    clamped to `maxMediaSeconds()` — the policy's `limits.longestAudioHours`, 6h by default, read per call)
+    sizes the real deadline. `inputGuards()` (`-protocol_whitelist file,pipe -t <maxMediaSeconds()>`) is on
+    every spawn, probe included, so a lie in the declared duration still can't make a decode read past the
+    longest input. A duration over the cap
+    — the caller's own or a probed one — or a probe that never gets one (a stalled read, not a fast ffmpeg
+    error) inside `PROBE_TIMEOUT_MS`, throws `MediaLimitError` (`code: "media_too_long" | "media_unreadable"`);
+    `db/queries/jobs.ts`'s `endFailedRun` treats that error as terminal regardless of the kind's
+    `maxAttempts`, folding `code` into the stored `error` text since the row has no separate column for it.
+    `decodeInto`/`convertAudio` take `maxMediaSeconds`/`probeTimeoutMs` overrides (unused in production,
+    `maxMediaSeconds()`/`PROBE_TIMEOUT_MS` by default) so a test can make a stalled fifo or an over-long
+    declaration fail in milliseconds instead of the real 20s/6h. `hasAudioSignature`'s bare-sync-word branch
+    additionally requires a second MPEG-audio or ADTS frame header at the exact offset the first frame's own
+    length field declares (`mpegFrameLength`/`adtsFrameLength`), so two bytes that happen to match the
+    11-bit sync word no longer pass on their own.
+    A first-time analysis or convert still pays for a real probe spawn on top of the real
+    decode/encode spawn, which is why `media.test.ts`'s progress test carries its own 15s timeout.
+    The suite's default stays at bun's 5s, and the stall tests keep a deliberate
+    `STALL_TEST_TIMEOUT_MS` of 5s so a genuine hang still fails fast.
+30. The role a route needs comes from its HTTP method (`middleware/authorize-project.ts`: `GET`/`HEAD` need
+    viewer, everything else editor). A mount raises or lowers that with a function policy, which returns a role
+    for the requests it recognises and `undefined` for the rest so the method map still decides them: the
+    `/assets/*` mount uses one to grant viewer on `POST /assets/lookup` (a read that takes a body), and every
+    other write under the mount still needs an editor.
+31. Every single-resource DELETE answers `204 No Content` with no body, whichever router it lives in, and
+    documents itself with `describeRaw` rather than `describe`. A **bulk** delete answers `{ deleted: n }`
+    (`bulkDeletedSchema`, `db/queries/pagination.ts`): the entity `DELETE /{kind}s/bulk` routes,
+    `DELETE /assets/bulk` and `DELETE /projects/:id/jobs/failed`, where the count is the result. There is no
+    per-entity choice any more — the `deleteResponse` field this used to dispatch on is gone from
+    `entities/types.ts`. On the client every **single-resource** DELETE wrapper goes through `toActionOutcome`,
+    which ignores the body; the bulk ones read `{ deleted }` through `toActionResult`
+    (`lib/asset-mutations.ts`, `lib/client-api.ts`, and each entity's `api.ts`).
+32. No project read is unbounded any more: the images listing (`GET /images/project/:projectId`) and the assets
+    listing (`GET /assets/project/:projectId`) are both paged like `/admin/users`, the project jobs read is
+    capped at `MAX_PROJECT_JOBS` (200, `db/queries/jobs.ts`), activity at 200 (`db/queries/activity-feed.ts`)
+    and saves at 100 (`entities/project/routes.ts`). `{kind}/summary` and `GET /projects/:id/sessions` are
+    complete by design: clients read them whole.

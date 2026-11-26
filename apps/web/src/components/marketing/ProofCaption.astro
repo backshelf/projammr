@@ -1,0 +1,21 @@
+---
+/* The caption over a piece of gear a marketing page shows: what it is of,
+   on a hairline, with a label that says where it comes from. Every one of
+   them draws the demo catalogue (`packages/demo`), invented songs, sets and
+   people, and the label says so, so none reads as someone's real work. */
+import { LABEL } from "@workspace/ui/lib/shell";
+
+type Props = {
+  /** What the gear is showing: a set's file, a track's name. */
+  name: string;
+  /** What it is showing of it, after the demo mark. */
+  detail: string;
+};
+
+const { name, detail } = Astro.props;
+---
+
+<figcaption class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule pb-3">
+  <span class="text-body text-ink">{name}</span>
+  <span class:list={[LABEL, "text-ink-soft"]}>Demo · {detail}</span>
+</figcaption>

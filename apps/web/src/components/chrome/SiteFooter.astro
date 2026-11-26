@@ -1,0 +1,49 @@
+---
+/* The close of every marketing page: link groups under label heads, then the
+   licence and the AI disclosure, which the README leads with and the site
+   does not bury. Form from a hairline, not a box. */
+import { LABEL } from "@workspace/ui/lib/shell";
+
+import Brand from "@/components/chrome/Brand.astro";
+import { FOOTER_NAV } from "@/nav";
+import { SITE } from "@/site";
+---
+
+<footer class="relative z-10 mt-24 border-t border-rule px-(--gutter) pt-12 pb-16">
+  <div class="mx-auto grid max-w-(--page) grid-cols-[minmax(0,1fr)_repeat(3,auto)] gap-x-16 gap-y-10 stack:grid-cols-3 phone:grid-cols-1">
+    <div class="flex flex-col gap-3 stack:col-span-3 phone:col-span-1">
+      <Brand />
+      <p class="max-w-72 text-small text-ink-soft">
+        A home for unfinished music. Open source under {SITE.license}.
+      </p>
+    </div>
+    {FOOTER_NAV.map((group) => (
+      <nav aria-label={group.heading} class="flex flex-col gap-3">
+        <h2 class:list={[LABEL, "text-ink-soft"]}>{group.heading}</h2>
+        <ul class="flex flex-col gap-2">
+          {group.links.map((link) => (
+            <li>
+              <a
+                href={link.href}
+                {...(link.external ? { rel: "noopener" } : {})}
+                class="rounded-sm text-small text-ink-soft motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+              >
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    ))}
+  </div>
+  <p class="mx-auto mt-12 max-w-(--page) text-small text-ink-soft">
+    Most of Projammr is written by AI coding agents under human direction and
+    review.{" "}
+    <a
+      href="/ai/"
+      class="text-ink underline decoration-rule-strong underline-offset-4 motion-ink hover:decoration-current"
+    >
+      Read how, before you rely on it.
+    </a>
+  </p>
+</footer>

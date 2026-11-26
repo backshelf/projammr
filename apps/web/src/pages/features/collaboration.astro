@@ -1,0 +1,202 @@
+---
+/* Collaboration: members and roles, invites, share links, the shared
+   tracking of the work, and getting around. Lit by the magenta cover, the
+   Low Tide project's in the demo catalogue. Every claim is from the
+   collaboration docs and the guide's tables, statuses and search pages. The
+   app has no mentions or notifications, and a project's members cannot leave
+   it or edit its links from the app, so none of that is claimed here. */
+import Action from "@/components/marketing/Action.astro";
+import Close from "@/components/marketing/Close.astro";
+import Hunk from "@/components/marketing/Hunk.astro";
+import MastheadArt from "@/components/marketing/MastheadArt.astro";
+import PageHead from "@/components/marketing/PageHead.astro";
+import Screenshot from "@/components/Screenshot.astro";
+import { coverArt } from "@/data/covers";
+import SiteLayout from "@/layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Collaboration"
+  description="Members with roles, invites, share pages for people outside the project, and the statuses, views and activity that keep everyone on the same song."
+  art={coverArt("magenta")}
+>
+  <MastheadArt slot="atmosphere" cover="magenta" />
+
+  <PageHead
+    crumb={{ href: "/#features", label: "Features" }}
+    title="Bring the whole circle in."
+    lede="Members with roles, invites, share pages for people outside the project, and the statuses, views and activity that keep everyone on the same song."
+  >
+    <Action slot="actions" href="/docs/collaboration/" variant="quiet">
+      Working with other people
+    </Action>
+  </PageHead>
+
+  <Hunk
+    id="roles"
+    cover="magenta"
+    title="Everyone gets the role their part needs."
+    lines={[
+      { sign: "+", text: "Viewers play the audio and read everything." },
+      {
+        sign: "+",
+        text: "Editors create, change and delete, upload, comment, share and push from dit.",
+      },
+      {
+        sign: "+",
+        text: "Admins invite people, change roles and remove members.",
+      },
+      {
+        sign: "+",
+        text: "The owner can delete the project or hand it to someone else.",
+      },
+      {
+        sign: "~",
+        text: "The server checks the role on every request, and a project is not found by anyone outside it.",
+      },
+    ]}
+    link={{
+      href: "/docs/collaboration/members-and-roles/",
+      label: "Members and roles",
+    }}
+  >
+    <Screenshot
+      adaptive
+      id="members"
+      alt="A project's members, each with their role."
+    />
+  </Hunk>
+
+  <Hunk
+    id="invites"
+    title="Invite by email, or send the link yourself."
+    lines={[
+      {
+        sign: "+",
+        text: "An invite names the role, starting at editor, and lasts seven days.",
+      },
+      {
+        sign: "+",
+        text: "It is emailed when your server has mail set up; otherwise copy the link and send it.",
+      },
+      { sign: "+", text: "Revoke an invite any time before it is used." },
+      {
+        sign: "~",
+        text: "The link is the invitation: whoever opens it joins as the account they are signed in with, so send it only to the person it is for.",
+      },
+    ]}
+    link={{ href: "/docs/collaboration/invites/", label: "Invites" }}
+  >
+    <Screenshot
+      adaptive
+      id="invite-accept"
+      alt="The page an invite link opens, where the invited person accepts."
+    />
+  </Hunk>
+
+  <Hunk
+    id="share"
+    title="People outside the project can still listen and comment."
+    lines={[
+      {
+        sign: "+",
+        text: "A share page needs no account: visitors play and comment with just a name.",
+      },
+      {
+        sign: "+",
+        text: "Share whichever version is primary, or a snapshot of the ones you chose.",
+      },
+      {
+        sign: "+",
+        text: "Add a note for the visitor, an expiry date, and downloads if you want them.",
+      },
+      {
+        sign: "~",
+        text: "Guest comments can stay private to the project.",
+      },
+    ]}
+    link={{ href: "/docs/collaboration/share-links/", label: "Share links" }}
+  >
+    <Screenshot
+      adaptive
+      id="share"
+      alt="A share page: what was shared, lit by its cover, with its waveform and a visitor's comment."
+    />
+  </Hunk>
+
+  <Hunk
+    id="tracking"
+    cover="magenta"
+    title="Everyone can see where every song stands."
+    lines={[
+      {
+        sign: "+",
+        text: "Statuses in your own colours, each with a percentage that adds up to a collection's progress.",
+      },
+      {
+        sign: "+",
+        text: "Labels, and a priority scale and relation types of each project's own, so a remix or an acoustic version knows the track it came from.",
+      },
+      {
+        sign: "+",
+        text: "Tables with saved views, private until you share them, and a board view.",
+      },
+      {
+        sign: "+",
+        text: "Change many rows at once: status, labels, priority, collection or project.",
+      },
+      {
+        sign: "~",
+        text: "Every change lands in the activity feed, from its old value to its new one.",
+      },
+    ]}
+    link={{ href: "/docs/guide/tables/", label: "Tables and views" }}
+  >
+    <Screenshot
+      adaptive
+      id="tables-board"
+      alt="A project's tracks on a board, one column per status."
+    />
+  </Hunk>
+
+  <Hunk
+    id="getting-around"
+    title="Find anything from the keyboard."
+    lines={[
+      {
+        sign: "+",
+        text: "The command palette opens on ⌘K or /, and searches tracks, collections, sessions, files and comments.",
+      },
+      {
+        sign: "+",
+        text: "It forgives typos, and takes commands as well as searches.",
+      },
+    ]}
+    link={{
+      href: "/docs/guide/search-and-shortcuts/",
+      label: "Search, the command palette and shortcuts",
+    }}
+  >
+    <Screenshot
+      adaptive
+      id="command-palette"
+      alt="The command palette open over a project, with its search results."
+    />
+  </Hunk>
+
+  <Close
+    id="next"
+    cover="magenta"
+    title="Your collaborators, on a server you run."
+  >
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <Action href="/docs/self-hosting/quickstart/">Self-host it</Action>
+      <Action href="/features/listening/" variant="quiet">
+        Listening and review
+      </Action>
+      <Action href="/features/writing/" variant="quiet">
+        Notebook and lyrics
+      </Action>
+    </div>
+  </Close>
+</SiteLayout>

@@ -1,0 +1,39 @@
+---
+/* A page's cover, blurred behind the top of it and under the header: the
+   room's one light, as the app's entity mastheads draw it. Rendered into
+   `SiteLayout`'s `atmosphere` slot. The frame, mask, scrim, blur and drift
+   are the token layer's, shared with the app; site.css sets the band's
+   height (`.site-masthead`).
+   At a 64px blur none of the cover's detail survives, so the field is drawn
+   from a small copy of it. */
+import { getImage } from "astro:assets";
+
+import { COVERS, type CoverKey } from "@/data/covers";
+
+type Props = {
+  cover: CoverKey;
+  /** `hero` fills the first viewport; `page` is a shorter band. */
+  size?: "hero" | "page";
+};
+
+const { cover, size = "page" } = Astro.props;
+
+const field = await getImage({
+  src: COVERS[cover].image,
+  width: 480,
+  format: "webp",
+});
+---
+
+<div
+  aria-hidden="true"
+  class:list={["site-masthead", size === "page" && "site-masthead--page"]}
+  style={`--art-image: url("${field.src}")`}
+>
+  <div class="masthead__art">
+    <div class="masthead__tone">
+      <div class="masthead__field bg-[image:var(--art-image)]"></div>
+    </div>
+  </div>
+  <div class="masthead__scrim"></div>
+</div>

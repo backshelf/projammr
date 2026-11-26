@@ -1,0 +1,13 @@
+{
+  "name": "@workspace/typescript-config",
+  "version": "0.9.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "license": "PROPRIETARY",
+  "scripts": {
+    "format": "bun --bun prettier --write \"**/*.json\""
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,18 @@
+[package]
+name = "dit-daws"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = ["gzip"]
+# The gzip wrapper the Ableton module reads and writes through zlib: C code the wasm build leaves out.
+gzip = ["dit-daw-ableton/gzip"]
+
+[dependencies]
+dit-core = { path = "../dit-core", default-features = false }
+dit-daw-ableton = { path = "../dit-daw-ableton", default-features = false }
+
+[dev-dependencies]
+tempfile.workspace = true

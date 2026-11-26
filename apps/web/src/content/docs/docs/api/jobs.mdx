@@ -1,0 +1,115 @@
+---
+title: Jobs and event streams
+description: Follow audio analysis, conversions and other background work by polling a job or holding open a project's event stream.
+sidebar:
+  order: 5
+---
+
+Work that takes longer than a request (measuring a new audio version, converting a file, resizing artwork) runs in
+the background as a job. The request that starts it answers straight away with the job's id, and you follow the job
+to its end in one of two ways: ask for it now and then, or hold open the project's event stream and be told.
+
+## What runs as a job
+
+| Kind             | Started by                                                    | Retried automatically |
+| ---------------- | ------------------------------------------------------------- | --------------------- |
+| `audio_analysis` | Linking audio to a track (`POST /api/tracks/{id}/audios`)     | Up to 3 attempts      |
+| `audio_backfill` | `POST /api/projects/{id}/audio-backfill`                      | Up to 3 attempts      |
+| `convert`        | `POST /api/assets/{id}/convert`                               | No                    |
+| `image_variants` | Uploading project artwork (`POST /api/images/upload`)         | No                    |
+
+An analysis job measures one version's duration, waveform, loudness, spectrum, tempo and key. A backfill runs the
+same analysis over every audio file in a project that has not been measured yet, which needs the project's admin
+role. A conversion transcodes an audio file to another format (`.wav`, `.mp3`, `.aiff`, `.aif`, `.flac`, `.m4a`,
+`.aac` or `.ogg`, with an optional `kbps` up to 320) and stores the output as a new file.
+
+## A job
+
+```json
+{
+  "id": 2,
+  "projectId": 1,
+  "kind": "audio_analysis",
+  "label": "Analysing audio",
+  "subjectId": 1,
+  "subjectLabel": "Track 3 v2.wav",
+  "status": "running",
+  "percent": 42.5,
+  "steps": [
+    { "key": "decode", "label": "Decoding and measuring", "weight": 80 },
+    { "key": "analyse", "label": "Detecting tempo, key and sections", "weight": 15 },
+    { "key": "store", "label": "Saving", "weight": 5 }
+  ],
+  "stepIndex": 0,
+  "stepPercent": 53.1,
+  "queuePosition": null,
+  "cancelRequested": false,
+  "attempts": 0,
+  "result": null,
+  "error": null,
+  "startedAt": "2026-09-23T00:05:36.660Z",
+  "finishedAt": null
+}
+```
+
+- `status` is one of `queued`, `running`, `done`, `failed` or `cancelled`.
+- `percent` is the whole job's progress. `steps` lists its stages and `stepIndex` the current one, with
+  `stepPercent` its progress within that stage.
+- `queuePosition` is the job's place in the instance's queue while it waits, and `null` once it runs.
+- `label` and `subjectLabel` name the kind and the thing it is working on, ready to show a person.
+- `result` holds what a finished job produced. A conversion's is the new file: `{ "assetId", "name", "url" }`.
+- `error` says why a failed job failed.
+
+## Poll a job
+
+```bash
+curl -s https://music.example.com/api/jobs/2 \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN"
+```
+
+Every job in a project is readable by its members. To see several at once,
+`GET /api/projects/{id}/jobs` lists the project's jobs, newest first. It takes `status` (a comma-separated list,
+such as `status=queued,running`) and `recentMs`, which keeps finished jobs only if they finished within that many
+milliseconds (failed jobs always stay).
+
+## Follow a project's event stream
+
+`GET /api/projects/{id}/jobs/events` is a [server-sent event](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)
+stream of the project's jobs. Hold it open and it tells you about every change as it happens:
+
+```bash
+curl -s -N https://music.example.com/api/projects/1/jobs/events \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN"
+```
+
+```text
+event: snapshot
+data: [{"id":2,"kind":"audio_analysis","status":"running","percent":42.5, …}]
+
+event: job
+id: 2
+data: {"id":2,"kind":"audio_analysis","status":"done","percent":100, …}
+
+event: ping
+data:
+```
+
+- **`snapshot`** comes first, once: the jobs worth showing right now, which are those queued, running or failed,
+  and those that finished in the last 10 seconds.
+- **`job`** follows every change to one of the project's jobs, carrying the whole job. Its `id` field is the job's
+  id.
+- **`ping`** arrives every 5 seconds to keep the connection open through proxies. Ignore it.
+
+A browser's `EventSource` sends the session cookie on a same-origin stream. A script that needs a bearer token uses
+a client that can set headers, as curl does above.
+
+## Retry, cancel and clear
+
+| Request                                  | What it does                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `POST /api/jobs/{id}/retry`              | Puts a failed job back in the queue with a fresh attempt count. Anything but a failed job is `409` |
+| `POST /api/jobs/{id}/cancel`             | Cancels a job that has not finished: a queued one at once, a running one as soon as it can stop  |
+| `DELETE /api/projects/{id}/jobs/failed`  | Deletes the project's failed jobs and answers `{ "deleted": n }`                                  |
+
+All three need the editor role. A job that fails with attempts to spare is retried on its own, after a delay that
+grows with each attempt, before it is marked `failed`.

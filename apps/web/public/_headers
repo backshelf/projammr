@@ -1,0 +1,11 @@
+# Cloudflare Pages response headers.
+
+# Every built asset's name carries its content hash, so it never changes.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

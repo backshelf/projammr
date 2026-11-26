@@ -1,0 +1,74 @@
+---
+title: Finding your way around
+description: The sidebar, the project switcher, the account menu and switching between light and dark.
+sidebar:
+  order: 3
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+On a computer, everything in Projammr hangs off the sidebar on the left: the project you are in, the latest of
+its collections, tracks, notes and sessions, and your account. On a phone the sidebar makes way for a bar along
+the bottom; [Projammr on your phone](/docs/guide/phones/) covers that layout.
+
+## The project switcher
+
+The top of the sidebar shows the project you have open. Select it to open the project switcher: "Your projects"
+lists every project you belong to, and **Add New** starts a new one.
+
+<Screenshot
+  id="nav-project-switcher"
+  alt="The project switcher open at the top of the sidebar, listing the projects you belong to"
+/>
+
+Switching projects changes everything below it in the sidebar. Projammr remembers the project you last had open
+and returns to it the next time you visit.
+
+With a project open, two rows sit under the switcher:
+
+- **Search**, which opens the [command palette](/docs/guide/search-and-shortcuts/), and beside it the jobs tray,
+  where background work on your uploads shows its progress.
+- **View project**, the project's own page.
+
+Below them, on every page, **Settings** opens [Settings](/docs/guide/settings-and-profile/#settings): your own, the
+current project's (its statuses, labels, images, assets, members and, for its owner, the danger zone) and, for
+the instance's admins, the instance's.
+
+## The sidebar groups
+
+Below those rows the sidebar has four groups, each a shortcut to the latest few of one kind of thing:
+
+| Group       | Shows                                                           | Its **+** makes | Its name opens                  |
+| ----------- | --------------------------------------------------------------- | --------------- | ------------------------------- |
+| Collections | Up to five of the project's collections                         | a collection    | every collection in the project |
+| Tracks      | The five tracks edited most recently                            | a track         | every track in the project      |
+| Notebook    | Your five most recently edited notes, even with no project open | a note          | the notebook                    |
+| Sessions    | The five sessions edited most recently                          | a session       | every session in the project    |
+
+Select a group's name to see everything of that kind, and the **+** beside it to make a new one. Each group folds
+away with the arrow beside its name.
+
+## Your account
+
+The bottom of the sidebar shows your name. Select it for the account menu:
+
+- **Profile** opens [your profile](/docs/guide/settings-and-profile/).
+- **Settings** opens [Settings](/docs/guide/settings-and-profile/#settings), as the sidebar's own item does. The
+  instance's admins find [the instance's settings](/docs/admin/) there too.
+- **Sign out** signs you out of this browser.
+
+The button beside your name hides the sidebar, giving the page the whole window. <kbd>Ctrl</kbd> <kbd>B</kbd>
+(<kbd>⌘</kbd> <kbd>B</kbd> on a Mac) hides it and brings it back.
+
+## Light and dark
+
+Projammr follows your device's light or dark setting until you choose otherwise. Press <kbd>D</kbd> anywhere in
+the app, outside a text field, to swap between light and dark. To go back to following your device, open the
+[command palette](/docs/guide/search-and-shortcuts/) inside a project, type `theme` and a space, and pick
+**System**.
+
+<Aside>
+  Artwork, not a theme colour, lights each page. In either theme a project, collection or track takes its accent
+  from its own cover art; [Artwork and colour](/docs/guide/artwork/) explains how.
+</Aside>

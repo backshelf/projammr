@@ -1,0 +1,180 @@
+---
+title: Requests and errors
+description: How the API names things, answers failures, pages through lists, selects rows in bulk and meters traffic.
+sidebar:
+  order: 3
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Every route follows the same handful of rules, so once you have made one request you can read the rest of the
+[endpoint reference](/docs/api/reference/) without surprises.
+
+## Requests
+
+- Bodies are JSON (`content-type: application/json`), except file uploads, which are `multipart/form-data`. See
+  [Files and media](/docs/api/files-and-media/).
+- Responses are JSON, except file downloads, the job event stream, and deletes that answer `204` with no body.
+- A create answers `201` with the new row. Everything else that succeeds answers `200`, or `204` where the
+  reference says so.
+- Timestamps come back as ISO 8601 strings in UTC (`"2026-09-23T00:05:28.311Z"`).
+
+### Ids
+
+Projects, collections, tracks, sessions, audio versions, assets, images, comments, labels, statuses and jobs are
+all numbered: their ids are positive integers, and a path segment that is not one (`/api/tracks/abc`) answers `400`
+with `"Invalid path parameter: id"`. Accounts are the exception. A user id is a string (`"LGIJ4XCmTnDj0u3m2BKRiOIyQn0RACFJ"`),
+because accounts belong to Better Auth.
+
+A share link is addressed by its token rather than an id: `/api/share/{token}`.
+
+### Who can do what
+
+Every project-scoped route checks the caller's role in the project the row belongs to. Reads need viewer, writes need
+editor, and a few operations need more (the reference lists each one's failures).
+
+- A caller who is not signed in gets `401`.
+- A caller who is not a member of the project gets `404`, the same answer as for a row that does not exist, so a
+  project's contents cannot be probed from outside it.
+- A member whose role is too low gets `403`.
+- Instance administration under `/api/admin` answers `404` to everyone but an instance admin.
+
+## Errors
+
+A failure answers with a status code and a JSON body in one shape:
+
+```json
+{
+  "error": "Not found",
+  "requestId": "eefdcff8-a6a1-46b1-9f75-0fef02b9e5b6"
+}
+```
+
+- `error` is a message you can show a person.
+- `requestId` matches the `X-Request-Id` header on every response and the instance's log line for the request.
+  Quote it when you report a problem to whoever runs the instance.
+- `code` and `details` appear on the failures a client is expected to handle rather than merely report. The
+  storage cap is one: an upload that would pass it answers `413` with `"code": "storage_limit"` and
+  `details` holding the numbers (see [Files and media](/docs/api/files-and-media/#storage-caps)).
+
+The status codes the API uses:
+
+| Status | Means                                                                          |
+| ------ | ------------------------------------------------------------------------------ |
+| `400`  | The request is malformed: a bad id, a missing field, a value of the wrong type |
+| `401`  | Not signed in, or the session has expired                                      |
+| `403`  | Signed in, but not allowed (role too low, a guest session, a refused origin)   |
+| `404`  | No such row, or not one you can see                                            |
+| `409`  | Conflicts with the current state (attaching an asset that is already attached) |
+| `410`  | No longer available (an expired invite or share link)                          |
+| `413`  | The upload is too large, or it would pass a storage cap                        |
+| `429`  | Too many requests; wait for the `Retry-After` header's seconds                 |
+| `500`  | The server failed; the `requestId` finds it in the logs                        |
+
+### Validation failures
+
+When a request body or query string fails validation, the `400` is in the same envelope, with
+`"code": "invalid_request"` and every problem listed in `details.issues`:
+
+```json
+{
+  "error": "Invalid request",
+  "code": "invalid_request",
+  "details": {
+    "issues": [
+      {
+        "path": ["title"],
+        "message": "Invalid input: expected string, received number",
+        "code": "invalid_type"
+      }
+    ]
+  },
+  "requestId": "0634f9ed-f442-446a-a6cd-e49ee4d3349d"
+}
+```
+
+Each issue has the `path` of the field as an array of keys (a number is an index into a list), a `message` you
+can show, and the `code` of the check that failed. An issue whose `code` is `too_big` also carries the
+`maximum` it went over.
+
+## Lists
+
+Two kinds of list route cover the entities in a project:
+
+- **Summaries** return every row in a compact form: an id, a name, and the few fields a picker or a sidebar
+  needs. `GET /api/projects/{id}/tracks/summary`, `…/collections/summary` and `…/sessions/summary` are the ones
+  to reach for when you need to find a row by name.
+- **Pages** return full rows, filtered, sorted and a page at a time:
+  `GET /api/projects/{id}/tracks/paginated`, and the same for `collections` and `sessions`.
+
+A page request takes:
+
+| Parameter  | Default | What it does                                                                                 |
+| ---------- | ------- | -------------------------------------------------------------------------------------------- |
+| `page`     | `1`     | Which page, counting from 1                                                                  |
+| `pageSize` | `50`    | Rows per page, up to 200                                                                     |
+| `sort`     |         | `<key>.<asc\|desc>`, for example `title.asc`; each route's description lists its sort keys   |
+| `q`        |         | Text search over the list                                                                    |
+
+Each list also takes its own filters (a track page filters by `status`, `collection`, `label`, `artist` and more);
+the reference lists them per route. The answer is:
+
+```json
+{ "rows": [ … ], "rowCount": 37, "page": 1, "pageSize": 50, "facets": { … }, "groups": … }
+```
+
+`rowCount` is the total across every page, so the last page is `ceil(rowCount / pageSize)`.
+
+<Aside>
+  A sort key the list does not recognise is ignored rather than refused: the page comes back in its default order.
+</Aside>
+
+Some other lists are paged the same way or not at all; a project's images and files, for instance, are paged, and a
+track's audio versions come back whole. The reference shows each one's parameters.
+
+## Bulk operations
+
+Tracks, collections and sessions can be changed, relabelled, moved or deleted many at a time, through `/bulk`
+routes (`PATCH /api/tracks/bulk`, `DELETE /api/tracks/bulk`, `POST /api/tracks/bulk/move`,
+`PATCH /api/tracks/bulk/labels`, and the same under `collections` and `sessions`). Each takes the `projectId` it
+works in and a `selection`, which is either a list of ids:
+
+```json
+{ "projectId": 1, "selection": { "ids": [4, 7, 9] }, "patch": { "priority": "high" } }
+```
+
+or everything a list filter matches, with the same filters the page route takes:
+
+```json
+{ "projectId": 1, "selection": { "all": true, "status": 2 }, "patch": { "priority": "high" } }
+```
+
+Ids that belong to another project are left out of the selection rather than refused. The answer counts what
+changed: `{ "updated": 3 }`, `{ "moved": 3 }` or `{ "deleted": 3 }`.
+
+## Rate limits
+
+Most routes are not metered. The ones that do heavy work, or that anyone can reach before signing in, are, each with
+its own allowance. An allowance is a burst of requests that refills at a steady rate per minute; past it, the route
+answers `429` with a `Retry-After` header giving the seconds until the next request will be accepted.
+
+| What                                                   | Burst | Refills per minute | Counted per    |
+| ------------------------------------------------------ | ----- | ------------------ | -------------- |
+| `POST /api/auth/sign-in/email`                         | 10    | 20                 | client address |
+| `POST /api/auth/sign-up/email`                         | 5     | 5                  | client address |
+| `POST /api/assets/upload`                              | 100   | 300                | account        |
+| `POST /api/images/upload`                              | 100   | 300                | account        |
+| `POST /api/assets/{id}/convert`                        | 10    | 10                 | account        |
+| Moving one collection, track or session to another project | 10 | 20              | account        |
+| Bulk moves (`POST …/bulk/move`)                        | 5     | 10                 | account        |
+| Re-linking sessions to tracks (`POST /api/sessions/bulk/moves`) | 10 | 20           | account        |
+| `POST /api/projects/{id}/audio-backfill`               | 5     | 10                 | account        |
+| `PATCH /api/notes/{id}`                                | 60    | 120                | account        |
+| `POST /api/lyrics/analyze`                             | 60    | 120                | account        |
+| `PATCH /api/me/email`                                  | 5     | 10                 | account        |
+| Share page reads and streams                           | 60 / 20 | 120 / 60         | account or address |
+| Share page comments                                    | 5     | 10                 | account or address |
+
+The three single moves share one allowance: moving a track and then a collection draws on the same bucket.
+
+The counts live in the server's memory, so they reset when it restarts, and each API process keeps its own.

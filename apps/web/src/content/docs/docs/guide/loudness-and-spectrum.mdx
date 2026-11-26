@@ -1,0 +1,81 @@
+---
+title: Loudness, spectrum and measurements
+description: Read a version's loudness and true peak, the strips under its waveform, its spectrum, and the summaries across a whole collection.
+sidebar:
+  order: 27
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Projammr measures every version you add, so you can check a mix without opening a meter plugin: how loud it is,
+where it peaks, how its loudness moves through the song, and how its tone compares with the other versions and the
+rest of the record.
+
+## Loudness and true peak
+
+Beside the version menu, each version shows its integrated loudness and true peak, such as
+"−16.3 LUFS · TP −1.2". Hover a unit (or tap it on a phone) for what it means:
+
+- **LUFS** is the integrated loudness across the whole track. Streaming services play music at about −14 LUFS.
+- **TP**, the true peak, is the highest level between samples. Keeping it below −1 dB avoids clipping after
+  encoding.
+
+While a version is still being measured, it reads "measuring…".
+
+## The strips under the waveform
+
+Three strips can run under a version's waveform, lined up with it second by second. Turn each on or off with its
+button; your browser remembers which you like.
+
+- **Loudness**: how loud the song is from moment to moment (its short-term loudness), on a scale from −28 to
+  0 LUFS, with a dotted line at the −14 streaming level.
+- **Spectrogram**: where the energy sits across the frequency range over time, tinted in the track's colour.
+- **Change**: where this version differs from the one before it. The stronger the bar, the more changed in that
+  second. A caption sums it up, such as "38% changed · most in 1:32–2:10"; select it to jump to the part that
+  changed most.
+
+## The track's rail
+
+- **Loudness** shows the version's reading, and a live meter while the track plays.
+- **Spectrum** draws the average spectrum of every measured version of the track in one window, with the version
+  you are on picked out. It is the quickest way to see a mix get brighter or lose its low end from one bounce to
+  the next.
+- **Key** and **BPM**, from the main session or detected in the audio. See
+  [Versions and uploads](/docs/guide/audio-versions/#key-and-bpm).
+
+<Screenshot
+  id="track"
+  alt="A track page with its loudness reading and the spectrum of each version in the rail"
+/>
+
+### The live meter
+
+While a track plays, the loudness meter moves with it: a bar for the **momentary** loudness (the last 0.4
+seconds), a needle for the **short-term** loudness (the last 3 seconds), and the **peak**, each with its figure as
+**M**, **S** and **Peak**. It shows on the track's rail, the collection's rail and in the
+[now-playing sheet](/docs/guide/player-and-queue/#now-playing).
+
+## Across a collection
+
+A collection's rail sums up its tracks, so you can see whether a record hangs together.
+
+<Screenshot
+  id="collection"
+  alt="A collection's rail: the loudness of each track on one scale, the collection's spectrum, its tempo range and the keys on a circle of fifths"
+/>
+
+- **Loudness** gives the median loudness of the tracks, with every track marked on one scale and the range they
+  span.
+- **Spectrum** draws the average spectrum across the tracks, inside the band between the quietest and loudest.
+- **Tempo** gives the median BPM, the range, and each track on a scale from 60 to 200 BPM.
+- **Keys** puts each track on a circle of fifths: "Major outside, minor inside". While one of the collection's
+  tracks plays, its dot pulses in time.
+
+Each of these counts only the tracks that have been measured, and says so until they all are. While a track in
+the collection plays, its live level shows over the summary.
+
+<Aside>
+  The readings use each track's primary version. Choose the primary with the star in the track's version menu;
+  see [Versions and uploads](/docs/guide/audio-versions/#choosing-the-version-you-hear).
+</Aside>

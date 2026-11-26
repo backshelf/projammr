@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "track_audios_spectrogram_key" ON "track_audios" ("spectrogram_key");

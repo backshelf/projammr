@@ -1,0 +1,55 @@
+[package]
+name = "dit-app"
+version = "0.9.0"
+description = "dit's menu bar app: the bar item, the panel and the daemon behind them"
+edition = "2024"
+license = "AGPL-3.0-only"
+publish = false
+
+# Its own workspace: the app compiles WebKit, which the Linux jobs that test `packages/dit` must never do.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+block2 = "0.6.2"
+core-graphics = "0.25.0"
+dirs = "7.0.0"
+dit-cli = { path = "../../../packages/dit/crates/dit-cli" }
+dit-core = { path = "../../../packages/dit/crates/dit-core" }
+dit-daemon = { path = "../../../packages/dit/crates/dit-daemon" }
+dit-daws = { path = "../../../packages/dit/crates/dit-daws" }
+dit-ipc = { path = "../../../packages/dit/crates/dit-ipc" }
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", features = ["NSAccessibilityProtocols", "NSButton", "NSControl", "NSResponder", "NSStatusBarButton", "NSStatusItem", "NSView", "NSWorkspace"] }
+objc2-foundation = { version = "0.3.2", features = ["NSNotification", "NSOperation", "NSString", "NSURL", "block2"] }
+# The artwork scheme's requests carry the token; the same TLS stack and provider `dit-core`'s client uses.
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+signal-hook = "0.4.5"
+tauri = { version = "2.12", features = ["tray-icon", "image-png", "macos-private-api", "protocol-asset"] }
+tauri-nspanel = "2.1.1"
+tauri-plugin-autostart = "2.7.0"
+tauri-plugin-deep-link = "2.6.2"
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2.4.1"
+tauri-plugin-notification = "2.7.0"
+tauri-plugin-updater = "2.14.0"
+ureq = { version = "3.4.2", default-features = false, features = ["rustls-no-provider", "platform-verifier"] }
+url = "2"
+
+
+[dev-dependencies]
+base64 = "0.22"
+# The scripted instance on a loopback port, for the sign-out's test.
+dit-core = { path = "../../../packages/dit/crates/dit-core", features = ["test-support"] }
+minisign = "0.7"
+tauri = { version = "2.12", features = ["test"] }
+tempfile = "3"
+
+# Without `--target`, a release build strips the debug info of the proc-macro dylibs it loads, and this macOS's dyld
+# refuses the result ("mis-aligned LINKEDIT string pool").
+[profile.release.build-override]
+strip = "none"

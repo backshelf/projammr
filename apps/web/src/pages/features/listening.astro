@@ -1,0 +1,211 @@
+---
+/* Listening and review, one level deeper than the landing page's hunk:
+   versions and pinned comments, the measurements, comparing two versions,
+   the player and the Lab, and share links. Lit by the sunset cover, the one
+   Kindling and its EP carry in the demo catalogue. Every claim is from the
+   guide (`src/content/docs/docs/guide/`) and the collaboration docs. */
+import Action from "@/components/marketing/Action.astro";
+import Close from "@/components/marketing/Close.astro";
+import Hunk from "@/components/marketing/Hunk.astro";
+import KindlingReview from "@/components/marketing/KindlingReview.astro";
+import MastheadArt from "@/components/marketing/MastheadArt.astro";
+import PageHead from "@/components/marketing/PageHead.astro";
+import Screenshot from "@/components/Screenshot.astro";
+import { coverArt } from "@/data/covers";
+import SiteLayout from "@/layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Listening and review"
+  description="Every bounce of a song as a version you can play, compare and comment on to the second, with its loudness measured for you."
+  art={coverArt("sunset")}
+>
+  <MastheadArt slot="atmosphere" cover="sunset" />
+
+  <PageHead
+    crumb={{ href: "/#features", label: "Features" }}
+    title="Listening comes first."
+    lede="Every bounce of a song as a version you can play, compare and comment on to the second, with its loudness measured for you."
+  >
+    <Action slot="actions" href="/docs/guide/audio-versions/" variant="quiet">
+      Versions and uploads
+    </Action>
+  </PageHead>
+
+  <Hunk
+    id="versions"
+    cover="sunset"
+    title="Every bounce is a version, and every comment has a moment."
+    layout="stack"
+    lines={[
+      {
+        sign: "+",
+        text: "Each bounce becomes a numbered version of its track, with its own waveform, comments and measurements.",
+      },
+      {
+        sign: "+",
+        text: "Comments pinned to a moment sit above the waveform, on the version they are about.",
+      },
+      {
+        sign: "+",
+        text: "One version is the primary, and a master uploaded twice is flagged as the same audio.",
+      },
+      {
+        sign: "~",
+        text: "Download the original, or a copy converted to WAV, FLAC, AIFF, MP3, M4A, AAC or OGG.",
+      },
+      {
+        sign: "~",
+        text: "Members from editor up comment; viewers listen and read.",
+      },
+    ]}
+    link={{
+      href: "/docs/guide/waveform-and-comments/",
+      label: "The waveform, comments and comparing",
+    }}
+  >
+    <KindlingReview />
+  </Hunk>
+
+  <Hunk
+    id="measurements"
+    title="The numbers a master is judged by, measured for you."
+    lines={[
+      {
+        sign: "+",
+        text: "Integrated loudness and true peak for every version, against the −14 LUFS streaming reference.",
+      },
+      {
+        sign: "+",
+        text: "Strips under the waveform: short-term loudness, a spectrogram, and what changed since the version before.",
+      },
+      {
+        sign: "+",
+        text: "A spectrum that lays every version of the track over the others.",
+      },
+      { sign: "+", text: "Key and tempo, detected from the audio." },
+      {
+        sign: "~",
+        text: "A collection shows its median loudness, its tempo range and its keys.",
+      },
+    ]}
+    link={{
+      href: "/docs/guide/loudness-and-spectrum/",
+      label: "Loudness, spectrum and measurements",
+    }}
+  >
+    <Screenshot
+      adaptive
+      id="track"
+      alt="A track in Projammr: its waveform with the loudness, spectrogram and change strips beneath, and its loudness and spectrum in the rail."
+    />
+  </Hunk>
+
+  <Hunk
+    id="compare"
+    title="Hear two versions against each other from the same moment."
+    lines={[
+      {
+        sign: "+",
+        text: "Switch between two versions without losing your place, with the V key.",
+      },
+      {
+        sign: "+",
+        text: "Match their levels on a desktop, so the louder master cannot win by being louder.",
+      },
+      { sign: "+", text: "A change strip shows where the two differ." },
+      {
+        sign: "~",
+        text: "On a phone the levels are not matched, and the page says so.",
+      },
+    ]}
+    link={{
+      href: "/docs/guide/waveform-and-comments/",
+      label: "Comparing two versions",
+    }}
+  >
+    <Screenshot
+      adaptive
+      id="track-compare"
+      alt="Two versions of a track compared, with the change strip showing where they differ."
+    />
+  </Hunk>
+
+  <Hunk
+    id="player"
+    cover="sunset"
+    title="Keep listening while you work."
+    lines={[
+      {
+        sign: "+",
+        text: "The player keeps going as you move around the app, with a queue you can reorder.",
+      },
+      {
+        sign: "+",
+        text: "A now-playing sheet with the live loudness meter.",
+      },
+      {
+        sign: "+",
+        text: "The Lab: change the speed and pitch, run an EQ, a compressor and a reverb, and hear the mix as a phone, a car or a club would play it.",
+      },
+      {
+        sign: "+",
+        text: "Bounce what you hear in the Lab to a 24-bit FLAC. The original file is never changed.",
+      },
+      {
+        sign: "~",
+        text: "On a phone it installs to the home screen, and needs a connection to play.",
+      },
+    ]}
+    link={{ href: "/docs/guide/the-lab/", label: "The Lab" }}
+  >
+    <Screenshot
+      adaptive
+      id="player-lab"
+      alt="The now-playing sheet with the Lab open: time and pitch, the EQ over a live spectrum, and the ways to hear the mix."
+    />
+  </Hunk>
+
+  <Hunk
+    id="share"
+    title="Send it to someone without an account."
+    lines={[
+      {
+        sign: "+",
+        text: "A share link opens what you shared on a page of its own, with nothing to sign up for.",
+      },
+      { sign: "+", text: "Visitors comment on the audio with just a name." },
+      {
+        sign: "+",
+        text: "The link can follow the primary version or hold the ones you chose, and it can expire.",
+      },
+      {
+        sign: "~",
+        text: "Guest comments can be kept private to the project.",
+      },
+    ]}
+    link={{ href: "/docs/collaboration/share-links/", label: "Share links" }}
+  >
+    <Screenshot
+      adaptive
+      id="share"
+      alt="A share page: what was shared, lit by its cover, with its waveform and a visitor's comment."
+    />
+  </Hunk>
+
+  <Close
+    id="next"
+    cover="sunset"
+    title="Hear every version of every song, on your own server."
+  >
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <Action href="/docs/self-hosting/quickstart/">Self-host it</Action>
+      <Action href="/features/writing/" variant="quiet">
+        Notebook and lyrics
+      </Action>
+      <Action href="/features/collaboration/" variant="quiet">
+        Collaboration
+      </Action>
+    </div>
+  </Close>
+</SiteLayout>

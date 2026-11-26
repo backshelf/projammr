@@ -1,0 +1,91 @@
+---
+title: API overview
+description: Script against your own Projammr instance through the same REST API the web app and the scanner use.
+sidebar:
+  order: 1
+  label: Overview
+---
+
+import { LinkCard } from "@astrojs/starlight/components";
+
+Everything Projammr does goes through one REST API: the web app, the scanner and the share page all use it, and
+nothing they do is hidden from it. If you can do it in the app, a script can do it too, with the same permissions
+as the account it signs in with.
+
+[The API runs on your instance](/docs/self-hosting/). There is no central Projammr service to register with and no API key to request:
+you sign in to your own instance and send requests to it.
+
+## Where it lives
+
+Every route is served under `/api` on your instance. On an instance at `music.example.com`:
+
+| What                               | Where                                           |
+| ---------------------------------- | ----------------------------------------------- |
+| The API                            | `https://music.example.com/api/…`               |
+| Sign-in and sessions (Better Auth) | `https://music.example.com/api/auth/…`          |
+| Uploaded audio and images          | `https://music.example.com/media/…`             |
+| Health check                       | `https://music.example.com/api/health`          |
+
+`GET /api/health` needs no sign-in. It answers `200` with `{"status":"ok","db":true,"media":{"ffmpeg":true},"queue":0}`
+when the instance can serve requests, `200` with `"status":"degraded"` when it cannot find ffmpeg to decode audio,
+and `503` when its database is unreachable.
+
+## The spec and the references
+
+The API is OpenAPI-first: every route is declared with its request and response schemas, and the specification is
+generated from those declarations, so it cannot drift from what the server does. Your instance serves it in two
+forms:
+
+- `GET /api/openapi`, the OpenAPI document for the Projammr API, and `GET /api/auth/openapi`, the one for its
+  sign-in routes.
+- `/api/docs`, an interactive reference over the same document, which you can open in a browser.
+
+On a production instance all of these need a signed-in session: `/api/openapi` and `/api/auth/openapi` answer
+`401` without one, and `/api/docs` answers `404`. Sign in to the web app in the same browser and they open.
+
+The endpoint reference on this site is built from the same document, grouped by resource and labelled by what each
+operation does. It matches the version this site was built from; your instance's own `/api/openapi` is the
+authority for the version you run.
+
+## What the API covers
+
+Operations are grouped the way the product is: projects, and the collections, tracks and sessions inside them;
+audio versions, comments, statuses, labels, notes and lyrics; members, invites and share links; uploaded files and
+images; background jobs; your own account; and, for instance admins, the instance itself.
+
+Access follows project roles. A member with the viewer role can read everything in a project, an editor can change
+it, and some operations (members, invites, audio backfill) need an admin or the owner. The same rules apply to a
+script as to the app.
+
+## Where to start
+
+<LinkCard
+  title="Authentication"
+  description="Get a token for a script, or use the session cookie from a browser."
+  href="/docs/api/authentication/"
+/>
+<LinkCard
+  title="Requests and errors"
+  description="Ids, roles, the error envelope, lists, bulk selections and rate limits."
+  href="/docs/api/conventions/"
+/>
+<LinkCard
+  title="Files and media"
+  description="Upload a bounce, link it to a track, and fetch the audio back."
+  href="/docs/api/files-and-media/"
+/>
+<LinkCard
+  title="Jobs and event streams"
+  description="Follow audio analysis and conversions as they run."
+  href="/docs/api/jobs/"
+/>
+<LinkCard
+  title="Worked examples"
+  description="Real tasks end to end with curl."
+  href="/docs/api/examples/"
+/>
+<LinkCard
+  title="Endpoint reference"
+  description="Every operation, its parameters and its responses."
+  href="/docs/api/reference/"
+/>

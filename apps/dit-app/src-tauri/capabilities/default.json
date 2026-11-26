@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the panel's and the backfill window's webviews may do beyond the app's own commands.",
+  "windows": ["panel", "backfill"],
+  "permissions": ["core:default", "dialog:allow-open"]
+}

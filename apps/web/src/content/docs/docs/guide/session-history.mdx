@@ -1,0 +1,83 @@
+---
+title: Save history
+description: Follow a set from save to save, and compare any two saves to see which tracks, devices, clips and samples changed.
+sidebar:
+  order: 33
+---
+
+import { Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Every time the scanner sees a new save of a set, it records it. A session's history is that list of saves, with
+what changed between each one and the next: what you did last night, what the set looked like a month ago, and
+which save had the version you liked.
+
+## Where the saves come from
+
+Most saves in the history are the set as the scanner read it from the file. Ableton Live also keeps copies of
+earlier saves in the set's [`Backup` folder](/dit/). Saves read from there carry a **Backup** mark, and they fill in the
+history from before the scanner was watching.
+
+## The history page
+
+A session's page lists its latest six saves under **History**. When it has more, the section's link ("All 48
+saves", say) opens the full history page. It is headed "History", with a summary such as "48 saves over 3 months
+on 2 machines · first seen" and the date.
+
+<Screenshot
+  id="session-history"
+  alt="A session's save history: saves grouped by day, each with the tracks, devices and clips that changed since the one before"
+/>
+
+Below it, every save is listed by day ("Today", "Yesterday", then dates), newest first. Each shows its time, the
+machine it was saved on, and small notes on what changed since the save before:
+
+| Note                           | Means                                                   |
+| ------------------------------ | ------------------------------------------------------- |
+| First save seen                | The earliest save Projammr knows about                  |
+| tempo 120 → 124                | The tempo changed                                       |
+| time sig 4/4 → 6/8             | The time signature changed                              |
+| key A minor → C major          | The key changed                                         |
+| +2 tracks, −1 track            | Tracks were added or removed                            |
+| Old name → New name            | A track was renamed                                     |
+| +EQ Eight on Bass              | A device was added to a track (`−` when removed)        |
+| 5 device changes               | More device changes than fit on one line                |
+| +12 audio clips, +3 midi clips | Clips were added                                        |
+| +2 scenes                      | Scenes were added (`−` when removed)                    |
+| +4 samples, −1 sample          | Samples were added or removed                           |
+| Ableton Live 12.2 → Ableton Live 12.3 | The set was saved in a newer Live for the first time |
+
+A save where none of that changed says "Saved, nothing the scanner tracks changed".
+
+## Comparing two saves
+
+<Steps>
+
+1. On the history page, pick a save in the timeline. The comparison appears under **Comparing**, against the save
+   just before it.
+
+2. To compare with a different save, change **From** and **To** at the top of the comparison. **From** only offers
+   saves older than **To**. **Clear** starts again.
+
+</Steps>
+
+The comparison is drawn the way a session's [structure](/docs/guide/sessions/#structure) is, with the older
+save in **From** as the one before:
+
+- **The set as a skyline**, one bar per track in its own colour, with a mark under each track the newer save
+  added, removed or changed.
+- **What moved** in the set's details, each on its own gauge: the tempo on its ruler, the audio and MIDI clip
+  counts, and the time signature, key, scene count or Live version as before and after. Only the ones that changed
+  are shown.
+- **The tracks**, with every track in both saves. Added tracks are in the page's colour, removed ones are struck
+  through, a renamed track shows its old name struck through beside the new one, and each device says whether it
+  was added or removed.
+- **Samples** added and removed, by file name. Hover one for its full path.
+
+The comparison starts on **Changes**, which lists only the tracks that changed; **Whole set** shows every track.
+The arrows beside them, or `]` and `[`, step through the changed tracks one at a time.
+
+If the two saves are the same in everything Projammr reads, it says "Nothing the scanner reads changed between
+these saves."
+
+The page's address holds the two saves you picked, so you can send someone a link to the exact comparison.

@@ -1,0 +1,94 @@
+---
+title: Plugins and work heatmaps
+description: See every device and sample your sessions use and where, and when you have been working, per track, per project and across all of them.
+sidebar:
+  order: 34
+---
+
+import Screenshot from "@/components/Screenshot.astro";
+
+Because the scanner reads your sets, Projammr knows two things you would otherwise have to keep track of by hand:
+which plugins your music depends on, and when you actually worked on it.
+
+## Plugins
+
+A project page's **Plugins** section draws its sets on the left and their devices on the right, with a line for
+every set that uses a device: up to eight sets and twelve devices. **All devices** opens the full inventory.
+
+<Screenshot id="plugins" alt="The plugin inventory: a web of sets and the devices they use, above the list of devices" />
+
+The inventory page, **Plugins**, opens with a count such as "64 devices across 23 sets · 41 third-party", then
+a web of your sets and their devices, then the list. A set is a dot and a device a square, larger the more sets
+use it. Sets settle beside the devices they share, and a line is brighter the fewer sets share its device, so
+the gear that sets a set apart stands out from the gear every set has.
+
+Point at a set to light the devices it uses, or at a device to light every set that uses it; a thicker line
+means the set uses that device on more tracks. A note beside it names it and counts its sets or devices. Click
+to keep it lit, and the note offers **Open set** or **Show row**; click it again, click an empty spot or press
+Escape to let go. Drag to move around, scroll or pinch to zoom, or use the buttons at the web's top right to
+zoom in, zoom out and fit it all back in. Once you have clicked into the web, the arrow keys move around, <kbd>+</kbd>
+and <kbd>-</kbd> zoom, and <kbd>0</kbd> fits.
+
+The devices in more than 40% of your sets (and in at least five of them), your stock chain, stay out of the web
+so they do not bury the rest in lines. They are listed under it instead, most used first; **Show stock chain**
+puts them in the web and **Hide stock chain** takes them out again.
+
+Each device in the list shows:
+
+- its name;
+- who makes it and its format, such as "VST3" or "AU", or "Built-in" for a device that comes with the DAW;
+- how many sets and how many tracks use it.
+
+To narrow it, choose **All**, **Plugins** (third-party only) or **Built-in**, or type in "Search devices", which
+also lights the matching devices in the web and brings them into view.
+
+Select a device to see the sessions that use it, and on which of their tracks. That is the list to check before
+you uninstall a plugin, move to a new computer, or send a session to someone who might not have it.
+
+## Samples
+
+**Samples** (from the command palette, "Go to samples") is the same page for the samples your sets use: a count
+such as "142 samples across 12 sets · 18 shared by more than one · 3 missing", the web, and the list. The web
+draws only the samples more than one set uses; a sample only one set uses is counted on that set's note as its
+own. A sample the scanner could not find is an amber square. A sample shows its file name over its folder.
+**Missing** narrows it to the files the scanner could not find on the computer that last scanned; samples from
+Live's own library stay hidden until you turn **Library** on. Select a sample to see the sets that use it.
+
+A session page's **Samples** section lists that set's samples, marks the missing ones, and says how many other
+sets use each. The scanner marks a set that cannot find its samples with "Can't find n samples", and when a set
+keeps samples outside its project folder it suggests Live's **Collect All and Save**.
+
+## Work heatmaps
+
+A heatmap is a calendar with one square per day, shaded by how many saves the scanner recorded that day: one, two
+or three, four to six, or seven and more. Hover a square for the date and the number of saves. Days follow your
+browser's time zone.
+
+There are three, from close up to the whole picture.
+
+### Worked on, for a track
+
+A track's rail has **Worked on**: the last twelve weeks of saves to its sessions, with a line such as "18 days in
+the last 3 months · last save 2 days ago".
+
+### Work, for a project
+
+<Screenshot
+  id="project-work-heatmap"
+  alt="A project's work heatmap: a year of days shaded by how many saves each had, with the collection, label and DAW filters"
+/>
+
+The project page's **Work** section shows the last year, with a summary: how many saves on how many days, the
+streak you are on, your longest streak, and when the last save was. It only appears once the project has saves.
+
+Filter it by **Collection**, **Label** or **DAW** to see when a record, or one kind of song, got its work.
+
+Select a day to list that day's saves underneath, headed "Saves on" and the date; **Show recent** goes back to the
+latest saves. Each save shows what changed, the same way as a session's
+[save history](/docs/guide/session-history/).
+
+### Activity, across everything
+
+Your [profile](/docs/guide/settings-and-profile/) has an **Activity** heatmap of the saves in every project you
+belong to. Its summary counts the saves and the days, how many projects they were spread over, your longest
+streak and when you last saved.

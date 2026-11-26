@@ -1,0 +1,1 @@
+ALTER TABLE "statuses" ADD COLUMN "colour_hex" varchar(9) DEFAULT '#FFFFFF' NOT NULL;

@@ -1,0 +1,85 @@
+---
+title: The repository
+description: What each app and package in the Projammr monorepo is for, and how they depend on each other.
+sidebar:
+  order: 2
+---
+
+import { FileTree } from "@astrojs/starlight/components";
+
+Projammr is one repository: a [Bun](https://bun.sh) workspace driven by [Turborepo](https://turborepo.com), with four
+apps and the packages they share. Root scripts such as `bun run dev` and `bun run typecheck` fan out to every
+workspace that has the matching script.
+
+<FileTree>
+
+- apps/
+  - client/ the web app: Next.js 16, React 19, server components first
+  - server/ the REST API: Hono on Bun, PostgreSQL through Drizzle, Better Auth, the job runner
+  - scanner/ the desktop scanner: Electron, reads DAW project folders and syncs them
+  - web/ this site: the marketing pages and the docs, built with Astro and Starlight
+- packages/
+  - ui/ `@workspace/ui`: the component library and the design tokens every surface shares
+  - api/ `@workspace/api`: the generated API types, the typed API client and the auth client
+  - dsp/ `@workspace/dsp`: audio analysis and playback maths, Rust compiled to WebAssembly
+  - test/ `@workspace/test`: the few helpers `bun:test` lacks, shared by every suite
+  - eslint-config/ `@workspace/eslint-config`: the shared ESLint flat configs
+  - typescript-config/ `@workspace/typescript-config`: the shared tsconfig presets
+
+</FileTree>
+
+## The apps
+
+**`apps/server`** is the source of truth. It owns the database, and every other surface reads and writes through
+it. The API is OpenAPI-first: each route is declared with its request and response schemas, and the specification
+at `/api/openapi` is generated from those declarations. Entities (projects, collections, tracks, sessions) are
+modules in a registry under `src/entities/`, so a new entity is one directory and one line of registration rather
+than a case added to every consumer.
+
+**`apps/client`** is the web app. Pages are React server components that fetch through the API with the typed
+client; interactive parts are client components calling the same API. Below `/project/[projectId]` the URL is
+parsed by hand (`src/lib/route-parser.ts`) rather than by file-based routing.
+
+**`apps/scanner`** is an Electron app. Its main process walks the DAW folders, reads each set, and uploads sessions
+and bounces through the API with a bearer token; its renderer is React with TanStack Router. The two talk through a
+typed `window.api` bridge, every call asynchronous. Each DAW it reads is a module of its own under
+`src/main/scanner/daws/`.
+
+**`apps/web`** is this site: static pages, with the API reference generated from the server's specification.
+
+## How they depend on each other
+
+| Workspace      | Uses                                                                            |
+| -------------- | ------------------------------------------------------------------------------- |
+| `apps/server`  | `@workspace/dsp`                                                                |
+| `apps/client`  | `@workspace/api`, `@workspace/ui`, `@workspace/dsp`                             |
+| `apps/scanner` | `@workspace/api`, `@workspace/ui`                                               |
+| `apps/web`     | `@workspace/ui`, and the server's OpenAPI document for the endpoint reference   |
+| `packages/api` | The server's OpenAPI document, from which its types are generated               |
+
+- The client and the scanner call the API through `@workspace/api`. Neither imports the server's code.
+- `@workspace/ui` is consumed as source: there is no build step, and each app compiles what it imports.
+- `@workspace/dsp` runs the same analysis in two places: in the server's analysis jobs, and in the browser's audio
+  worklet for live metering.
+- `@workspace/test` and the two config packages are development dependencies of every workspace that tests, lints or
+  type-checks.
+
+## The generated API types
+
+The client and the scanner are typed against the API from its own specification, so a change to a route shows up as
+a type error wherever it is used:
+
+- `bun run typegen` at the root builds the server's app in process, reads its OpenAPI document, and writes
+  `packages/api/src/v1.d.ts` (the types, gitignored) and `packages/api/src/enums.ts` (the value lists shared with
+  the database, committed). It needs no running server and no database.
+- The same command writes `apps/web/openapi/api.json` and `auth.json`, the committed copies this site's endpoint
+  reference is built from.
+- `bun run typecheck` and `bun run build` run typegen first, so a fresh clone generates the types on its first
+  check.
+
+After changing a route, run `bun run typegen` and commit `packages/api/src/enums.ts` and the site's two
+specification files with the change. A test in each place fails when a committed copy has drifted from the
+server.
+
+Generated files are never edited by hand: `v1.d.ts`, `enums.ts`, the site's specifications, and the scanner's
+`routeTree.gen.ts` (written by the TanStack Router plugin, gitignored).

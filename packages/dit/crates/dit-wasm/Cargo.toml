@@ -1,0 +1,21 @@
+[package]
+name = "dit-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# `cdylib` is the WebAssembly module; `rlib` lets `cargo test` link the crate natively.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+dit-core = { path = "../dit-core", default-features = false }
+dit-daws = { path = "../dit-daws", default-features = false }
+serde_json.workspace = true
+
+[dev-dependencies]
+# Tests decode the fixture through zlib and record it into a real store, which the wasm build leaves out.
+dit-core = { path = "../dit-core" }
+dit-daw-ableton = { path = "../dit-daw-ableton" }
+tempfile.workspace = true

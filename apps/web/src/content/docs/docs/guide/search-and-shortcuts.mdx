@@ -1,0 +1,246 @@
+---
+title: Search, the command palette and shortcuts
+description: Find anything in a project, run commands by typing, and learn the keyboard shortcuts.
+sidebar:
+  order: 41
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+The command palette is the fastest way around Projammr. It searches the project you are in, and it runs commands:
+play a track, set a status, jump to a timecode, start a new session, all without reaching for the mouse.
+
+## Opening the command palette
+
+- Press <kbd>Ctrl</kbd> <kbd>K</kbd> (<kbd>⌘</kbd> <kbd>K</kbd> on a Mac), or <kbd>/</kbd>.
+- Select **Search** at the top of the sidebar.
+- On a phone, use the **Search** tab at the bottom.
+
+The palette is there on every page once you are signed in. Outside a project it offers what needs none: your
+settings, the notebook, a new note, the theme.
+
+<Screenshot id="command-palette" alt="The command palette open over a project, with recent tracks and sessions and a list of actions" />
+
+Move through the results with the arrow keys and press <kbd>Enter</kbd> to choose one. <kbd>Esc</kbd> closes the
+palette. On a phone it fills the screen and closes with its close button.
+
+## Searching
+
+Type anything to search the project you are in: tracks, collections, sessions and files, and the comments on them.
+Each result says what kind of thing it is, and the closest matches come first. Search matches by similarity
+rather than exact spelling, so a small typo usually still finds what you meant.
+
+Before you type, the palette shows up to five **Recent tracks** and five **Recent sessions** from the project.
+
+Search covers one project at a time. To search another, switch to it first.
+
+Search also finds settings, on any page: type a setting's name (or what it does: "rhyme", "sign up") and a
+**Setting** result, with its group beneath it, opens [Settings](/docs/guide/settings-and-profile/#settings) at
+that setting. Only the settings you can open are offered, so the instance's are for its admins.
+
+## Actions
+
+Under the recent items, the palette lists actions for where you are:
+
+- **New track**, **New collection**, **New session** and **New note**
+- **Toggle theme**
+- **Play this track**, on a track's page
+- **Open the Lab**, while something is playing
+- **Keyboard shortcuts**
+- **Go to project**, **Go to settings** and **Go to Notebook**
+
+Each shows its keyboard shortcut, when it has one.
+
+## Commands
+
+A command is a word, a space, and what it should act on. Start typing one ("pla", say) and the palette offers the
+commands that match, each with a line saying what it does.
+
+| Type                  | To                                                            | Where                     |
+| --------------------- | ------------------------------------------------------------- | ------------------------- |
+| `play` title          | Play a track now, replacing the queue                         | In a project              |
+| `queue` title         | Add a track to the end of the queue                           | In a project              |
+| `playnext` title      | Play a track straight after the current one                   | In a project              |
+| `go` name             | Jump to a track, collection, session or file                  | In a project              |
+| `note` title          | Jump to a note in your notebook                               | Anywhere                  |
+| `new track` title     | Start a new track with that title                             | In a project              |
+| `new session` name    | Start a new session with that name                            | In a project              |
+| `filter` words        | Filter the table on this page                                 | On a table's page         |
+| `status` name         | Change this track's status                                    | On a track's page         |
+| `priority` name       | Change this track's priority                                  | On a track's page         |
+| `label` name          | Add a label to this track, or make a new one                  | On a track's page         |
+| `unlabel` name        | Take a label off this track                                   | On a track's page         |
+| `theme` choice        | Switch to Light, Dark or System                               | Anywhere                  |
+| `volume` 0–100        | Set the player's volume                                       | While something plays     |
+| `speed` 0.5–2         | Change playback speed                                         | While something plays     |
+| `pitch` −12–12        | Change pitch, in semitones                                    | While something plays     |
+| `seek` mm:ss          | Jump the playing track to a time                              | While something plays     |
+| `lab` name            | Turn a [Lab](/docs/guide/the-lab/) audition on or off, such as mono | While something plays |
+
+## Other search boxes
+
+- Every table has a **Search...** box in its toolbar that narrows that table. See
+  [Tables and views](/docs/guide/tables/#searching-and-filtering).
+- The notebook's list has "Filter notes…", which matches note titles and previews.
+- The plugins page has "Search devices" and the samples page "Search samples", which also light what they match
+  in the page's web.
+
+## Keyboard shortcuts
+
+Press <kbd>?</kbd> anywhere to see the keyboard shortcuts. The list shows every key, and greys the ones that do
+nothing on the page you are on: the table, track, queue and notebook keys only work while that table, track page,
+queue or note list is in use.
+
+Shortcuts written as two keys, such as <kbd>G</kbd> <kbd>P</kbd>, are pressed one after the other, not together.
+A key with a modifier, such as <kbd>Ctrl</kbd> <kbd>K</kbd>, is held down together. Apart from
+<kbd>Ctrl</kbd> <kbd>Enter</kbd>, none of them fire while you are typing in a field.
+
+### General
+
+| Key                                                      | Does                                             |
+| -------------------------------------------------------- | ------------------------------------------------ |
+| <kbd>Ctrl</kbd> <kbd>K</kbd> (<kbd>⌘</kbd> <kbd>K</kbd>) | Command palette                                  |
+| <kbd>/</kbd>                                             | Search                                           |
+| <kbd>D</kbd>                                             | Toggle light and dark                            |
+| <kbd>Ctrl</kbd> <kbd>B</kbd> (<kbd>⌘</kbd> <kbd>B</kbd>) | Hide or show the sidebar                         |
+| <kbd>U</kbd>                                             | Undo the last change, while its Undo is on offer |
+| <kbd>.</kbd>                                             | Repeat the last command that can be repeated     |
+| <kbd>:</kbd>                                             | Open the command bar's prompt, when the bar is on |
+| <kbd>Ctrl</kbd> <kbd>Enter</kbd> (<kbd>⌘</kbd> <kbd>Enter</kbd>) | Send a comment, or confirm a dialog          |
+
+### Lab
+
+| Key                       | Does                                       |
+| ------------------------- | ------------------------------------------ |
+| <kbd>L</kbd>              | Open or close the Lab                      |
+| <kbd>H</kbd> <kbd>M</kbd> | Mono on or off                             |
+| <kbd>H</kbd> <kbd>D</kbd> | Dim on or off                              |
+| <kbd>V</kbd>              | Swap A and B, while comparing two versions |
+
+### Go to
+
+| Key                          | Goes to     |
+| ---------------------------- | ----------- |
+| <kbd>G</kbd> <kbd>P</kbd>    | Project     |
+| <kbd>G</kbd> <kbd>C</kbd>    | Collections |
+| <kbd>G</kbd> <kbd>T</kbd>    | Tracks      |
+| <kbd>G</kbd> <kbd>S</kbd>    | Sessions    |
+| <kbd>G</kbd> <kbd>A</kbd>    | Archived tracks |
+| <kbd>G</kbd> <kbd>L</kbd>    | Samples     |
+| <kbd>G</kbd> <kbd>U</kbd>    | Plugins     |
+| <kbd>G</kbd> <kbd>,</kbd>    | Settings    |
+| <kbd>G</kbd> <kbd>N</kbd>    | Notebook    |
+
+### New
+
+| Key                          | Makes a new |
+| ---------------------------- | ----------- |
+| <kbd>N</kbd> <kbd>T</kbd>    | Track       |
+| <kbd>N</kbd> <kbd>C</kbd>    | Collection  |
+| <kbd>N</kbd> <kbd>S</kbd>    | Session     |
+| <kbd>N</kbd> <kbd>N</kbd>    | Note        |
+
+The project ones need a project open; settings, the notebook and new note work everywhere.
+
+### Help
+
+| Key          | Does                                                                 |
+| ------------ | -------------------------------------------------------------------- |
+| <kbd>?</kbd> | Show the keyboard shortcuts, or close them (not offered on a touchscreen) |
+
+### Playback
+
+| Key                                               | Does                                             |
+| ------------------------------------------------- | ------------------------------------------------ |
+| <kbd>Space</kbd>                                  | Play or pause                                    |
+| <kbd>←</kbd> / <kbd>→</kbd>                       | Back or forward 5 seconds                        |
+| <kbd>Shift</kbd> with <kbd>←</kbd> / <kbd>→</kbd> | Back or forward 30 seconds                       |
+| <kbd>[</kbd> / <kbd>]</kbd>                       | Previous or next in the queue                    |
+| <kbd>M</kbd>                                      | Mute                                             |
+| <kbd>-</kbd> / <kbd>=</kbd>                       | Volume down or up, 5% a press                    |
+| <kbd>&lt;</kbd> / <kbd>&gt;</kbd>                 | Slower or faster                                 |
+| <kbd>P</kbd>                                      | Open or close the now-playing sheet              |
+| <kbd>Shift</kbd> <kbd>S</kbd>                     | Shuffle on or off                                |
+| <kbd>Shift</kbd> <kbd>R</kbd>                     | Cycle repeat                                     |
+| <kbd>0</kbd>–<kbd>9</kbd>                         | Jump to that tenth of the track: 0 is the start, 5 the middle |
+
+The volume, speed, now-playing and jump keys work while a track is loaded.
+
+### Queue
+
+| Key          | Does                                                      |
+| ------------ | --------------------------------------------------------- |
+| <kbd>Q</kbd> | Show the queue, or close it                               |
+| <kbd>J</kbd> | Next entry in the queue list                              |
+| <kbd>K</kbd> | Previous entry in the queue list                          |
+| <kbd>X</kbd> | Remove the entry from the queue                           |
+| <kbd>Enter</kbd> | Play the entry                                        |
+
+<kbd>J</kbd>, <kbd>K</kbd>, <kbd>X</kbd> and <kbd>Enter</kbd> act on the entry you have moved to, while the queue
+list is on screen.
+
+### Track
+
+On a track's page. The ones that change the track need you to be able to edit it.
+
+| Key                                                              | Does                                            |
+| ---------------------------------------------------------------- | ----------------------------------------------- |
+| <kbd>&lbrace;</kbd> / <kbd>&rbrace;</kbd>                                      | Previous or next track in its collection        |
+| <kbd>S</kbd>                                                     | Set the status                                  |
+| <kbd>!</kbd>                                                     | Set the priority                                |
+| <kbd>T</kbd>                                                     | Add a label                                     |
+| <kbd>R</kbd>                                                     | Rename the track                                |
+| <kbd>C</kbd>                                                     | Comment on the audio                            |
+| <kbd>A</kbd>                                                     | Upload audio                                    |
+| <kbd>E</kbd>                                                     | Archive the track                               |
+| <kbd>Ctrl</kbd> <kbd>Backspace</kbd> (<kbd>⌘</kbd> <kbd>Backspace</kbd>) | Delete the track, after you confirm |
+
+<kbd>S</kbd>, <kbd>!</kbd> and <kbd>T</kbd> open the command palette ready for a status, priority or label.
+
+### Table
+
+| Key                                                      | Does                                                  |
+| -------------------------------------------------------- | ----------------------------------------------------- |
+| <kbd>J</kbd>                                             | Next row                                              |
+| <kbd>K</kbd>                                             | Previous row                                          |
+| <kbd>Home</kbd> / <kbd>End</kbd>                         | First or last row                                     |
+| <kbd>Enter</kbd>                                         | Open the row's page                                   |
+| <kbd>O</kbd>                                             | Peek the row                                          |
+| <kbd>←</kbd> / <kbd>→</kbd>                              | Previous or next row, while the peek is open (<kbd>J</kbd> and <kbd>K</kbd> do the same) |
+| <kbd>X</kbd>                                             | Select the row                                        |
+| <kbd>Ctrl</kbd> <kbd>A</kbd> (<kbd>⌘</kbd> <kbd>A</kbd>) | Select every row                                      |
+| <kbd>R</kbd>                                             | Rename the row                                        |
+| <kbd>E</kbd>                                             | Archive the row                                       |
+| <kbd>A</kbd>                                             | Add the row to a collection                           |
+| <kbd>S</kbd>                                             | Set the row's status                                  |
+| <kbd>!</kbd>                                             | Set the row's priority                                |
+| <kbd>F</kbd>                                             | Search the table                                      |
+| <kbd>B</kbd>                                             | Switch between the board and the list, on a page that has both |
+| <kbd>Esc</kbd>                                           | Let go of the row and clear the selection             |
+
+The cell grid has its own keys for moving, editing, copying and pasting, and they take over from the ones above
+while a cell has focus; see [Selecting and editing in tables](/docs/guide/editing-in-tables/#editing-cells).
+
+| Key                                                           | Does, in the cell grid                     |
+| ------------------------------------------------------------- | ------------------------------------------ |
+| <kbd>↑</kbd> / <kbd>↓</kbd> / <kbd>←</kbd> / <kbd>→</kbd>     | Move the cell selection                    |
+| <kbd>Shift</kbd> with <kbd>↑</kbd> / <kbd>↓</kbd> / <kbd>←</kbd> / <kbd>→</kbd> | Extend the cell selection      |
+| <kbd>Enter</kbd>                                              | Edit the cell                              |
+| <kbd>Ctrl</kbd> <kbd>A</kbd> (<kbd>⌘</kbd> <kbd>A</kbd>)      | Select every cell                          |
+| <kbd>Ctrl</kbd> <kbd>C</kbd> (<kbd>⌘</kbd> <kbd>C</kbd>)      | Copy the selected cells                    |
+
+### Notebook
+
+| Key          | Does                                                    |
+| ------------ | ------------------------------------------------------- |
+| <kbd>J</kbd> | Open the next note in the list                          |
+| <kbd>K</kbd> | Open the previous note in the list                      |
+| <kbd>F</kbd> | Filter the notes                                        |
+| <kbd>Y</kbd> | Copy the open note as plain text                        |
+| <kbd>T</kbd> | Link the open note to a track                           |
+
+<Aside>
+  On a Mac, the shortcuts list shows <kbd>⌘</kbd>, <kbd>⌥</kbd> and <kbd>⇧</kbd> where other computers show
+  Ctrl, Alt and Shift.
+</Aside>

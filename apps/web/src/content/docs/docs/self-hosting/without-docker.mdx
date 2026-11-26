@@ -1,0 +1,98 @@
+---
+title: Running without Docker
+description: Run the API and the web app straight from a checkout, with Bun, PostgreSQL and ffmpeg installed on the machine.
+sidebar:
+  order: 90
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+You can run Projammr from a checkout of the repository without containers, with the tools installed on the machine
+itself. There is no proxy in this setup: the web app is served over plain HTTP at `http://localhost:3000`, and the
+API at `http://localhost:8080`.
+
+<Aside type="caution">
+  Without the proxy there is no HTTPS. On the machine itself `localhost` still counts as a secure context, but a
+  phone or another computer opening the app over plain HTTP loses the live loudness meter and the clipboard; see
+  [HTTPS and your devices](/docs/self-hosting/https/). The Docker stack is what adds HTTPS.
+</Aside>
+
+## Prerequisites
+
+- **Bun 1.4**, the version the repository's `package.json` pins.
+- **PostgreSQL.** 17 is the version the Docker stack runs.
+- **ffmpeg**, on the machine that runs the API, to decode and transcode audio.
+- **Rust 1.97.1** through rustup, with the `wasm32-unknown-unknown` target, for the audio analysis module.
+  `packages/dsp/rust/rust-toolchain.toml` pins the version, so rustup installs the toolchain, the target, clippy and
+  rustfmt on the first build.
+- **`wasm-opt` 116 or later** on your `PATH`, from `cargo install wasm-opt` or your distribution's `binaryen`
+  package.
+
+## Configure
+
+The API and the web app each read their own `.env`. Generate each secret with `openssl rand -base64 32`.
+
+```sh title="apps/server/.env"
+DATABASE_URL=postgres://user:pass@localhost:5432/projammr
+BETTER_AUTH_SECRET=<secret>
+NOTES_MASTER_KEY=<32 random bytes, base64>
+FFMPEG_PATH=ffmpeg
+```
+
+```sh title="apps/client/.env"
+BETTER_AUTH_SECRET=<the same value as the API's>
+```
+
+`BETTER_AUTH_SECRET` has to be the same in both, because the web app checks the session cookie in its own process.
+`FFMPEG_PATH` can be left out if you place an ffmpeg binary at `apps/server/deps/ffmpeg/bin/ffmpeg`, the default
+path. Everything else has a default; `apps/server/README.md` and `apps/client/README.md` list every variable.
+
+## Run it
+
+<Steps>
+
+1. Install the dependencies.
+
+   ```sh
+   bun install
+   ```
+
+2. Apply the database migrations.
+
+   ```sh
+   cd apps/server && bun run migrate && cd ../..
+   ```
+
+   With `pg_dump` on your `PATH`, this takes the [pre-migrate dump](/docs/self-hosting/backups/#the-pre-migrate-dump)
+   too, into `apps/server/backups/`. Without it, it warns and migrates anyway.
+
+3. Start the API and the web app, each in its own terminal, from the root of the repository.
+
+   ```sh
+   cd apps/server && bun run dev
+   ```
+
+   ```sh
+   cd apps/client && bun run dev
+   ```
+
+4. Open `http://localhost:3000` and create the first account. To sync sessions, point the scanner at
+   `http://localhost:8080`.
+
+</Steps>
+
+Both run the way they do in development, and reload when their source changes. Neither applies migrations by
+itself, so run `bun run migrate` in `apps/server` again after each `git pull`, before you start the API.
+
+## Admin commands
+
+The [admin commands](/docs/self-hosting/operations/#admin-commands) run from `apps/server` as TypeScript, with the
+account's address:
+
+```sh
+bun scripts/make-admin.ts you@example.com
+bun scripts/reset-link.ts you@example.com
+```
+
+So does the notes key rotation script, `bun scripts/rotate-notes-key.ts`; see
+[Rotating the notes key](/docs/self-hosting/operations/#rotating-the-notes-key).

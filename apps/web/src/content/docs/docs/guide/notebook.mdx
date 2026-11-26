@@ -1,0 +1,100 @@
+---
+title: The notebook
+description: Keep private notes and lyric ideas in your own notebook, and turn a note into a track's lyrics when it is ready.
+sidebar:
+  order: 37
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+The notebook is yours alone: a place for lyric ideas, lines you overheard, plans for a record. Your notes do not
+belong to a project, and nobody else can open them. When a note becomes a song's lyrics, you link it to the track,
+and from then on the people in that track's project can read it too.
+
+<Screenshot id="notebook" alt="The notebook: the list of notes on the left and an open note on the right" />
+
+## Opening the notebook
+
+Select **Notebook** in the sidebar, or press <kbd>G</kbd> then <kbd>N</kbd>. Your five most recently edited notes
+are listed under it in the sidebar, even when you have no project open. On a phone, use the **Notes** tab at the
+bottom.
+
+## Writing notes
+
+<Steps>
+
+1. Select **New** above the list, the **+** beside Notebook in the sidebar, or press <kbd>N</kbd> then
+   <kbd>N</kbd>. On a phone, press and hold the **Notes** tab.
+
+2. Start typing. Nothing is saved until you do, so an empty note never clutters your list.
+
+</Steps>
+
+A note has no separate title field: **its first line is its title**, and its second line is the preview under the
+title in the list. A note with nothing in it yet is called "New note".
+
+The editor is a block editor, like many writing apps: type <kbd>/</kbd> at the start of a line for a menu of
+blocks such as headings and lists.
+
+Your writing saves itself a moment after you stop typing. The line at the top says where it is up to: "Saving…",
+"Saved", "Unsaved" or "Couldn't save". If someone else changed the same note meanwhile, which can happen with
+lyrics a project shares, it says "This note changed elsewhere" with a **Reload** button.
+
+## Finding notes
+
+The list puts pinned notes first, then the rest with the most recently edited at the top. "Filter notes…" narrows
+it by title and preview; it does not search the rest of a note's text.
+
+From the [command palette](/docs/guide/search-and-shortcuts/), type `note` and a space, then part of a note's
+title, to jump to it from anywhere.
+
+## The note menu
+
+The **⋮** on an open note has:
+
+- **Lyrics mode**, which turns on the [lyrics tools](/docs/guide/lyrics/). New notes start in lyrics mode.
+- **Pin** or **Unpin**, to keep a note at the top of the list.
+- **Copy as plain text**.
+- **Link to track** or **Unlink from track**. See below.
+- **Delete**, which asks first ("Delete" and the note's title). Only you can delete your notes.
+
+## Turning a note into lyrics
+
+Linking a note to a track makes it that track's lyrics. The note stays in your notebook, marked with the track's
+name, and it shows on the track's page for everyone in the project.
+
+<Steps>
+
+1. Open the note and choose **Link to track** from its **⋮** menu.
+
+2. Pick the project, then search for the track by title, artist, key or BPM, and pick it. As the window says,
+   "The note becomes that track's lyrics, and everyone on the project can read it."
+
+</Steps>
+
+You can also start from the track: its **Lyrics** section offers **+ Lyrics**, to start writing new lyrics on the
+spot, and **Link a note**, to pick one of your notes that is not linked yet.
+
+A track has one lyrics note, and a note can be the lyrics of one track.
+
+### Who can read and change lyrics
+
+- Everyone in the project can read a track's lyrics.
+- You, and the project's editors, admins and owner, can change them. The track's **Lyrics** section shows who
+  wrote them when it was not you.
+- Only you can link your notes to a track, and only you can delete them. You or an editor can unlink them.
+
+A note you have not linked stays private to you.
+
+## How your notes are stored
+
+Projammr stores the text of your notes encrypted, and never sends the encrypted form out of the server. Someone
+who gets hold of a copy of the database or its backups cannot read your notes from it. The server itself holds the
+key, because it has to decrypt a note to show it to you, or to show a track's lyrics to the project. So this
+protects your notes on disk; it is not end-to-end encryption.
+
+<Aside>
+  Whoever runs your instance runs the server that holds the key. On an instance you do not run yourself, treat
+  your notes the way you would treat them in any other hosted app.
+</Aside>

@@ -1,0 +1,142 @@
+---
+/* How AI is used: in writing the code, in the app (not at all), and through
+   the MCP endpoint an AI client can connect to. The footer, the README and
+   the contributing docs all send readers here. Sources: the README's "How AI
+   is used"; `contributing/pull-requests.mdx`; for the app, the absence of any
+   AI or analytics dependency, `packages/dsp/rust/src/analysis/offline/`
+   (`key.rs`, `tempo.rs`), `apps/server/src/lib/pronunciation.ts` and
+   `thesaurus.ts`; for the endpoint, `apps/server/src/mcp/` and
+   `lib/env.ts`. Grey, like dit's page: the page is about the tooling, not
+   the music. */
+import Action from "@/components/marketing/Action.astro";
+import Close from "@/components/marketing/Close.astro";
+import Hunk from "@/components/marketing/Hunk.astro";
+import MastheadArt from "@/components/marketing/MastheadArt.astro";
+import PageHead from "@/components/marketing/PageHead.astro";
+import { coverArt } from "@/data/covers";
+import SiteLayout from "@/layouts/SiteLayout.astro";
+import { SITE } from "@/site";
+---
+
+<SiteLayout
+  title="How AI is used"
+  description="Most of Projammr is written by AI coding agents under one person's direction and review. The app itself calls no AI service."
+  art={coverArt("mono")}
+>
+  <MastheadArt slot="atmosphere" cover="mono" />
+
+  <PageHead
+    title="How AI is used."
+    lede="Most of Projammr is written by AI coding agents, under one person's direction and review. The app itself calls no AI service, and an AI client reaches your data only if you connect one. This page says exactly what that means, so you can decide before you rely on it."
+  />
+
+  <Hunk
+    id="code"
+    title="AI agents write most of it. One person directs it and reviews it."
+    lines={[
+      {
+        sign: "+",
+        text: "AI coding agents write most of what is in the repository: the code, the tests, the docs and this site.",
+      },
+      {
+        sign: "+",
+        text: "They also write the implementation plans, the issue descriptions and the first pass of code review.",
+      },
+      {
+        sign: "+",
+        text: "One person sets the direction, settles the design questions, approves each plan before its code is written, and reads and merges every pull request.",
+      },
+      {
+        sign: "+",
+        text: "Lint, typecheck, build and tests run on every pull request and every push to the main branch.",
+      },
+      {
+        sign: "~",
+        text: "Small fixes go straight to the main branch without a pull request, and a large pull request does not always get a line-by-line read.",
+      },
+      {
+        sign: "~",
+        text: "So assume any line was written by an AI, and do not assume a person has read it.",
+      },
+    ]}
+    link={{
+      href: "/docs/contributing/pull-requests/",
+      label: "Pull requests, and how AI is part of them",
+    }}
+  />
+
+  <Hunk
+    id="app"
+    title="The app itself never calls an AI service."
+    lines={[
+      {
+        sign: "+",
+        text: "Key and tempo are found by signal processing on your server: key profiles and beat tracking, not a trained model.",
+      },
+      {
+        sign: "+",
+        text: "Rhymes come from the CMU Pronouncing Dictionary and synonyms from WordNet, both bundled with the server.",
+      },
+      {
+        sign: "+",
+        text: "Loudness, spectra and waveforms are measured by the app's own code, on your server and in your browser.",
+      },
+      { sign: "−", text: "Calls to an AI or machine-learning service." },
+      { sign: "−", text: "Telemetry and analytics." },
+    ]}
+  />
+
+  <Hunk
+    id="mcp"
+    title="An AI client can work in your projects, if you let it."
+    lines={[
+      {
+        sign: "+",
+        text: "The server has a Model Context Protocol endpoint, /api/mcp, that an AI client you choose (Claude Code, for one) can connect to.",
+      },
+      {
+        sign: "+",
+        text: "You sign in and consent through OAuth, granting read access, or read and write.",
+      },
+      {
+        sign: "+",
+        text: "With read, it can list and search your projects, tracks, collections and sessions, and read your notes and lyrics.",
+      },
+      {
+        sign: "+",
+        text: "With write, it can also change them: statuses, running orders, notes, lyrics and audio versions.",
+      },
+      {
+        sign: "~",
+        text: "Notes and lyrics reach the client unencrypted, because reading them is what you granted.",
+      },
+      {
+        sign: "~",
+        text: "It is rate-limited per person, and a guest account cannot use it.",
+      },
+      {
+        sign: "~",
+        text: "It is on when your server's public address is HTTPS or on the same machine. MCP_DISABLED=1 turns it off.",
+      },
+      { sign: "−", text: "A model of Projammr's own." },
+    ]}
+  />
+
+  <Close
+    id="choice"
+    title="If AI-written code rules Projammr out for you, that is a fair call."
+  >
+    <p class="max-w-(--measure) text-lead text-pretty text-ink-soft">
+      People have their reasons for not using or not trusting code an AI wrote,
+      and many of them are sound. The source is there to read before you decide.
+    </p>
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <Action href={SITE.repository} variant="ghost">
+        Source on GitHub
+      </Action>
+      <Action href="/docs/contributing/" variant="quiet">
+        Contributing
+      </Action>
+    </div>
+  </Close>
+</SiteLayout>

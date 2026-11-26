@@ -1,0 +1,1 @@
+ALTER TABLE "sharelinks" ADD COLUMN "revoked_at" timestamp;

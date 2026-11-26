@@ -1,0 +1,94 @@
+---
+/* One claim about the product, set as a hunk of a save-to-save diff: a hunk
+   header counting its lines, the claim, the lines that back it (`HunkLine`),
+   a way into the docs, and the proof beside it: real gear or a real
+   screenshot, passed as the default slot. The claim names the hunk, so the
+   header carries only the counts; it is drawn for the eye, and the lines
+   themselves are what a screen reader hears. A `−` line is what the product
+   deliberately leaves out. The lines tick in as they scroll into view
+   (site.css, `.hunk-line`). */
+import { LABEL } from "@workspace/ui/lib/shell";
+
+import Action from "@/components/marketing/Action.astro";
+import Band from "@/components/marketing/Band.astro";
+import HunkLine from "@/components/marketing/HunkLine.astro";
+import {
+  HUNK_SIGNS,
+  SIGN_MARK,
+  type HunkSign,
+} from "@/components/marketing/hunk-signs";
+import type { CoverKey } from "@/data/covers";
+
+type Props = {
+  /** The anchor the hunk can be linked to, and the id its heading builds on. */
+  id: string;
+  title: string;
+  lines: { sign: HunkSign; text: string }[];
+  link?: { href: string; label: string };
+  cover?: CoverKey;
+  /** `split` puts the proof beside the claim and its lines. `stack` sets the
+   * claim beside its lines, at the next step of the type scale, and runs the
+   * proof the full width of the page under them: the shape for proof that
+   * needs the room, and for a hunk with no proof at all. */
+  layout?: "split" | "stack";
+};
+
+const { id, title, lines, link, cover } = Astro.props;
+
+const count = (sign: HunkSign) =>
+  lines.filter((line) => line.sign === sign).length;
+const counts = HUNK_SIGNS.map((sign) => ({ sign, n: count(sign) })).filter(
+  ({ n }) => n > 0
+);
+
+const headingId = `${id}-title`;
+const hasProof = Astro.slots.has("default");
+const layout = hasProof ? (Astro.props.layout ?? "split") : "stack";
+---
+
+<Band id={id} cover={cover} labelledby={headingId} class="py-24 phone:py-16">
+  <div class:list={["hunk", `hunk--${layout}`]}>
+    <p
+      aria-hidden="true"
+      class:list={[
+        LABEL,
+        "hunk__head flex gap-2 border-b border-rule pb-3 text-ink-soft tabular-nums",
+      ]}
+    >
+      <span>@@</span>
+      {counts.map(({ sign, n }) => (
+        <span class={SIGN_MARK[sign]}>
+          {sign}
+          {n}
+        </span>
+      ))}
+      <span>@@</span>
+    </p>
+    <h2
+      id={headingId}
+      class:list={[
+        "hunk__title tracking-[-0.02em] text-balance text-ink",
+        layout === "stack"
+          ? "max-w-[20ch] text-title/[1.1] phone:text-subtitle/[1.2]"
+          : "max-w-[24ch] text-subtitle/[1.2] phone:text-section/[1.25]",
+      ]}
+    >
+      {title}
+    </h2>
+    <ul class="hunk-lines hunk__lines flex max-w-(--measure) flex-col gap-2.5">
+      {lines.map((line, n) => (
+        <HunkLine {...line} n={n} />
+      ))}
+    </ul>
+    {link && (
+      <Action href={link.href} variant="quiet" class="hunk__link self-start">
+        {link.label}
+      </Action>
+    )}
+    {hasProof && (
+      <div class="hunk__proof min-w-0">
+        <slot />
+      </div>
+    )}
+  </div>
+</Band>

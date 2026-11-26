@@ -1,0 +1,125 @@
+---
+title: Authentication
+description: Sign a script in with a bearer token, or call the API from a browser with the session cookie.
+sidebar:
+  order: 2
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+A script signs in with an account's email and password and gets back a token, then sends that token with every
+request. A browser does the same thing with a cookie. Both are sessions of the same account, so a script can do
+exactly what that account can do in the app, and nothing more.
+
+## Two kinds of session
+
+- **Bearer tokens** are for anything that is not a browser: a script, a cron job, the scanner. The token goes in an
+  `Authorization: Bearer …` header on every request.
+- **The session cookie** is what the web app uses. Signing in to the app sets `better-auth.session_token`, an
+  `HttpOnly` cookie, and the browser sends it with every request to your instance.
+
+Sign-in, sign-out and sessions are handled by [Better Auth](https://better-auth.com), mounted at `/api/auth`. Its
+routes are listed in the auth endpoint reference, beside the Projammr API's.
+
+## Get a token for a script
+
+<Steps>
+
+1. Sign in with the account's email and password:
+
+   ```bash
+   curl -s -X POST https://music.example.com/api/auth/sign-in/email \
+     -H 'content-type: application/json' \
+     -d '{"email":"you@example.com","password":"your password"}'
+   ```
+
+   The answer carries the token at the top level, beside the user it belongs to:
+
+   ```json
+   {
+     "redirect": false,
+     "token": "d99RY2kFNvo4v2Ot7kpoGupNfKz7uazi",
+     "user": { "id": "LGIJ4XCmTnDj0u3m2BKRiOIyQn0RACFJ", "name": "Your Name", "email": "you@example.com" }
+   }
+   ```
+
+   The same token is also sent in a `set-auth-token` response header, in a signed form. Either value works.
+
+2. Keep it somewhere your script can read it, and send it with each request:
+
+   ```bash
+   export PROJAMMR_TOKEN='d99RY2kFNvo4v2Ot7kpoGupNfKz7uazi'
+
+   curl -s https://music.example.com/api/me \
+     -H "Authorization: Bearer $PROJAMMR_TOKEN"
+   ```
+
+3. Check what the token is signed in as, and when it expires:
+
+   ```bash
+   curl -s https://music.example.com/api/auth/get-session \
+     -H "Authorization: Bearer $PROJAMMR_TOKEN"
+   ```
+
+   The answer is `{ "session": {…}, "user": {…} }`; `session.expiresAt` is when the token stops working.
+
+</Steps>
+
+A token is a session like any other. A new one expires seven days after sign-in (`session.expiresAt` says when
+yours does), and a request made with an expired or signed-out token answers `401`. When that happens, sign in
+again for a new one.
+
+To end a session before it expires, sign it out:
+
+```bash
+curl -s -X POST https://music.example.com/api/auth/sign-out \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN"
+```
+
+<Aside type="caution">
+  A token is as good as the account's password for as long as it lasts. Keep it out of shell history and source
+  control, and sign it out when the script no longer needs it.
+</Aside>
+
+### Which account to use
+
+A script acts as the account it signs in with, with that account's project roles. To give a script less than your
+own access, create a separate account for it, invite it to the projects it needs, and give it the role it needs
+there: viewer to read, editor to change things.
+
+A share-page guest session (the anonymous session the share page creates so a listener can comment) is not an
+account. The API answers it `403` with `"This needs an account"` everywhere outside the share routes.
+
+## Sign-in limits
+
+Signing in is metered twice:
+
+- **Per address.** `POST /api/auth/sign-in/email` allows a burst of 10 requests from one client address, refilling
+  at 20 a minute. Past that it answers `429` with a `Retry-After` header in seconds.
+- **Per account.** Five failed sign-ins within 15 minutes are free. Each failure after that locks the email
+  address's sign-in, for one minute at first and then doubling with every further failure, up to an hour, whatever
+  address the attempts come from. A locked address answers `429` with
+  `"Too many failed sign-in attempts. Try again later."` and a `Retry-After` header, whether or not it belongs to an
+  account, so the lock does not reveal which accounts exist. A successful sign-in clears it.
+
+A script that signs in once and reuses its token for days never comes near either limit.
+
+## Calling the API from a browser
+
+A page served from your instance itself, such as the web app, needs nothing extra: the browser sends the session
+cookie with every same-origin request.
+
+A page on another origin (a dashboard on a different host, say) can only use the cookie if your instance trusts
+that origin. The API answers cross-origin requests with CORS headers, credentials included, only for its trusted
+origins: the ones listed in [its `TRUSTED_ORIGINS` setting](/docs/self-hosting/configuration/) or, when that is empty, the web app's own address
+(`CLIENT_URL`). A list replaces that default rather than adding to it, so include the web app's own address in it.
+
+The API also refuses cross-site form posts outright. A request that carries the session cookie, changes something,
+and uses a content type a plain HTML form can send (`multipart/form-data`, `application/x-www-form-urlencoded`,
+`text/plain`, or none) must come from a trusted origin. From anywhere else it answers `403` with
+`"Cross-site request refused"` before it reaches the route. JSON requests are covered by CORS instead, because a
+browser will not send one cross-origin without asking first.
+
+Requests with an `Authorization: Bearer` header are exempt from that check, and so is any request without a
+cookie. Neither carries a credential a browser could attach on another site's behalf, so there is nothing for the
+check to protect. That is why a script with a token never meets it.

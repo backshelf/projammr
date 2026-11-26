@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-23T00:00:00Z",
+  "title": "Design System: Projammr",
+  "extensions": {
+    "colorMeta": {
+      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "oklch(0.995 0 0)", "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.26 0 0)", "oklch(0.37 0 0)", "oklch(0.49 0 0)", "oklch(0.6 0 0)", "oklch(0.72 0 0)", "oklch(0.83 0 0)", "oklch(0.95 0 0)"] },
+      "paper-sunk": { "role": "neutral", "displayName": "Sunk Paper", "canonical": "oklch(0.965 0 0)", "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.26 0 0)", "oklch(0.37 0 0)", "oklch(0.49 0 0)", "oklch(0.6 0 0)", "oklch(0.72 0 0)", "oklch(0.83 0 0)", "oklch(0.95 0 0)"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(0.09 0 0)", "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.26 0 0)", "oklch(0.37 0 0)", "oklch(0.49 0 0)", "oklch(0.6 0 0)", "oklch(0.72 0 0)", "oklch(0.83 0 0)", "oklch(0.95 0 0)"] },
+      "ink-soft": { "role": "neutral", "displayName": "Soft Ink", "canonical": "oklch(0.44 0 0)" },
+      "ink-faint": { "role": "neutral", "displayName": "Faint Ink", "canonical": "oklch(0.63 0 0)" },
+      "rule": { "role": "neutral", "displayName": "Hairline", "canonical": "oklch(0.89 0 0)" },
+      "rule-strong": { "role": "neutral", "displayName": "Strong Hairline", "canonical": "oklch(0.78 0 0)" },
+      "glass": { "role": "neutral", "displayName": "Glass", "canonical": "oklch(1 0 0 / 62%)" },
+      "glass-edge": { "role": "neutral", "displayName": "Glass Edge", "canonical": "oklch(0.89 0 0)" },
+      "paper-dark": { "role": "neutral", "displayName": "Paper (dark)", "canonical": "oklch(0.135 0 0)" },
+      "paper-sunk-dark": { "role": "neutral", "displayName": "Sunk Paper (dark)", "canonical": "oklch(0.105 0 0)" },
+      "ink-dark": { "role": "neutral", "displayName": "Ink (dark)", "canonical": "oklch(0.99 0 0)" },
+      "ink-soft-dark": { "role": "neutral", "displayName": "Soft Ink (dark)", "canonical": "oklch(0.68 0 0)" },
+      "ink-faint-dark": { "role": "neutral", "displayName": "Faint Ink (dark)", "canonical": "oklch(0.48 0 0)" },
+      "rule-dark": { "role": "neutral", "displayName": "Hairline (dark)", "canonical": "oklch(1 0 0 / 11%)" },
+      "rule-strong-dark": { "role": "neutral", "displayName": "Strong Hairline (dark)", "canonical": "oklch(1 0 0 / 22%)" },
+      "glass-dark": { "role": "neutral", "displayName": "Glass (dark)", "canonical": "oklch(0.2 0 0 / 55%)" },
+      "art-fallback": { "role": "primary", "displayName": "Artwork Accent (grayscale fallback)", "canonical": "oklch(0.45 0 0)", "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.26 0 0)", "oklch(0.37 0 0)", "oklch(0.49 0 0)", "oklch(0.6 0 0)", "oklch(0.72 0 0)", "oklch(0.83 0 0)", "oklch(0.95 0 0)"] },
+      "art-glow-fallback": { "role": "primary", "displayName": "Artwork Glow (grayscale fallback)", "canonical": "oklch(0.65 0 0)" },
+      "art-fallback-dark": { "role": "primary", "displayName": "Artwork Accent (dark fallback)", "canonical": "oklch(0.8 0 0)" },
+      "art-glow-fallback-dark": { "role": "primary", "displayName": "Artwork Glow (dark fallback)", "canonical": "oklch(0.38 0 0)" },
+      "warn": { "role": "secondary", "displayName": "Amber Warning", "canonical": "oklch(0.58 0.16 65)", "tonalRamp": ["oklch(0.15 0.05 65)", "oklch(0.26 0.09 65)", "oklch(0.37 0.12 65)", "oklch(0.49 0.15 65)", "oklch(0.6 0.16 65)", "oklch(0.72 0.15 65)", "oklch(0.83 0.1 65)", "oklch(0.95 0.04 65)"] },
+      "danger": { "role": "secondary", "displayName": "Signal Red", "canonical": "oklch(0.52 0.22 27)", "tonalRamp": ["oklch(0.15 0.06 27)", "oklch(0.26 0.11 27)", "oklch(0.37 0.16 27)", "oklch(0.49 0.2 27)", "oklch(0.6 0.2 27)", "oklch(0.72 0.15 27)", "oklch(0.83 0.09 27)", "oklch(0.95 0.03 27)"] },
+      "warn-dark": { "role": "secondary", "displayName": "Amber Warning (dark)", "canonical": "oklch(0.78 0.15 70)" },
+      "danger-dark": { "role": "secondary", "displayName": "Signal Red (dark)", "canonical": "oklch(0.7 0.19 22)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The masthead <h1> only, in halftone Redaction 35." },
+      "headline": { "displayName": "Headline", "purpose": "Compact page titles: PageHead, compact masthead, phones." },
+      "title": { "displayName": "Title", "purpose": "Headings on pages with no entity behind them (sign-in, invite)." },
+      "stat": { "displayName": "Stat", "purpose": "The one stat figure in the rail and the sidebar brand, in clean Redaction." },
+      "lead": { "displayName": "Lead", "purpose": "Emphasised body." },
+      "body": { "displayName": "Body", "purpose": "Document default: data, table cells, bylines, forms." },
+      "prose": { "displayName": "Prose", "purpose": "Notes and lyrics inside .doc at a 68ch measure." },
+      "small": { "displayName": "Small", "purpose": "Subheads, secondary body, comment bodies, button text." },
+      "section-label": { "displayName": "Section label", "purpose": "Uppercase tracked section heads (SectionHead, CollapsibleSection)." },
+      "label": { "displayName": "Label", "purpose": "Uppercase tracked eyebrows, rail labels, table headers, chips, timestamps." },
+      "claim": { "displayName": "Claim", "purpose": "Public website: a hunk's claim <h2> in the body face, tracked -0.02em; a step down (1.75rem at 1.2) in a split hunk and on the Close line." }
+    },
+    "shadows": [
+      { "name": "overlay-lift", "value": "0 24px 60px -20px oklch(0 0 0 / 28%)", "purpose": "The one surface shadow, for dialogs and popovers via OVERLAY_SURFACE; oklch(0 0 0 / 65%) in dark." },
+      { "name": "menu-lift", "value": "0 18px 44px -16px oklch(0 0 0 / 30%)", "purpose": "Dropdown menus over a blurred popover fill." },
+      { "name": "on-art-text", "value": "0 1px 3px color-mix(in oklab, var(--paper) 70%, transparent)", "purpose": "Text shadow for type set over an art field." }
+    ],
+    "motion": [
+      { "name": "dur-instant", "value": "80ms", "purpose": "The hand's own feedback (motion-ink)." },
+      { "name": "dur-quick", "value": "140ms", "purpose": "A reveal, a menu (motion-reveal)." },
+      { "name": "dur-move", "value": "240ms", "purpose": "A toggle, a chip, a status (motion-move)." },
+      { "name": "dur-settle", "value": "420ms", "purpose": "A surface taking its place; the public website's band relight." },
+      { "name": "dur-arrive", "value": "700ms", "purpose": "A page on navigation." },
+      { "name": "dur-bloom", "value": "1100ms", "purpose": "The masthead art on first load." },
+      { "name": "ease-arrive", "value": "cubic-bezier(0.2, 0, 0, 1)", "purpose": "Everything arriving or answering; the hunk tick-in." },
+      { "name": "ease-leave", "value": "cubic-bezier(0.3, 0, 0.8, 0.15)", "purpose": "Surfaces leaving, faster and smaller than they came." },
+      { "name": "status-shift", "value": "420ms", "purpose": "Status colour and pie changes." },
+      { "name": "art-drift", "value": "28s linear infinite", "purpose": "Ambient masthead art drift; off on phones and under reduced motion." },
+      { "name": "wash-drift", "value": "67s / 103s linear infinite", "purpose": "Ambient page-wash lobes on coprime loops." },
+      { "name": "hunk-line-in", "value": "view timeline, range cover calc(2% + n × 3%) to cover calc(14% + n × 3%)", "purpose": "Public website: a hunk's lines draw in from their gutter marks as the list scrolls through the viewport; only under @supports (animation-timeline: view()) and prefers-reduced-motion: no-preference, resting on the full line." }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "<768px" },
+      { "name": "stack", "value": "≤1180px" },
+      { "name": "ultrawide", "value": "≥1800px" },
+      { "name": "fine", "value": "(hover: hover) and (pointer: fine)" },
+      { "name": "coarse", "value": "(pointer: coarse)" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ink-filled confirm action; the only filled button. Presses 1px on click.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; height: 1.75rem; padding: 0 0.5rem; border: 1px solid transparent; border-radius: 0.36rem; background: var(--ink, oklch(0.09 0 0)); color: var(--paper, oklch(0.995 0 0)); font: 500 0.75rem/1.625 'Spline Sans Mono', ui-monospace, monospace; cursor: pointer; transition: background-color 0.15s cubic-bezier(0.2, 0, 0, 1); } .ds-btn-primary:hover { background: color-mix(in oklab, var(--ink, oklch(0.09 0 0)) 80%, transparent); } .ds-btn-primary:focus-visible { outline: none; border-color: var(--art, oklch(0.45 0 0)); box-shadow: 0 0 0 2px color-mix(in oklab, var(--art, oklch(0.45 0 0)) 30%, transparent); } .ds-btn-primary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Quiet secondary action; a muted plate appears on hover.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; height: 1.75rem; padding: 0 0.5rem; border: 1px solid transparent; border-radius: 0.36rem; background: transparent; color: var(--ink, oklch(0.09 0 0)); font: 500 0.75rem/1.625 'Spline Sans Mono', ui-monospace, monospace; cursor: pointer; transition: background-color 0.15s cubic-bezier(0.2, 0, 0, 1); } .ds-btn-ghost:hover { background: var(--paper-sunk, oklch(0.965 0 0)); } .ds-btn-ghost:focus-visible { outline: none; border-color: var(--art, oklch(0.45 0 0)); box-shadow: 0 0 0 2px color-mix(in oklab, var(--art, oklch(0.45 0 0)) 30%, transparent); } .ds-btn-ghost:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Play Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button-play",
+      "description": "Bare filled play mark: ink at rest, artwork accent on hover. Never filled or circular.",
+      "html": "<button class=\"ds-play\" aria-label=\"Play\"><svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"currentColor\"><path d=\"M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z\"/></svg></button>",
+      "css": ".ds-play { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 0.27rem; background: transparent; color: var(--ink, oklch(0.09 0 0)); cursor: pointer; transition: color 0.12s; } .ds-play:hover { color: var(--art, oklch(0.45 0 0)); } .ds-play:focus-visible { outline: 2px solid var(--art, oklch(0.45 0 0)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Hairline field with a faint tint; focus shifts the border to the artwork accent.",
+      "html": "<input class=\"ds-input\" placeholder=\"Track title\" />",
+      "css": ".ds-input { height: 1.75rem; width: 16rem; padding: 0.125rem 0.5rem; border: 1px solid var(--rule, oklch(0.89 0 0)); border-radius: 0.36rem; background: color-mix(in oklab, var(--rule, oklch(0.89 0 0)) 20%, transparent); color: var(--ink, oklch(0.09 0 0)); font: 400 0.75rem/1.625 'Spline Sans Mono', ui-monospace, monospace; transition: border-color 0.15s, box-shadow 0.15s; } .ds-input::placeholder { color: var(--ink-soft, oklch(0.44 0 0)); } .ds-input:focus-visible { outline: none; border-color: var(--art, oklch(0.45 0 0)); box-shadow: 0 0 0 2px color-mix(in oklab, var(--art, oklch(0.45 0 0)) 30%, transparent); }"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "chip",
+      "refersTo": "status-pill",
+      "description": "The user's status colour at full strength with a conic pie dot showing progress.",
+      "html": "<span class=\"ds-status-pill\" style=\"--status: oklch(0.62 0.14 250); --pct: 60\">Mixing</span>",
+      "css": ".ds-status-pill { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.875rem 0.375rem 0.4375rem; border-radius: 9999px; background: var(--status); color: var(--paper, oklch(0.995 0 0)); font: 400 0.75rem/1 'Spline Sans Mono', ui-monospace, monospace; white-space: nowrap; } .ds-status-pill::before { content: ''; width: 0.875rem; height: 0.875rem; border-radius: 9999px; background: conic-gradient(currentColor 0 calc(var(--pct) * 1%), color-mix(in oklab, currentColor 28%, transparent) calc(var(--pct) * 1%) 100%); }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "status-pill",
+      "description": "The quiet table and menu form: 18% tint, 35% border, same pie.",
+      "html": "<span class=\"ds-status-chip\" style=\"--status: oklch(0.62 0.14 250); --pct: 60\">Mixing</span>",
+      "css": ".ds-status-chip { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.125rem 0.5rem 0.125rem 0.3125rem; border: 1px solid color-mix(in oklab, var(--status) 35%, transparent); border-radius: 9999px; background: color-mix(in oklab, var(--status) 18%, transparent); color: var(--ink, oklch(0.09 0 0)); font: 400 0.6875rem/1.2 'Spline Sans Mono', ui-monospace, monospace; white-space: nowrap; } .ds-status-chip::before { content: ''; width: 0.625rem; height: 0.625rem; border-radius: 9999px; background: conic-gradient(var(--status) 0 calc(var(--pct) * 1%), color-mix(in oklab, var(--status) 28%, transparent) calc(var(--pct) * 1%) 100%); }"
+    },
+    {
+      "name": "Section Head",
+      "kind": "custom",
+      "refersTo": "section-label",
+      "description": "Tracked-caps section heading with a count; no rule, no card. The heading is the structure.",
+      "html": "<h2 class=\"ds-section-head\">Tracks <span class=\"ds-section-count\">12</span></h2>",
+      "css": ".ds-section-head { margin: 0; display: flex; align-items: baseline; gap: 0.5rem; font: 400 0.75rem/1.15 'Departure Mono', ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft, oklch(0.44 0 0)); } .ds-section-count { color: var(--ink-faint, oklch(0.63 0 0)); }"
+    },
+    {
+      "name": "Rail Block",
+      "kind": "custom",
+      "refersTo": "rail",
+      "description": "Glass rail block: tracked label over a value, separated from the next by a hairline.",
+      "html": "<div class=\"ds-rail\"><div class=\"ds-rail-block\"><div class=\"ds-rail-label\">Key · BPM</div><div class=\"ds-rail-value\">F minor · 124</div></div><div class=\"ds-rail-block\"><div class=\"ds-rail-label\">Updated</div><div class=\"ds-rail-value ds-rail-empty\">Not set</div></div></div>",
+      "css": ".ds-rail { width: 20rem; padding: 1.25rem; background: var(--glass, oklch(1 0 0 / 62%)); border-left: 1px solid var(--glass-edge, oklch(0.89 0 0)); backdrop-filter: blur(20px) saturate(1.2); } .ds-rail-block + .ds-rail-block { margin-top: 1.125rem; padding-top: 1.125rem; border-top: 1px solid var(--rule, oklch(0.89 0 0)); } .ds-rail-label { margin-bottom: 0.375rem; font: 400 0.6875rem/1.2 'Departure Mono', ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft, oklch(0.44 0 0)); } .ds-rail-value { font: 400 0.875rem/1.5 'Spline Sans Mono', ui-monospace, monospace; color: var(--ink, oklch(0.09 0 0)); } .ds-rail-empty { font-style: italic; color: var(--ink-faint, oklch(0.63 0 0)); }"
+    },
+    {
+      "name": "Loudness Scale",
+      "kind": "custom",
+      "refersTo": "loudness-scale",
+      "description": "Signature meter: −28 to 0 LUFS, dotted −14 reference at centre, 2px accent ticks, ink caret under the value.",
+      "html": "<div class=\"ds-loud\"><div class=\"ds-loud-read\">−9.8<span>LUFS integrated</span></div><div class=\"ds-loud-scale\"><i class=\"ds-loud-ref\"></i><i class=\"ds-loud-tick\" style=\"left:62%\"></i><i class=\"ds-loud-tick\" style=\"left:66%\"></i><i class=\"ds-loud-tick\" style=\"left:65%\"></i><i class=\"ds-loud-caret\" style=\"left:65%\"></i></div></div>",
+      "css": ".ds-loud { width: 16rem; } .ds-loud-read { font: 400 1.5rem/1 Redaction, Georgia, serif; color: var(--ink, oklch(0.09 0 0)); } .ds-loud-read span { margin-left: 0.5rem; font: 400 0.6875rem/1 'Spline Sans Mono', ui-monospace, monospace; color: var(--ink-soft, oklch(0.44 0 0)); } .ds-loud-scale { position: relative; height: 1rem; margin: 0.75rem 0 0.5rem; border-bottom: 1px solid var(--rule-strong, oklch(0.78 0 0)); } .ds-loud-ref { position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px dotted var(--ink-faint, oklch(0.63 0 0)); } .ds-loud-tick { position: absolute; top: 0.125rem; bottom: 0; width: 2px; background: var(--art, oklch(0.45 0 0)); } .ds-loud-caret { position: absolute; bottom: -0.4rem; width: 0; height: 0; margin-left: -0.25rem; border: 0.25rem solid transparent; border-top: 0; border-bottom: 0.3rem solid var(--ink, oklch(0.09 0 0)); }"
+    },
+    {
+      "name": "Waveform",
+      "kind": "custom",
+      "refersTo": "track-waveform",
+      "description": "Square 2px bars spaced to fill; played bars take the artwork accent.",
+      "html": "<div class=\"ds-wave\"><i style=\"height:30%\"></i><i style=\"height:55%\"></i><i style=\"height:80%\"></i><i style=\"height:62%\"></i><i style=\"height:90%\"></i><i style=\"height:45%\"></i><i class=\"ds-unplayed\" style=\"height:70%\"></i><i class=\"ds-unplayed\" style=\"height:95%\"></i><i class=\"ds-unplayed\" style=\"height:58%\"></i><i class=\"ds-unplayed\" style=\"height:40%\"></i><i class=\"ds-unplayed\" style=\"height:66%\"></i><i class=\"ds-unplayed\" style=\"height:28%\"></i></div>",
+      "css": ".ds-wave { display: flex; align-items: center; justify-content: space-between; width: 16rem; height: 3rem; } .ds-wave i { display: block; width: 2px; background: var(--art, oklch(0.45 0 0)); } .ds-wave i.ds-unplayed { background: var(--rule-strong, oklch(0.78 0 0)); }"
+    },
+    {
+      "name": "Hunk",
+      "kind": "custom",
+      "refersTo": "claim",
+      "description": "Public website signature: one claim as a hunk of a save-to-save diff. Counts-only header, a body-face claim, gutter-marked lines that tick in on scroll, a quiet link into the docs.",
+      "html": "<section class=\"ds-hunk\"><p class=\"ds-hunk-head\" aria-hidden=\"true\"><span>@@</span><span class=\"ds-add\">+2</span><span class=\"ds-change\">~1</span><span class=\"ds-remove\">−1</span><span>@@</span></p><h2 class=\"ds-hunk-title\">The cover art lights the page.</h2><ul class=\"ds-hunk-lines\"><li style=\"--n: 0\"><span class=\"ds-mark ds-add\" aria-hidden=\"true\">+</span><span class=\"ds-text\">A project, collection or track takes its colour from its own cover.</span></li><li style=\"--n: 1\"><span class=\"ds-mark ds-add\" aria-hidden=\"true\">+</span><span class=\"ds-text\">The server reads the accent once, when the artwork is uploaded.</span></li><li style=\"--n: 2\"><span class=\"ds-mark ds-change\" aria-hidden=\"true\">~</span><span class=\"ds-text-soft\">A track with no cover borrows its collection's, then its project's.</span></li><li style=\"--n: 3\"><span class=\"ds-mark ds-remove\" aria-hidden=\"true\">−</span><span class=\"ds-text-removed\">A brand colour. With no artwork anywhere, the page stays grey.</span></li></ul><a class=\"ds-hunk-link\" href=\"#\">Artwork and colour <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12l14 0\"/><path d=\"M13 18l6 -6\"/><path d=\"M13 6l6 6\"/></svg></a></section>",
+      "css": ".ds-hunk { display: grid; gap: 1.5rem; max-width: 40rem; } .ds-hunk-head { margin: 0; display: flex; gap: 0.5rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--rule, oklch(0.89 0 0)); font: 400 0.6875rem/1.2 'Departure Mono', ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase; font-variant-numeric: tabular-nums; color: var(--ink-soft, oklch(0.44 0 0)); } .ds-hunk-title { margin: 0; max-width: 20ch; font: 400 2.5rem/1.1 'Spline Sans Mono', ui-monospace, monospace; letter-spacing: -0.02em; text-wrap: balance; color: var(--ink, oklch(0.09 0 0)); } .ds-hunk-lines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.625rem; max-width: 68ch; } .ds-hunk-lines li { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr); font: 400 1rem/1.55 'Spline Sans Mono', ui-monospace, monospace; } .ds-mark { font-family: 'Departure Mono', ui-monospace, monospace; } .ds-add { color: var(--art, oklch(0.45 0 0)); } .ds-change { color: var(--ink-soft, oklch(0.44 0 0)); } .ds-remove { color: var(--ink-faint, oklch(0.63 0 0)); } .ds-text { color: var(--ink, oklch(0.09 0 0)); } .ds-text-soft { color: var(--ink-soft, oklch(0.44 0 0)); } .ds-text-removed { color: var(--ink-soft, oklch(0.44 0 0)); text-decoration: line-through; text-decoration-color: var(--ink-faint, oklch(0.63 0 0)); } .ds-hunk-link { justify-self: start; display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.5rem; border-radius: 0.27rem; font: 400 0.875rem/1.5 'Spline Sans Mono', ui-monospace, monospace; color: var(--ink-soft, oklch(0.44 0 0)); text-decoration: none; transition: color 80ms cubic-bezier(0.2, 0, 0, 1); } .ds-hunk-link svg { transition: translate 240ms cubic-bezier(0.2, 0, 0, 1); } .ds-hunk-link:hover { color: var(--ink, oklch(0.09 0 0)); } .ds-hunk-link:hover svg { translate: 2px 0; } .ds-hunk-link:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in oklab, var(--art, oklch(0.45 0 0)) 30%, transparent); } @keyframes ds-hunk-line-in { from { opacity: 0; clip-path: inset(0 100% 0 0); translate: -0.5rem 0; } } @supports (animation-timeline: view()) { @media (prefers-reduced-motion: no-preference) { .ds-hunk-lines { view-timeline-name: --ds-hunk-lines; } .ds-hunk-lines li { animation: ds-hunk-line-in cubic-bezier(0.2, 0, 0, 1) both; animation-timeline: --ds-hunk-lines; animation-range: cover calc(2% + var(--n, 0) * 3%) cover calc(14% + var(--n, 0) * 3%); } } }"
+    },
+    {
+      "name": "Site Primary Action",
+      "kind": "button",
+      "refersTo": "site-action-primary",
+      "description": "Public website call to action: the app's ink button a size up (2.5rem, text-body). Ghost is its --rule-strong hairline sibling with a 4% ink hover plate.",
+      "html": "<a class=\"ds-site-action\" href=\"#\">Self-host it</a>",
+      "css": ".ds-site-action { display: inline-flex; align-items: center; justify-content: center; gap: 0.625rem; min-height: 2.5rem; padding: 0 1rem; border-radius: 0.36rem; background: var(--ink, oklch(0.09 0 0)); color: var(--paper, oklch(0.995 0 0)); font: 400 0.875rem/1.5 'Spline Sans Mono', ui-monospace, monospace; text-decoration: none; white-space: nowrap; transition: background-color 80ms cubic-bezier(0.2, 0, 0, 1); } .ds-site-action:hover { background: color-mix(in oklab, var(--ink, oklch(0.09 0 0)) 80%, transparent); } .ds-site-action:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in oklab, var(--art, oklch(0.45 0 0)) 30%, transparent); } .ds-site-action:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Site Unavailable Action",
+      "kind": "button",
+      "refersTo": "site-action-ghost",
+      "description": "Public website: an action whose destination does not exist yet. The button shape on a dashed hairline, aria-disabled, with its reason in the faint label shape. Never a link to nowhere.",
+      "html": "<span class=\"ds-site-unavailable\" aria-disabled=\"true\">Hosted Solo <span class=\"ds-site-soon\">Coming soon</span></span>",
+      "css": ".ds-site-unavailable { display: inline-flex; align-items: center; justify-content: center; gap: 0.625rem; min-height: 2.5rem; padding: 0 1rem; border: 1px dashed var(--rule-strong, oklch(0.78 0 0)); border-radius: 0.36rem; color: var(--ink-soft, oklch(0.44 0 0)); font: 400 0.875rem/1.5 'Spline Sans Mono', ui-monospace, monospace; white-space: nowrap; cursor: default; } .ds-site-soon { font: 400 0.6875rem/1.2 'Departure Mono', ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint, oklch(0.63 0 0)); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Listening Room",
+    "overview": "Projammr is a dim room built around the record that is playing. The cover art is the only light source: blurred into the masthead, thrown across the page as a faint wash, tinting the player and the share page, and moving with the audio on the now-playing sheet. Everything else is the room's furniture: true-neutral paper and ink, fine grain, glass, and hairlines. It sits back so the music carries the page.\n\nThe furniture is precise. Data is set in a monospace face, labels are tracked caps in a pixel mono, and readouts behave like studio gear: a loudness meter with a caret and a dotted reference line, a status dot that fills like a pie, a waveform of square bars. The gear is modern and professional, never literal hardware. It feels warm rather than clinical because the display face is a halftone serif, the page carries grain, and the art drifts slowly behind the title.\n\nBoldness is spent in one place per page (the masthead on entity pages, the art field on the share page and the now-playing sheet); every other surface is quieter than stock shadcn. Structure encodes information: a rule, a heading, a chip or a badge appears because it says something.",
+    "keyCharacteristics": [
+      "Artwork is the only source of hue; with no artwork the room is pure grayscale.",
+      "True-neutral paper and ink with a wide range, in light and dark themes.",
+      "Four self-hosted faces, each with exactly one job; monospace is the document default.",
+      "Flat pages; depth comes from blurred art, the wash, grain and glass. Only overlays lift.",
+      "Studio-gear readouts (meters, carets, ticks, pies, waveforms) instead of charts and cards.",
+      "One orchestrated page-load reveal; ambient motion only where the art lives; everything respects `prefers-reduced-motion`.",
+      "One language across the client, dit, the share page and the public website."
+    ],
+    "rules": [
+      { "name": "The Borrowed Light Rule", "body": "There is no brand hue. A page with no artwork anywhere in its fallback chain is pure grayscale. The only non-artwork colours are user status and label colours, `--warn` and `--danger`.", "section": "colors" },
+      { "name": "The No Success Colour Rule", "body": "There is deliberately no green. Confirm actions are ink or art; a diff is not a warning, so it never uses `--warn` or `--danger`.", "section": "colors" },
+      { "name": "The Spine Names Rule", "body": "New code uses the spine names directly (`text-ink-soft`, not `text-muted-foreground`). The shadcn aliases exist for the library, not for us.", "section": "colors" },
+      { "name": "The Server Extracts Rule", "body": "Never compute the page accent from pixels in the browser. The one exception is the now-playing lava field, where `lib/cover-palette.ts` samples several distinct colours from the cover on a small canvas, because the server stores one accent and the field needs a handful.", "section": "colors" },
+      { "name": "The One Job Rule", "body": "Each face has exactly one job. Redaction 35 is only the page `<h1>`; Departure Mono is only labels, always tracked caps and never prose; Spline Sans Mono is everything else.", "section": "typography" },
+      { "name": "The Scale Only Rule", "body": "Use `text-micro`, `text-small`, `text-body`, `text-lead`, `text-section`, `text-subtitle`, `text-title` and `text-display`. Never `text-xs`, `text-sm`, `text-lg` or arbitrary `text-[…]` sizes; `text-micro` is the floor.", "section": "typography" },
+      { "name": "The Centred Measure Rule", "body": "Content sits in a centred, capped column; wide screens frame the page with margin rather than anchoring everything to the left edge. Only tables and settings panes opt out with `PAGE_WIDE`.", "section": "layout" },
+      { "name": "The One Phone Tier Rule", "body": "Say `stack:` or `phone:`, never a raw `max-[…px]:` width, and never build a band that is half phone, half desktop.", "section": "layout" },
+      { "name": "The Flat Room Rule", "body": "Surfaces are flat at rest. No shadow on cards, rows, buttons, sections or the rail; only overlays lift, and only with the overlay values.", "section": "elevation" },
+      { "name": "The Light, Not Bitmap Rule", "body": "The page wash is built from the extracted accent as gradients. Never blur the cover bitmap across the page: it leaves a dark block.", "section": "elevation" },
+      { "name": "The Single Seam Rule", "body": "Art and scrim end at the same edge, and the art's mask reaches zero before that edge, or the artwork reappears below the fold as a hard band.", "section": "elevation" },
+      { "name": "The Line Not Box Rule", "body": "If a group needs separating, use a heading or a hairline. A border that fully encloses content is reserved for overlays and inputs.", "section": "shapes" },
+      { "name": "The One Cover Per Band Rule", "body": "A band is lit by one cover, and its light fades out before both edges, so two hues never share a band or meet on a line between bands. A relight swaps the band's light for another; it never adds a second.", "section": "components" },
+      { "name": "The Real Gear Rule", "body": "A marketing page proves a claim with the app's own gear rendered to HTML over the demo catalogue, or a screenshot of it. Every raster the site ships is one of the four covers or one of those screenshots, its source recorded in `apps/web/CLAUDE.md`: no mockups, illustrations or browser frames.", "section": "components" }
+    ],
+    "dos": [
+      "**Do** use the spine tokens (`text-ink-soft`, `bg-paper-sunk`, `border-rule`) and the type scale (`text-micro` through `text-display`).",
+      "**Do** put anything label-shaped in `font-sub` tracked caps via `LABEL`, `EYEBROW`, `RailLabel` or `SectionHead`.",
+      "**Do** read artwork through `--art`, `--art-glow` and `--art-image`, and carry it with `ArtProvider`, `ArtSwatch` or `artVarsFromAccent`.",
+      "**Do** reuse the primitives in `packages/ui` and `apps/client/src/components/` before writing a new surface.",
+      "**Do** keep server components server: `SectionHead`, `RailBlock`, `Rows`, `MetadataItem`, `Masthead` and `PageHead` have no `\"use client\"`.",
+      "**Do** guard user colour with `getContrastColour()`.",
+      "**Do** make hover-revealed affordances also focus-revealed (`group-focus-within:opacity-100`) and put hover-only affordances behind `fine:`.",
+      "**Do** draw quantities as studio readouts (meters, ticks, carets, pies, waveforms) rather than charts in cards.",
+      "**Do** lift overlays only with `OVERLAY_SURFACE`.",
+      "**Do** use `motion-ink`/`motion-reveal`/`motion-move`/`motion-settle` on stateless primitives and `m` with `SPRING`/`FADE`/`LEAVE` everywhere React owns the state.",
+      "**Do** meet WCAG 2.2 AA: contrast on every theme and over art (`.on-art`), visible focus, and 44px touch targets.",
+      "**Do** render gear on a marketing page from `@workspace/ui` with no `client:` directive, add its file to `site.css`'s `@source` lines, and keep the page's motion in CSS."
+    ],
+    "donts": [
+      "**Don't** use `text-xs`, `text-sm`, `text-lg` or arbitrary `text-[…]` sizes; shadcn colour names in new code; Tailwind palette hues (`green-600`, `sky-500`, `bg-black/50`); `#hex`, `rgb()` or `oklch()` literals in components; or raw `max-[…px]:` widths where `stack:` or `phone:` says it.",
+      "**Don't** use `Separator` stacks, bordered cards, `shadow-lg`, or `rounded-lg` panels as section containers.",
+      "**Don't** build a generic SaaS dashboard: cards in grids, KPI tiles, brand-blue buttons, rounded shadowed panels.",
+      "**Don't** go skeuomorphic: literal knobs, brushed metal, fake LEDs or screws. The gear is modern, not a DAW skin.",
+      "**Don't** imitate a streaming app: green accents, huge rounded art tiles, carousel shelves.",
+      "**Don't** use the neon \"producer\" look: purple gradients, glow, synthwave.",
+      "**Don't** use filled or circular play buttons, or hover backgrounds on icon buttons.",
+      "**Don't** add hover lifts, bounce, or a literal duration or stiffness at a call site; don't animate blur, `width`, `height` or `left` on anything larger than a control or a collapsible panel; don't put Motion on a named view-transition boundary.",
+      "**Don't** blur the cover bitmap for the page wash.",
+      "**Don't** set `--art` inline; set the `--art-light` and `--art-dark` pairs.",
+      "**Don't** nest a `<button>` inside an anchor or a `role=\"button\"`."
+    ]
+  }
+}

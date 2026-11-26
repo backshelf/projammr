@@ -1,0 +1,43 @@
+---
+/* A session's saves as dit records them: newest first, grouped by
+   day, each with what changed since the one before and the machine it was
+   saved on, and the saves it filled in from Live's Backup folder marked as
+   such. `@workspace/ui`'s own `SaveTimeline` over the demo catalogue's
+   Halogen set, with its entries drawn as plain rows (`StaticRow`) because a
+   static page has no save to open. The oldest save shown is diffed against
+   the one before it, as the app does, so it is not read as the first. The
+   days and times are read in the zone the set was saved in, so the built
+   page is the same on any machine. */
+import { SaveTimeline } from "@workspace/ui/components/session-structure/save-timeline";
+import { diffSaves } from "@workspace/session-diff";
+import ProofCaption from "@/components/marketing/ProofCaption.astro";
+import { StaticRow } from "@/components/marketing/StaticRow";
+import { HALOGEN_HISTORY, HALOGEN_SET } from "@/data/halogen-saves";
+
+const SHOWN = HALOGEN_HISTORY.length - 1;
+
+const entries = HALOGEN_HISTORY.slice(0, SHOWN).map((save, i) => ({
+  id: i,
+  fileUpdatedAt: save.at,
+  machineName: HALOGEN_SET.machine,
+  source: save.source,
+  chips: diffSaves(HALOGEN_HISTORY[i + 1]!.meta, save.meta),
+}));
+
+/* Past the last save, so every day reads as a date rather than "Today". */
+const asOf = new Date("2026-06-20T12:00:00+10:00");
+---
+
+<figure class="flex min-w-0 flex-col gap-3">
+  <ProofCaption
+    name={HALOGEN_SET.file}
+    detail={`${HALOGEN_SET.track} · save history`}
+  />
+  <SaveTimeline
+    entries={entries}
+    hrefFor={() => ""}
+    link={StaticRow}
+    asOf={asOf}
+    timeZone={HALOGEN_SET.timeZone}
+  />
+</figure>

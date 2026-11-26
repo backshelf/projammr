@@ -1,0 +1,1 @@
+ALTER TABLE "statuses" ALTER COLUMN "colour_hex" SET DEFAULT '#8A8A8A';

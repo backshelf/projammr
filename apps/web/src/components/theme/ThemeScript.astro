@@ -1,0 +1,32 @@
+---
+/* The site's theme, and the only script a marketing page runs. It resolves the
+   theme before the first paint: the stored choice if the visitor made one,
+   otherwise the system's. The token layer switches on `.dark` (as the
+   client's does) and Starlight switches on `data-theme`, so both are set from
+   the one answer. A press on any `[data-theme-toggle]` flips the resolved
+   theme and stores it. Inline, so it runs before the stylesheet paints. */
+import { THEME_STORAGE_KEY } from "@/theme";
+---
+
+<script is:inline define:vars={{ key: THEME_STORAGE_KEY }}>
+  (() => {
+    const root = document.documentElement;
+    const system = matchMedia("(prefers-color-scheme: dark)");
+    const set = (dark) => {
+      root.classList.toggle("dark", dark);
+      root.dataset.theme = dark ? "dark" : "light";
+    };
+    const resolve = () => {
+      const stored = localStorage.getItem(key);
+      set(stored ? stored === "dark" : system.matches);
+    };
+    resolve();
+    system.addEventListener("change", resolve);
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest?.("[data-theme-toggle]")) return;
+      const dark = !root.classList.contains("dark");
+      localStorage.setItem(key, dark ? "dark" : "light");
+      set(dark);
+    });
+  })();
+</script>

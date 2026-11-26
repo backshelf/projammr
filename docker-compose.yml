@@ -1,0 +1,170 @@
+services:
+  db:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-projammr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-projammr}
+      POSTGRES_DB: ${POSTGRES_DB:-projammr}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-projammr}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ghcr.io/backshelf/projammr-api:${PROJAMMR_VERSION:-latest}
+    restart: unless-stopped
+    # Docker's init reaps the ffmpeg children the API spawns; the API itself
+    # handles the stop signal.
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-projammr}:${POSTGRES_PASSWORD:-projammr}@db:5432/${POSTGRES_DB:-projammr}
+      # The browser reaches the API through the proxy and the web service's
+      # /api rewrite, so its public address is the site's own origin.
+      BASE_URL: https://${PUBLIC_HOST:-localhost}
+      BETTER_AUTH_URL: https://${PUBLIC_HOST:-localhost}
+      CLIENT_URL: https://${PUBLIC_HOST:-localhost}
+      # Only for a page on another origin that calls the API from a browser.
+      # Setting it replaces the CLIENT_URL default above, so the list must
+      # include https://<PUBLIC_HOST> too.
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      NOTES_MASTER_KEY: ${NOTES_MASTER_KEY:?set NOTES_MASTER_KEY in .env}
+      # Only set while a key rotation (`scripts/rotate-notes-key.ts`) is in
+      # flight; a note not yet re-wrapped still needs the key it was wrapped
+      # under to be readable.
+      NOTES_MASTER_KEY_PREVIOUS:
+      # Raised by one for each key rotation and left at that value after it;
+      # the API refuses to start when NOTES_MASTER_KEY cannot open the notes
+      # stored under this version.
+      NOTES_KEY_VERSION: ${NOTES_KEY_VERSION:-1}
+      # The largest file one upload may carry, at most 2048 (MiB). The API
+      # holds a whole upload in memory while it handles it. It seeds the
+      # "Largest upload" setting (Settings → Instance → Limits), which holds
+      # it until an admin changes it there.
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-128}
+      # One trusted proxy sits in front of this container: Caddy, or the
+      # Tailscale node under docker-compose.tailscale.yml, which routes /api
+      # and /media straight here. The web service's Next rewrite forwards
+      # the proxy's X-Forwarded-For unchanged rather than adding a hop
+      # (apps/client/src/proxy.ts), so both paths count the same. Set wrong
+      # this fails open (too high trusts a caller-chosen address) or closed
+      # (too low keys every caller on one shared bucket) — 0 outside compose
+      # is what makes the header ignored by default anywhere this isn't true.
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
+      # Whether the site is served under a publicly trusted certificate; the
+      # API sends HSTS only for `acme`. The proxy does not read it: its one
+      # HTTPS site is `tls internal` (Caddyfile), so `internal` is the only
+      # value that matches what it serves. docker-compose.tailscale.yml sets
+      # `acme` for Tailscale's publicly trusted certificate.
+      TLS_MODE: ${TLS_MODE:-internal}
+      # Outgoing mail and the storage caps, passed through only when .env sets
+      # them: unset, the instance sends no mail and storage is unlimited. The
+      # caps seed their settings in Settings → Instance → Limits, where an
+      # admin can change them; only unsetting a cap here removes it.
+      SMTP_URL:
+      MAIL_FROM:
+      MAX_PROJECT_GB:
+      MAX_USER_GB:
+      # Tuning, passed through only when .env sets it so the server's own
+      # defaults apply otherwise. MEDIA_CONCURRENCY, SAVE_CONTENT_RETENTION_DAYS and LOG_LEVEL seed their
+      # settings in Settings → Instance (Background work, Integrations), which
+      # hold them until an admin changes them there. MIGRATE_BACKUP=0 skips the
+      # pre-migrate dump.
+      DB_POOL_MAX:
+      MEDIA_CONCURRENCY:
+      SAVE_CONTENT_RETENTION_DAYS:
+      JOB_RETRY_DELAY_MS:
+      LOG_FORMAT:
+      LOG_LEVEL:
+      MIGRATE_BACKUP:
+    # Not published: dit and every other bearer-token client reach
+    # the API through the proxy's /api and /media routes, same as the
+    # browser.
+    volumes:
+      # Uploaded assets and images live on disk beside the API, so they must
+      # outlive the container.
+      - static-data:/app/apps/server/static
+      # Where the migrator's pre-migrate dump lands; shared with the `backup`
+      # profile below so both write to the same place.
+      - backups-data:/app/apps/server/backups
+
+  web:
+    image: ghcr.io/backshelf/projammr-web:${PROJAMMR_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # Server-side rendering, server actions and the forward of the
+      # browser's /api requests reach the API by its service name on the
+      # compose network. Read at start-up; the image bakes in no address.
+      INTERNAL_API_URL: http://api:8080
+      # The client verifies the session cookie in its own process, so it needs
+      # the same signing secret as the API.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+    # Not published: the proxy is the only way in from the host.
+
+  proxy:
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      # The one name the stack is opened by, without scheme or port; the
+      # Caddyfile builds its sites from it. Lowercase, because the server
+      # compares origins against the lowercased host the browser sends.
+      PUBLIC_HOST: ${PUBLIC_HOST:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The local CA and the certificates it signs; losing it means every
+      # device has to trust a new root.
+      - caddy-data:/data
+      - caddy-config:/config
+
+  # A one-shot, on-demand dump: `docker compose --profile backup run --rm
+  # backup`. Never starts with `up`; the migrator's own pre-migrate dumps
+  # (`api`'s `backups-data` mount) are the automatic backstop, this is the
+  # manual one before a risky operation, writing to the same volume so both
+  # kinds of dump are restored the same way.
+  backup:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    profiles: ["backup"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-projammr}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-projammr}
+      PGDATABASE: ${POSTGRES_DB:-projammr}
+    volumes:
+      - backups-data:/backups
+      - static-data:/static-data:ro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -eu
+        ts=$$(date -u +%Y%m%dT%H%M%SZ)
+        pg_dump --format=custom --file "/backups/manual-$$ts.dump"
+        tar -czf "/backups/static-$$ts.tar.gz" -C /static-data .
+        echo "wrote /backups/manual-$$ts.dump and /backups/static-$$ts.tar.gz"
+
+volumes:
+  db-data:
+  static-data:
+  backups-data:
+  caddy-data:
+  caddy-config:

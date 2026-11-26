@@ -1,0 +1,43 @@
+---
+/* The head of a marketing page below the landing: the page's one h1 in the
+   display face over its cover's masthead (`MastheadArt` in the
+   `atmosphere` slot), a lede, and the page's actions. `crumb` names the
+   page's parent where it has one, as the app's mastheads do; the `before`
+   slot takes anything else that belongs above the title. Secondary type
+   over the art takes `.on-art-soft`, which holds its contrast there. */
+import { LABEL } from "@workspace/ui/lib/shell";
+
+type Props = {
+  title: string;
+  lede: string;
+  crumb?: { href: string; label: string };
+};
+
+const { title, lede, crumb } = Astro.props;
+---
+
+<header class="flex min-h-[min(52vh,34rem)] flex-col justify-end px-(--gutter) pt-16 pb-14 phone:min-h-0 phone:pt-14 phone:pb-10">
+  <div class="mx-auto flex w-full max-w-(--page) flex-col gap-6">
+    {crumb && (
+      <nav aria-label="Breadcrumb">
+        <a
+          href={crumb.href}
+          class:list={[
+            LABEL,
+            "on-art-soft rounded-sm underline decoration-transparent underline-offset-4 motion-ink hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none",
+          ]}
+        >
+          {crumb.label}
+        </a>
+      </nav>
+    )}
+    <slot name="before" />
+    <h1 class="max-w-[14ch] font-heading text-display leading-none text-balance text-ink">
+      {title}
+    </h1>
+    <p class="on-art-soft max-w-[52ch] text-lead text-pretty">{lede}</p>
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3 empty:hidden">
+      <slot name="actions" />
+    </div>
+  </div>
+</header>

@@ -1,0 +1,74 @@
+---
+title: Configuration
+description: Every variable in .env.example, what it does, and what Docker Compose does with it.
+sidebar:
+  order: 30
+---
+
+import EnvReference from "@/components/docs/EnvReference.astro";
+
+Your instance is configured by `.env` at the root of the repository, which starts as a copy of `.env.example`.
+Compose reads it whenever you run a `docker compose` command and hands each value to the services that use it.
+
+The reference below is generated from `.env.example`, `docker-compose.yml` and its [Tailscale
+override](/docs/self-hosting/tailscale/), `docker-compose.tailscale.yml`, every time these docs are built, so it says
+what those files say. Each variable is marked with what Compose does with it:
+
+- **Required**: Compose refuses to start until `.env` sets it.
+- **Compose default**: Compose uses the value shown when `.env` leaves the variable unset.
+- **Optional**: passed to the services only when `.env` sets it; otherwise the service's own default applies.
+- **Outside Docker only**: neither compose file passes it to any service, so it only has an effect when you
+  [run Projammr without Docker](/docs/self-hosting/without-docker/).
+
+<EnvReference />
+
+A page on another origin that calls your API from a browser needs that origin in `TRUSTED_ORIGINS`, as
+[Calling the API from a browser](/docs/api/authentication/#calling-the-api-from-a-browser) explains. Setting it
+replaces the default, `https://<PUBLIC_HOST>`, so keep that in the list too. The web app itself needs nothing here, and
+the proxy answers only `PUBLIC_HOST`: to open the stack by a different name, change `PUBLIC_HOST` and recreate the services.
+
+## Variables that seed a setting
+
+Five variables give a starting value to a setting an admin can change in the app, under **Settings → Instance**:
+
+| Variable            | Setting                                    |
+| ------------------- | ------------------------------------------ |
+| `MAX_UPLOAD_MB`     | Limits, **Largest upload**                 |
+| `MAX_PROJECT_GB`    | Limits, **Storage per project**            |
+| `MAX_USER_GB`       | Limits, **Storage per account**            |
+| `MEDIA_CONCURRENCY` | Background work, **Jobs at once**          |
+| `LOG_LEVEL`         | Integrations, **Log level**                |
+
+While a variable is set, its setting shows the value with **Environment** as its source. Changing the setting in the
+app overrides the variable at once, with no restart, and resetting the setting goes back to the variable's value. A
+storage cap set here can be changed in the app but only removed by unsetting the variable. Every other instance
+setting lives only in the app.
+
+## The upload limit
+
+`MAX_UPLOAD_MB` is the largest file one upload can carry, 128 unless you change it and at most 2048, and the API
+refuses anything larger. The instance's **Largest upload** setting starts from it. The scanner asks for the limit when
+it scans and lists a render over it as over the limit rather than trying to send it.
+
+A higher limit costs memory. The API holds the whole of an upload in memory while it handles it, so every upload in
+flight can take up to that limit of the server's RAM, and a scanner sends three at a time. Raise it only as far as
+the host has room for.
+
+## Applying a change
+
+Most variables are read when a container starts. After editing `.env`, run:
+
+```sh
+docker compose up -d
+```
+
+Compose recreates each container whose configuration changed and leaves the rest running. `PUBLIC_HOST` works like
+any other variable: the web app reads its own origin from each request, so changing it needs no rebuild.
+
+## Variables beyond `.env.example`
+
+`docker-compose.yml` passes a few more variables to the API when `.env` sets them. The tuning, logging and migration
+knobs are in [Operations](/docs/self-hosting/operations/#tuning-and-logs), and `NOTES_MASTER_KEY_PREVIOUS`, which
+only matters during a key rotation, is under
+[Rotating the notes key](/docs/self-hosting/operations/#rotating-the-notes-key), as is what to do with
+`NOTES_KEY_VERSION`.

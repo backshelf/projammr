@@ -1,0 +1,52 @@
+---
+title: Comments and activity
+description: Talk about the work where it lives, and see who changed what.
+sidebar:
+  order: 22
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+## Comments
+
+Projects, collections, tracks and sessions each have a **Comments** section, and so does every audio version of a
+track. Put a comment where it belongs:
+
+- **On the track** for the song as a whole. The track's section says so: "About the song as a whole. Timestamped
+  mix notes go on an audio version."
+- **On an audio version** for notes about that mix, pinned to a moment in it. See
+  [The waveform and timecoded comments](/docs/guide/waveform-and-comments/).
+- **On a collection, a session or the project** for anything about those.
+
+### Writing a comment
+
+Type in "Write a comment…" and select **Comment**, or press <kbd>Ctrl</kbd> <kbd>Enter</kbd> (<kbd>⌘</kbd>
+<kbd>Enter</kbd> on a Mac). Comments are plain text: line breaks are kept, and nothing else is formatted.
+
+Each comment has a **Reply** button. Replies sit indented under the comment they answer, one level deep.
+
+Your own comments have **Edit** and **Delete**. Nobody else can change or delete them, including the project's
+owner.
+
+<Aside>
+  Every member of the project can comment, viewers included. People outside the project can comment on the [share
+  page, when the share link allows it](/docs/collaboration/share-links/#commenting-without-an-account).
+</Aside>
+
+## Activity
+
+Projammr keeps a record of every change: who created, updated or deleted what, and who commented on it. It shows
+in the **Activity** section, folded shut at the foot of the page until you open it, newest first.
+
+- **On the project page**, the latest activity across the whole project.
+- **On a collection or track page**, the latest activity on that one collection or track.
+
+Each entry reads like a sentence, such as "Juno Adeyemi updated track Kindling", with what changed underneath:
+
+- A field change shows its old and new values, such as `bpm: 120 → 124`. A priority change names the project's
+  levels, such as `Priority: Low → High`; a level deleted since shows as its number.
+- A status change on its own shows the old and new status, such as `To Do → In Progress`.
+- A comment shows the start of what was said. A comment pinned to a moment in an audio version ends with
+  where, such as "at 1:52".
+
+Anyone in the project can read the activity.

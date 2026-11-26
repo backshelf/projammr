@@ -1,0 +1,11 @@
+{
+  "extends": "@workspace/typescript-config/library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node", "bun"]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

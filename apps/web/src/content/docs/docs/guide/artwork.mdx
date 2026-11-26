@@ -1,0 +1,68 @@
+---
+title: Artwork and colour
+description: Add cover art to a project, collection or track, and see how each page takes its colour from it.
+sidebar:
+  order: 12
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Projammr has no colour scheme of its own. Each project, collection and track is lit by its cover art: the
+masthead, the glow behind the page and the player all take their accent from the record. Add a cover and the
+page changes colour to match it.
+
+## Adding a cover
+
+Projects, collections and tracks each have an **Artwork** section on their page.
+
+<Steps>
+
+1. Open the page and find the **Artwork** section.
+
+2. Drop an image onto it, or select **Add cover** and pick one. JPG, PNG, GIF and WEBP images work, up to the
+   size limit your instance sets (10 MB unless whoever runs it has changed it). The uploader shows the limit.
+
+3. Once the upload finishes, the page takes on the cover's colour.
+
+</Steps>
+
+To swap the cover, select **Replace** (or **Change**) and pick another image. To take it away, use the remove
+button on the image; the page then falls back as described below.
+
+You need to be an editor, admin or owner of the project to add, replace or remove artwork.
+
+## Where a page gets its cover
+
+Most tracks never get a cover of their own: they share their release's. So when a page has no artwork, Projammr
+looks up the chain for the nearest one that does:
+
+| Page       | Uses, in order                                                                                  |
+| ---------- | ----------------------------------------------------------------------------------------------- |
+| Project    | Its own cover                                                                                   |
+| Collection | Its own cover, then the project's                                                               |
+| Track      | Its own cover, then its first collection's, then the project's                                  |
+| Session    | Whatever its track would show. Sessions have no cover of their own                              |
+
+A track's "first collection" is the oldest of the collections it is on, so a song on both an EP and an album shows
+the same cover everywhere it appears. If you want it to show the album's cover instead, give the track that cover
+itself.
+
+If nothing in the chain has a cover, the page is shown in greys.
+
+<Aside>
+  The colour comes from the image, worked out once on the server when you upload it. Projammr keeps the colour
+  readable in both themes, so a very pale or very dark cover still gives an accent you can see. A cover with
+  hardly any colour in it, like a black-and-white photo, gives a grey page.
+</Aside>
+
+## Every image in the project
+
+**Settings** → **Project** → **Images** shows every image uploaded to the project, with a preview of each. It is a place to
+look, not to tidy up: to remove a cover, go to the page it belongs to.
+
+## What else takes the cover
+
+- **The player** and the now-playing sheet sit on a blurred copy of the cover of whatever is playing.
+- **Share pages** put the cover of the shared track or collection behind the whole page.
+- **The tracks table** shows each track's cover as a thumbnail, following the same chain.

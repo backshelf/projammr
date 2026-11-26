@@ -1,0 +1,10 @@
+{
+  "extends": "@workspace/typescript-config/react-library.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "types": ["bun", "vite/client"]
+  },
+  "include": ["src", "fixtures", "vite.config.ts"]
+}

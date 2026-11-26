@@ -1,0 +1,108 @@
+---
+title: Creating, editing and deleting
+description: Make collections, tracks and sessions, change them in place, arrange a running order, and delete what you no longer need.
+sidebar:
+  order: 11
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+Everything on this page needs an editor, admin or owner of the project. Viewers see the same pages without the
+controls that change them.
+
+## Creating
+
+There are several ways to start something new, and they all open the same form.
+
+| To make a… | Use                                                                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| Collection | the **+** beside Collections in the sidebar, or <kbd>N</kbd> then <kbd>C</kbd>                               |
+| Track      | the **+** beside Tracks in the sidebar, or <kbd>N</kbd> then <kbd>T</kbd>                                    |
+| Session    | the **+** beside Sessions in the sidebar, or <kbd>N</kbd> then <kbd>S</kbd>                                  |
+
+The [command palette](/docs/guide/search-and-shortcuts/) has **New track**, **New collection** and **New
+session** too. Type `new track` followed by a title, or `new session` followed by a name, and the form opens with
+it filled in.
+
+To add a row without leaving a table, use the table's **+ Add** row instead. See
+[Selecting and editing in tables](/docs/guide/editing-in-tables/#adding-rows).
+
+### What each form asks for
+
+- **Collection:** **Title** (required), **Notes**, **Status**, **Release date** and **UPC**. Select **Create
+  collection**.
+- **Track:** **Title** and **Status** (both required), **Artists** (separate several with commas), **Notes**,
+  **Track position**, **ISRC**, **ISWC** and **Explicit**. Select **Create track**.
+- **Session:** **Title** (required), **Notes**, and the **DAW** it lives in, which suggests the DAWs already in
+  the project. Select **Create session**.
+
+A session you make here has no file behind it, so it stays a name and notes. Sessions read from your Ableton
+projects come from [dit](/dit/).
+
+### Adding a track to a collection
+
+On a collection's page, the **+** in the **Tracks** section offers:
+
+- **New track**, which makes a track and puts it in this collection.
+- **Existing track**, which adds a track already in the project. A track can be in any number of collections.
+
+From the track's side, the **Collections** block in its rail adds it to more collections and takes it out of
+them. In a table, **Add to collection** in the row's actions or the bulk bar does the same for many tracks.
+
+## Editing
+
+There is no separate edit screen: change things where you see them.
+
+- **Titles:** select the title in the masthead to edit it.
+- **Notes and descriptions:** type straight into the **Notes** section (a project's is its **Description**).
+- **Properties:** status, priority, dates, codes and the rest sit in the rail. Select one to change it.
+- **Many at once:** use a table. See [Selecting and editing in tables](/docs/guide/editing-in-tables/).
+
+Changes save as you make them.
+
+### Setting the running order
+
+A collection's page lists its tracks with a **#** column: their places in the running order. To move a track,
+change its number. If another track already holds that number, the two swap places.
+
+You can also give a track its place as you create it, with **Track position**.
+
+### Assigning a session to a track
+
+A session the scanner has not matched to a track shows a **+** in its **Track** cell in the sessions table. Select
+it and pick the track.
+
+On a session's page, the **Main** star in the rail makes it the track's main session: "The session that carries
+this track's work." A track has only one.
+
+## Moving to another project
+
+Tracks, collections and sessions can move to another project, from **Move to project…** in a table. See
+[Moving to another project](/docs/guide/editing-in-tables/#moving-to-another-project) for what travels with them.
+
+## Deleting
+
+Delete collections, tracks and sessions from a table: **Delete** in the row's **⋯** menu, in its right-click menu,
+or in the bulk bar for a selection. Projammr asks first.
+
+- **Deleting a track** takes it out of every collection it was on. Its sessions stay, with no track.
+- **Deleting a collection** leaves its tracks in the project; they just leave the collection.
+
+<Aside type="danger">
+  Deleting is permanent. There is no bin and no undo.
+</Aside>
+
+### Deleting a project
+
+Only the project's owner can delete it, from **Settings** → **Project** → **Danger zone**.
+
+<Steps>
+
+1. Select **Delete project**.
+
+2. Read the warning: deleting the project permanently removes every collection, track and session in it, along
+   with their attachments and comments, and everyone loses access.
+
+3. Type the project's name to confirm, then select **Delete project**.
+
+</Steps>

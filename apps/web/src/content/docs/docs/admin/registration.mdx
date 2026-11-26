@@ -1,0 +1,44 @@
+---
+title: Registration
+description: Choose whether anyone can create an account on your instance, or only the people invited to a project.
+sidebar:
+  order: 72
+---
+
+import Screenshot from "@/components/Screenshot.astro";
+
+Registration decides who can create an account. With it open, anyone who can reach your instance can sign up.
+With it closed, the only new accounts are people who have been invited to a project.
+
+## Open or close registration
+
+In the instance's settings (Settings → Instance → Access), set **Registration** to **Open** or **Invite only**.
+The change applies straight away.
+
+<Screenshot
+  id="admin-registration"
+  alt="The Access group of the instance's settings, with Registration set to Invite only"
+/>
+
+A new instance starts open, so that you can create the first account. Creating it makes you the admin and
+closes registration behind you, so a freshly set up instance is never left open by accident.
+
+## What visitors see
+
+The sign-in page changes with the setting:
+
+| When                   | The sign-in page shows                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| No account exists yet  | "Create the first account", with a note that this account will administer the instance |
+| Registration is open   | "Sign in or create an account", with a tab for each                                    |
+| Registration is closed | "Sign in" and "Accounts on this instance are by invite only.", with no way to register |
+
+## Invites still work when closed
+
+Closing registration does not lock out the people you invite. Someone with an invite that is still open (not
+accepted, not expired) can create an account with the email address the invite was sent to, even while
+registration is closed. Any other address is refused. [Invites](/docs/collaboration/invites/) covers
+sending one.
+
+That makes a closed instance with invites the usual way to run Projammr for a small circle: each person
+arrives through a project they have been asked to join.

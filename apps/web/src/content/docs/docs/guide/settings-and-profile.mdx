@@ -1,0 +1,113 @@
+---
+title: Your profile and settings
+description: Change your name, photo, email and password, see where you are signed in, and find your way around Settings, yours and a project's.
+sidebar:
+  order: 46
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Your profile holds everything about you: your name, avatar, email address and password, and where you are signed
+in. Your preferences and a project's own settings are in **Settings**, covered at the end of this page.
+
+Open your profile from the account menu: select your name at the foot of the sidebar and choose **Profile**. On a
+phone, it is in the account menu at the top right.
+
+<Screenshot id="profile" alt="Your profile: name and photo, email, password and signed-in devices" />
+
+## Name and photo
+
+The name and photo in **Profile** are what everyone in your projects sees beside your comments and changes. Click
+the photo, or drag an image onto it, to change it (**Change photo**), or **Remove** it. Change your **Name** and
+select **Save**.
+
+## Email
+
+**Email** shows the address you sign in with, marked "(unverified)" if it has not been confirmed. Enter a **New
+email** and save.
+
+- **If your instance sends email**, Projammr sends a message to the new address, and the change happens once you
+  confirm it there.
+- **If it does not**, enter your **Current password** as well, and the change happens straight away.
+
+## Password
+
+Enter your **Current password** and a **New password** of at least 8 characters, and save. Projammr says "Password
+changed".
+
+## Signed-in devices
+
+**Signed-in devices** lists everywhere your account is signed in, such as "Firefox on macOS", with "(this device)"
+beside the one you are using and when each was last active. **Sign out** beside any other device signs it out. [dit
+shows here](/dit/) by its own name, so you can sign it out too.
+
+## Activity
+
+Once you have saves in any of your projects, your profile shows an **Activity** heatmap of them across every
+project. See [Plugins and work heatmaps](/docs/guide/plugins-and-heatmaps/#activity-across-everything).
+
+## Deleting your account
+
+**Delete account** tells you exactly what it will remove before you go ahead:
+
+- projects only you are in, with everything in them;
+- your comments, activity and notes.
+
+Projects you share with other people stay, and your comments and activity in them are kept, credited to "Deleted
+user".
+
+If you are the only owner of a project that other people are still in, you cannot delete your account until you
+make someone else its owner or remove the other members. The section lists those projects, each with a link to its
+members.
+
+<Steps>
+
+1. Select **Delete account**. If your instance does not send email, enter your **Current password** first.
+
+2. Type `DELETE` to confirm, and select **Delete account**.
+
+3. If your instance sends email, Projammr emails you a link, and the account is deleted when you follow it.
+   Otherwise it is deleted straight away.
+
+</Steps>
+
+<Aside type="danger">
+  Deleting your account cannot be undone.
+</Aside>
+
+## Light and dark
+
+Press <kbd>D</kbd> to swap between light and dark, or use the command palette's `theme` command to follow your
+device again. On a phone, the account menu has **light**, **dark** and **system** buttons. See
+[Finding your way around](/docs/guide/finding-your-way-around/#light-and-dark).
+
+## Settings
+
+Select **Settings** in the sidebar or the account menu, or press <kbd>G</kbd> then <kbd>,</kbd>, from any page.
+Settings opens on your own. The list beside them (above them on a phone) holds each section you can open:
+**Personal**, which is yours wherever you sign in; **Project**, the current project's, while a project is open;
+**Instance**, [the instance's](/docs/admin/), for its admins; and **Devices**.
+
+A setting saves as soon as you change it. The search box at the top finds a setting by name in every section, and
+so does the [command palette](/docs/guide/search-and-shortcuts/): type a setting's name and choose it to open
+Settings at that setting.
+
+### Lyrics suggestions
+
+While you write lyrics, `\` opens a list of rhymes and `~` a list of synonyms. If you need either character in
+your lyrics, choose different ones under **Editor** in your personal settings: **Rhyme prefix** and **Synonym
+prefix**. See [Writing lyrics](/docs/guide/lyrics/#looking-up-rhymes-and-synonyms).
+
+### A project's settings
+
+Each project has its own settings: open Settings with the project open and choose **Project**. Its pages are:
+
+| Page        | Holds                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------- |
+| Statuses    | The project's statuses. See [Statuses, labels and priority](/docs/guide/statuses-labels-priority/#statuses). |
+| Labels      | The project's labels. See [Statuses, labels and priority](/docs/guide/statuses-labels-priority/#labels).     |
+| Images      | Every image uploaded to the project. See [Artwork and colour](/docs/guide/artwork/#every-image-in-the-project). |
+| Assets      | Storage and every file in the project. See [Every file in the project](/docs/guide/relations-attachments-links/#every-file-in-the-project). |
+| Members     | [Who is in the project, and their roles](/docs/collaboration/members-and-roles/).                              |
+| Danger zone | Deleting the project, for its owner only. See [Deleting a project](/docs/guide/creating-and-editing/#deleting-a-project). |

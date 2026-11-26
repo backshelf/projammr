@@ -1,0 +1,17 @@
+{
+  "TCP": {
+    "443": { "HTTPS": true }
+  },
+  "Web": {
+    "${TS_CERT_DOMAIN}:443": {
+      "Handlers": {
+        "/api": { "Proxy": "http://api:8080/api" },
+        "/media": { "Proxy": "http://api:8080/static" },
+        "/": { "Proxy": "http://web:3000" }
+      }
+    }
+  },
+  "AllowFunnel": {
+    "${TS_CERT_DOMAIN}:443": true
+  }
+}

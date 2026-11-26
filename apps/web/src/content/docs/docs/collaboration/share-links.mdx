@@ -1,0 +1,95 @@
+---
+title: Share links
+description: Let someone outside a project hear a track or a collection and comment on it, without an account.
+sidebar:
+  order: 63
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+A share link lets anyone you send it to play one track or one collection on a public page, the share page, and
+leave comments on the audio. They do not need an account, and they see nothing else in the project.
+
+Editors, admins and the owner can create share links.
+
+## Create a share link
+
+<Steps>
+
+1. Open the track or collection you want to share.
+
+2. In its **Sharing** section, choose the **+** (**Share**) button.
+
+3. Choose **what the link plays**:
+   - **Current version** always plays whatever the current primary version is. When you add a new version and
+     make it primary, the link plays the new one.
+   - **Snapshot** freezes the versions you pick now, whatever changes later. You choose the version of each
+     track, and can give the share its own title (and, for a collection, a title for each track) for the
+     people who open it.
+
+4. Set the options you want (below), then choose **Create link**.
+
+5. Choose **Copy share link** on the new link and send it however you like.
+
+</Steps>
+
+### Options
+
+- **Note for whoever opens it**: a message shown under the title, such as what you want them to listen for.
+- **Stops working**: off (**Never**) to begin with. Turn it on and pick a date for the link to expire on.
+- **Keep guest comments private**: each visitor sees only the comments they wrote and the replies to them.
+  Project members still see every comment.
+- **Allow downloads**: adds a download link beside each track on the share page. Off to begin with.
+
+## Manage your links
+
+Each link is listed in the **Sharing** section with its type, and for a snapshot how many tracks it holds, and
+whether it expires: "Never expires", "Expires" with a date, or "Expired" with a date.
+
+The menu on a link offers:
+
+- **Edit**: change its options, and for a snapshot its versions and titles.
+- **Make snapshot** or **Make connected**: switch between freezing the versions and following the current one.
+- **Delete**: the link stops working immediately for everyone who has it. There is no undo; create a new link
+  to share again.
+
+## What someone sees on the share page
+
+The share page is Projammr without the app around it. The artwork fills the page, and over it sit:
+
+- whether it is a **Shared track** or a **Shared collection**, its title, and your note;
+- a play button and the waveform, which they can click to jump through the audio, with the length beside it;
+- for a collection, the list of its tracks, with controls to skip between them;
+- a download link for each track, if you allowed downloads;
+- the comments, with a note that anyone with the link and the project's members can see them.
+
+<Screenshot
+  id="share"
+  alt="The share page of a collection: the cover filling the page, the waveform with comment marks on it, the track list and a visitor's comment"
+/>
+
+They see nothing else: not the project, its other tracks, its sessions, its members or its activity.
+
+## Commenting without an account
+
+Anyone can read the comments on a share page. To write one, a visitor enters **Your name** and chooses **Continue
+as guest**; that name is shown on everything they post. No email address or password is involved.
+
+Comments on the share page belong to the audio, and one made at a moment in it shows as a mark on the waveform.
+Guests can edit and delete their own comments.
+
+The comments land on the version of the track they were made on, so project members see them in the app, in that
+version's comments, alongside their own. A member who opens the share page while signed in comments as
+themselves.
+
+<Aside type="note">
+  Guests are not accounts on your instance. They never appear in the instance's
+  list of accounts, and they cannot see anything a share link does not show
+  them.
+</Aside>
+
+## When a link stops working
+
+Someone who opens a link that has expired is told "This share link has expired". A deleted link, or a link that
+was cut short when it was copied, says "This share link isn't valid".

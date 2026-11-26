@@ -1,0 +1,74 @@
+---
+/* The plans from `@/data/pricing`, one hairline row each: what it is, what it
+   costs, the storage and the members it comes with, and its action. Rows,
+   not cards: the plans differ in two figures, so they read best lined up in
+   columns. On a phone each row stacks and its figures carry their own
+   labels. */
+import { LABEL } from "@workspace/ui/lib/shell";
+
+import Action from "@/components/marketing/Action.astro";
+import { formatPrice, PLANS, PRICE_CURRENCY } from "@/data/pricing";
+
+const COLUMNS =
+  "grid grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,1.5fr)_minmax(0,1.1fr)_12rem] items-baseline gap-x-6";
+---
+
+<div>
+  <div
+    aria-hidden="true"
+    class:list={[COLUMNS, LABEL, "pb-3 text-ink-soft phone:hidden"]}
+  >
+    <span>Plan</span>
+    <span>A month</span>
+    <span>Storage</span>
+    <span>Members</span>
+    <span></span>
+  </div>
+  <ul class="flex flex-col">
+    {PLANS.map((plan) => (
+      <li
+        class:list={[
+          COLUMNS,
+          "gap-y-4 border-t border-rule py-6 phone:grid-cols-2",
+        ]}
+      >
+        <span class="flex flex-col gap-1 phone:col-span-2">
+          <span class="text-lead text-ink">{plan.name}</span>
+          <span class="text-small text-ink-soft">{plan.host}</span>
+        </span>
+        <span class="flex flex-col gap-1">
+          <span class:list={[LABEL, "hidden text-ink-soft phone:block"]}>
+            A month
+          </span>
+          <span class="text-section leading-none text-ink tabular-nums">
+            {formatPrice(plan)}
+          </span>
+        </span>
+        <span class="flex flex-col gap-1 phone:col-span-2 phone:row-start-3">
+          <span class:list={[LABEL, "hidden text-ink-soft phone:block"]}>
+            Storage
+          </span>
+          <span class="text-body text-ink">{plan.storage}</span>
+        </span>
+        <span class="flex flex-col gap-1">
+          <span class:list={[LABEL, "hidden text-ink-soft phone:block"]}>
+            Members
+          </span>
+          <span class="text-body text-ink">{plan.members}</span>
+        </span>
+        <span class="justify-self-end phone:col-span-2 phone:justify-self-start">
+          <Action
+            href={plan.href}
+            variant={plan.monthly === 0 ? "primary" : "ghost"}
+          >
+            {plan.action}
+          </Action>
+        </span>
+      </li>
+    ))}
+  </ul>
+  <p class="border-t border-rule pt-4 text-small text-ink-soft">
+    Hosting is not open yet. Its prices ({PRICE_CURRENCY}) and limits may change
+    before it is.
+  </p>
+</div>

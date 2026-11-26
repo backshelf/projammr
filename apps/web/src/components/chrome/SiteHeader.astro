@@ -1,0 +1,48 @@
+---
+/* The marketing header: the brand, the three primary links as tracked-caps
+   labels, the source link and the theme mark. It sits in normal flow over the
+   page's own atmosphere, so a masthead's art reads behind it. On a phone the
+   links drop to a row of their own under the brand. */
+import { IconBrandGithub } from "@tabler/icons-react";
+import { LABEL } from "@workspace/ui/lib/shell";
+
+import Brand from "@/components/chrome/Brand.astro";
+import ThemeToggle from "@/components/theme/ThemeToggle.astro";
+import { PRIMARY_NAV } from "@/nav";
+import { SITE } from "@/site";
+
+const current = Astro.url.pathname;
+---
+
+<header class="relative z-10 px-(--gutter) pt-5">
+  <div class="mx-auto flex max-w-(--page) flex-wrap items-center justify-between gap-x-8 gap-y-3">
+    <Brand />
+    <nav
+      aria-label="Primary"
+      class="flex items-center gap-6 phone:order-last phone:w-full phone:justify-between"
+    >
+      {PRIMARY_NAV.map((link) => (
+        <a
+          href={link.href}
+          aria-current={current.startsWith(link.href) ? "page" : undefined}
+          class:list={[
+            LABEL,
+            "rounded-sm py-2 text-ink-soft motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none aria-[current=page]:text-ink",
+          ]}
+        >
+          {link.label}
+        </a>
+      ))}
+    </nav>
+    <div class="flex items-center gap-2">
+      <a
+        href={SITE.repository}
+        aria-label="Projammr on GitHub"
+        class="relative inline-flex size-7 items-center justify-center rounded-sm text-ink-soft motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none coarse:after:absolute coarse:after:-inset-2"
+      >
+        <IconBrandGithub className="size-4" aria-hidden="true" />
+      </a>
+      <ThemeToggle />
+    </div>
+  </div>
+</header>

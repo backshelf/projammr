@@ -1,0 +1,46 @@
+name: Set up the workspace
+description: Install Bun at the pinned version, the Rust toolchain and cache for the Rust workspaces (dsp, dit and the dit app) and wasm-opt for @workspace/dsp (unless `dsp` is "false"), restore the caches, and install dependencies.
+inputs:
+  dsp:
+    description: 'Install the Rust toolchain and its cache (for the dsp, dit and dit app workspaces) and wasm-opt for @workspace/dsp. "false" skips all three, for a job that never builds the WebAssembly or runs off Linux.'
+    default: "true"
+  wasm-opt:
+    description: 'Install wasm-opt, a Linux x86_64 binary. "false" keeps the Rust toolchain and cache on a job that runs elsewhere (the dit app on macOS) and never optimises WebAssembly. Ignored when `dsp` is "false".'
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      # No bun-version input: the action reads `packageManager` from package.json.
+    - uses: actions/cache@v6
+      with:
+        path: ~/.bun/install/cache
+        key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+        restore-keys: bun-${{ runner.os }}-
+    # The toolchain the Rust workspaces (packages/dsp/rust, packages/dit, the dit
+    # app) pin in their rust-toolchain.toml, so rustup finds it installed rather than
+    # fetching it again.
+    - if: inputs.dsp == 'true'
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: "1.97.1"
+        targets: wasm32-unknown-unknown
+        components: clippy, rustfmt
+    # The Rust workspaces: dsp, dit and the dit app. After the toolchain: the
+    # cache key includes the rustc version.
+    - if: inputs.dsp == 'true'
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: |
+          packages/dsp/rust
+          packages/dit
+          apps/dit-app/src-tauri
+    - name: Install wasm-opt
+      if: inputs.dsp == 'true' && inputs.wasm-opt == 'true'
+      shell: bash
+      run: |
+        curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_116/binaryen-version_116-x86_64-linux.tar.gz \
+          | sudo tar -xz -C /opt
+        echo /opt/binaryen-version_116/bin >> "$GITHUB_PATH"
+    - run: bun install --frozen-lockfile
+      shell: bash

@@ -1,0 +1,61 @@
+---
+title: Self-hosting
+description: Run your own instance of Projammr on one machine with Docker Compose, and keep it trusted, backed up and current.
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+
+Projammr is open source, and all of it runs on a machine you control: your instance. These pages take you from a
+clone of the repository to an instance your devices trust, then cover backing it up, upgrading it and looking after
+it.
+
+<Aside>
+  Hosted Projammr is coming soon, for when you would rather not run a server yourself. See
+  [pricing](/pricing/).
+</Aside>
+
+## What you run
+
+`docker compose up` starts four services from the repository's `docker-compose.yml`:
+
+- **proxy**: Caddy, the only service published on the host. It serves the site over HTTPS, under a certificate
+  from its own local certificate authority, and hands each request to the service that answers it. A Tailscale node
+  can take its place: see [Serving it through Tailscale](/docs/self-hosting/tailscale/).
+- **web**: the web app, a Next.js server running on Bun.
+- **api**: the API, running on Bun, with ffmpeg to decode audio. It applies any pending database migrations
+  before it starts listening.
+- **db**: PostgreSQL 17.
+
+A fifth service, **backup**, never starts on its own. You run it when you want a copy of the database and the
+uploaded media. [How the stack fits together](/docs/self-hosting/stack/) draws all five, with their routes, health
+checks and volumes.
+
+## What the scanner needs from it
+
+[dit](/dit/), the desktop app that reads your Ableton project folders, reaches your instance the way a browser does.
+It signs in at `https://<PUBLIC_HOST>` with an account on your instance, and sends its requests through the proxy's
+`/api` and `/media` routes, so nothing else has to be opened up for it. The machine it runs on trusts your
+instance's certificate like any other device: see [HTTPS and your devices](/docs/self-hosting/https/).
+
+## Requirements
+
+- **Docker with Compose.** Every command in these pages is `docker compose`. It pulls the published images, so the
+  machine needs network access to `ghcr.io`.
+- **A 64-bit x86 or ARM machine.** The published images cover `amd64` and `arm64`.
+- **To build from source only:** BuildKit, which Compose uses by default (the `Dockerfile`'s cache mounts need it),
+  and network access for the build. The `Dockerfile` pulls the base images, installs a Rust toolchain to compile the
+  audio analysis module to WebAssembly, and installs the JavaScript dependencies. It fetches `wasm-opt`, which
+  optimises that module, from binaryen's release on `amd64` and from Debian's package on `arm64`.
+- **Ports 80 and 443 free on the host.** The proxy publishes both, and 443 over UDP as well. Served through
+  Tailscale, the stack publishes no ports.
+- **Disk for your catalogue.** Uploaded audio and images live in the `static-data` volume and the database in
+  `db-data`, both on the host's disk. One upload can be up to `MAX_UPLOAD_MB` megabytes, 128 unless you change it.
+- **Git**, to clone the repository and to pull upgrades.
+
+<LinkCard
+  title="Quickstart"
+  href="/docs/self-hosting/quickstart/"
+  description="Clone, set two secrets, start the stack and create the first account."
+/>

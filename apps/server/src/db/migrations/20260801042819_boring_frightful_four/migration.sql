@@ -1,0 +1,1 @@
+ALTER TABLE "images" ADD CONSTRAINT "images_image_path_key" UNIQUE("image_path");

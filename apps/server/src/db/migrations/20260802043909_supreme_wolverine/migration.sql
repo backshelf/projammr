@@ -1,0 +1,1 @@
+ALTER TABLE "tracks" RENAME COLUMN "status" TO "status_id";

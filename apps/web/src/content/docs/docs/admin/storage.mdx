@@ -1,0 +1,47 @@
+---
+title: Storage and version
+description: See how much your instance stores, per project and per account, and which version of Projammr it runs.
+sidebar:
+  order: 73
+---
+
+import Screenshot from "@/components/Screenshot.astro";
+
+In the instance's settings (Settings → Instance), the **Storage** page shows how much space your instance's files
+take up, and the **About** page shows which version of Projammr it runs. Both are read-only.
+
+## Storage
+
+The page has three parts:
+
+- **Total**: everything the instance stores.
+- **Projects**: each project and how much its files take up.
+- **Accounts**: each account and how much the files it uploaded take up.
+
+<Screenshot
+  id="admin-storage"
+  alt="The Storage page: the instance total at the top, then a row per project and a row per account with the space each uses"
+/>
+
+A file usually counts twice, once towards its project and once towards the account that uploaded it, so the
+projects and the accounts each add up to roughly the total on their own. Some files count only once: a
+profile picture belongs to an account and no project, and files Projammr makes itself, such as a spectrum
+image, belong to a project and nobody's account.
+
+### Storage limits
+
+An instance can cap how much each project and each account may store. An instance admin sets the caps under
+**Settings → Instance → Limits**, as **Storage per project** and **Storage per account**, and a change applies to
+the next upload. Leave a cap empty for no cap. Whoever runs the server can give a cap a starting value with
+`MAX_PROJECT_GB` or `MAX_USER_GB` in `.env`, as [Configuration](/docs/self-hosting/configuration/#variables-that-seed-a-setting)
+explains; you can change a cap set that way in the app, but only unsetting the variable removes it. With no cap set,
+storage is unlimited and the page shows each figure on its own.
+
+With a cap set, each row shows a meter and reads "used of cap", for example `1.2 GB of 5 GB`. An upload that
+would take a project or an account past its cap is refused with "This project is at its storage limit" or
+"Your account is at its storage limit". Deleting files frees the space again.
+
+## About
+
+The **About** page shows the **Version** of Projammr running on the instance. It is the number to quote when you
+report a problem or check whether an upgrade has been applied.

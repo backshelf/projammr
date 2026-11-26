@@ -1,0 +1,309 @@
+/* The marketing pages' stylesheet. It takes the token layer's foundation,
+   atmosphere and motion parts, never the whole of `globals.css`: that one
+   also carries the note editor's styles and sources every component in the
+   UI package, which a static page would download and never use. */
+@import "tailwindcss";
+@import "@workspace/ui/fonts.css";
+@import "@workspace/ui/styles/foundation.css";
+@import "@workspace/ui/styles/atmosphere.css";
+@import "@workspace/ui/styles/motion.css";
+
+@source "../**/*.{astro,ts,tsx,mdx}";
+@source "../../../../packages/ui/src/lib/shell.ts";
+@source "../../../../packages/ui/src/components/logo.tsx";
+/* The gear the marketing pages render as static HTML. */
+@source "../../../../packages/ui/src/components/layout/rail.tsx";
+@source "../../../../packages/ui/src/components/layout/rows.tsx";
+@source "../../../../packages/ui/src/components/session-structure/diff-chip-list.tsx";
+@source "../../../../packages/ui/src/components/session-structure/diff-readouts.tsx";
+@source "../../../../packages/ui/src/components/session-structure/sample-delta.tsx";
+@source "../../../../packages/ui/src/components/session-structure/save-diff-card.tsx";
+@source "../../../../packages/ui/src/components/session-structure/set-skyline.tsx";
+@source "../../../../packages/ui/src/components/session-structure/structure-outline.tsx";
+@source "../../../../packages/ui/src/components/session-structure/save-timeline.tsx";
+@source "../../../../packages/ui/src/components/session-structure/track-swatch.tsx";
+@source "../../../../packages/ui/src/components/status-chip.tsx";
+@source "../../../../packages/ui/src/components/waveform.tsx";
+@source "../../../../packages/ui/src/components/loudness/loudness-reading.tsx";
+@source "../../../../packages/ui/src/components/loudness/loudness-scale.tsx";
+@source "../../../../packages/ui/src/components/loudness/ruler-scale.tsx";
+
+:root {
+  /* The widest a marketing page's content runs. Wider than the app's reading
+     column, which is set for a single entity rather than a page of them. */
+  --page: 76rem;
+}
+
+/* ── Browser surfaces ────────────────────────────────────────────────────
+   The parts the browser draws take the page's light too: a selection is the
+   accent at a wash, the caret is the accent, and the scrollbar is hairline on
+   paper rather than the platform's grey. */
+::selection {
+  background: color-mix(in oklab, var(--art) 26%, transparent);
+  color: var(--ink);
+}
+
+html {
+  caret-color: var(--art);
+  scrollbar-color: var(--rule-strong) var(--paper);
+  scroll-padding-top: 1.5rem;
+}
+
+/* ── Masthead ─────────────────────────────────────────────────────────────
+   The cover blurred behind the top of the page, under the header, in the
+   app's own frame: the art's bleed and mask and the scrim under the type
+   are `.masthead__art` and `.masthead__scrim` in the token layer's
+   atmosphere.css, and the blur, saturation and drift are its motion.css.
+   What the site sets is the band's height, `--masthead-h`: the first
+   viewport on the landing page, less on the others. */
+.site-masthead {
+  --masthead-h: 82vh;
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 0;
+  height: var(--masthead-h);
+  overflow-x: clip;
+  pointer-events: none;
+}
+
+.site-masthead--page {
+  --masthead-h: 64vh;
+}
+
+@media (width < 768px) {
+  .site-masthead {
+    --masthead-h: 56vh;
+  }
+
+  .site-masthead--page {
+    --masthead-h: 48vh;
+  }
+}
+
+/* ── Bands ────────────────────────────────────────────────────────────────
+   A band is one stretch of a page lit by one cover. Its light is the page
+   wash (`.wash` in atmosphere.css) held to the band rather than the viewport,
+   and faded out towards both edges so neighbouring bands, each in its own
+   hue, never meet on a line. */
+.band {
+  position: relative;
+  isolation: isolate;
+}
+
+.band__light {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 22%,
+    #000 64%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 22%,
+    #000 64%,
+    transparent 100%
+  );
+}
+
+/* The wash's tones, haze and dither, with its key light taken off. That light
+   sits above the top edge of a viewport, where the band's fade would cut it
+   into a stripe along the band's top. The band draws its own key instead
+   (`.band__key`), a pool in the wash's core tone thrown behind what the band
+   is showing: beside the claim in a split hunk, under it in a stacked one. It
+   is brighter than the app's wash, which sits behind a whole entity page and
+   has to stay out of the way. */
+.band__light > .wash {
+  --key-a: 0.66;
+  --lobe-a: 0.36;
+  position: absolute;
+  background: none;
+}
+
+.dark .band__light > .wash {
+  --key-a: 0.56;
+  --lobe-a: 0.3;
+}
+
+.band__key {
+  --key-x: 42%;
+  --key-y: 56%;
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 60% 68% at var(--key-x) var(--key-y),
+    oklch(from var(--wash-core) l c h / var(--key-a)) 0%,
+    oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.7)) 26%,
+    oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.36)) 52%,
+    oklch(from var(--wash-core) l c h / calc(var(--key-a) * 0.1)) 78%,
+    transparent 100%
+  );
+}
+
+.band:has(.hunk--split) .band__key {
+  --key-x: 70%;
+  --key-y: 44%;
+}
+
+/* On a phone every band is one column, so its light sits under the middle of
+   it whatever the hunk's layout. */
+@variant phone {
+  .band .band__key.band__key {
+    --key-x: 50%;
+    --key-y: 60%;
+  }
+}
+
+/* A second light a band can hold, carried by one of the things it shows
+   (`BandLight relight` inside a `.band-relight`): while the pointer rests on
+   the carrier, its light takes over from the band's own, so the band is lit
+   by whatever the reader is pointing at. It needs a pointer that hovers, and
+   it only changes what is already there, so a touchscreen misses nothing. */
+.band__light--relight {
+  opacity: 0;
+}
+
+@variant fine {
+  .band-relight:hover > .band__light--relight {
+    opacity: 1;
+  }
+
+  .band:has(.band-relight:hover) > .band__light {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .band__light {
+    transition: opacity var(--dur-settle) var(--ease-arrive);
+  }
+}
+
+/* ── Hunks ────────────────────────────────────────────────────────────────
+   A hunk is a two-column grid whose areas say where each part sits. `split`
+   runs the header, claim, lines and link down the narrow column with the
+   proof beside them. `stack` runs the header across the page, sets the claim
+   beside its lines, and gives the proof the page's full width under both.
+   Narrower than the rail breakpoint, both fall to one column in reading
+   order. */
+.hunk {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  column-gap: 3.5rem;
+  row-gap: 1.5rem;
+  align-items: start;
+}
+
+.hunk--split {
+  grid-template-rows: auto auto auto 1fr;
+  grid-template-areas:
+    "head proof"
+    "title proof"
+    "lines proof"
+    "link proof";
+}
+
+.hunk--stack {
+  grid-template-areas:
+    "head head"
+    "title lines"
+    "title link"
+    "proof proof";
+}
+
+.hunk__head {
+  grid-area: head;
+}
+
+.hunk__title {
+  grid-area: title;
+}
+
+.hunk__lines {
+  grid-area: lines;
+}
+
+.hunk__link {
+  grid-area: link;
+}
+
+.hunk__proof {
+  grid-area: proof;
+}
+
+.hunk--stack .hunk__proof {
+  margin-top: 1rem;
+}
+
+@variant stack {
+  .hunk.hunk {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: "head" "title" "lines" "link" "proof";
+  }
+
+  .hunk__proof {
+    margin-top: 1rem;
+  }
+}
+
+/* A hunk's lines tick in as they come into view, one after another, each
+   drawn from its gutter mark rightwards. The resting state is the line in
+   full: the animation only runs where the browser drives it from the scroll
+   position and the reader has not asked for less motion, and it only ever
+   holds a line back while that line is still below the fold. The list is the
+   timeline, so the stagger is the lines' own spacing down the page. */
+@keyframes hunk-line-in {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+    translate: -0.5rem 0;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hunk-lines {
+      view-timeline-name: --hunk-lines;
+    }
+
+    .hunk-line {
+      animation: hunk-line-in var(--ease-arrive) both;
+      animation-timeline: --hunk-lines;
+      animation-range: cover calc(2% + var(--n, 0) * 3%) cover
+        calc(14% + var(--n, 0) * 3%);
+    }
+  }
+}
+
+/* The save diff card's skyline rises, and its tempo caret travels, as the
+   card comes into view rather than when the page loads, the way a hunk's
+   lines tick in: the skyline is the timeline, each bar starting a share of
+   the way along it by its place in the set. A card already in view when the
+   page opens is past its entry, so it arrives whole. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .skyline {
+      view-timeline-name: --skyline;
+    }
+
+    .skyline__bar {
+      animation: bar-in var(--ease-arrive) both;
+      animation-timeline: --skyline;
+      animation-range: entry calc(var(--i, 0) / var(--n, 1) * 50%) entry
+        calc(50% + var(--i, 0) / var(--n, 1) * 50%);
+    }
+
+    .ruler-caret {
+      animation: caret-travel var(--ease-arrive) both;
+      animation-timeline: view();
+      animation-range: entry 20% cover 45%;
+    }
+  }
+}

@@ -1,0 +1,32 @@
+---
+/* One line of a hunk, as a list item: its gutter mark and its text. `+` is an
+   addition, in the art colour; `~` a change, in soft ink; `−` a removal,
+   with a faint mark and a faint strike. A removal's words are a claim a
+   reader has to be able to read, so they stay at soft ink, where faint ink
+   would fall under AA contrast. `n` is the line's place in its list, which
+   staggers its tick-in (site.css, `.hunk-line`). */
+import { SIGN_MARK, type HunkSign } from "@/components/marketing/hunk-signs";
+
+type Props = { sign: HunkSign; text: string; n?: number };
+
+const { sign, text, n = 0 } = Astro.props;
+
+const TEXT = {
+  "+": "text-ink",
+  "~": "text-ink-soft",
+  "−": "text-ink-soft line-through decoration-ink-faint",
+};
+---
+
+<li
+  class="hunk-line grid grid-cols-[1.5rem_minmax(0,1fr)] text-lead/[1.55]"
+  style={`--n: ${n}`}
+>
+  <span aria-hidden="true" class:list={["font-sub", SIGN_MARK[sign]]}>
+    {sign}
+  </span>
+  <span class={TEXT[sign]}>
+    {sign === "−" && <span class="sr-only">Left out: </span>}
+    {text}
+  </span>
+</li>

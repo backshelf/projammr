@@ -1,0 +1,251 @@
+name: Release
+
+# A pushed `v*` tag publishes a release: the api and web images on GHCR and the
+# dit app as a signed dmg with the update feed the app reads. Nothing is public
+# until the last job: the images carry only `x.y.z` until the smoke has passed
+# against them, and the GitHub release stays a draft until then.
+#
+#   verify ─┬─ ci ─────┐
+#           └─ e2e ────┴─ images ─ smoke ─┐
+#                       └─ app ─ draft ───┴─ publish
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY_API: ghcr.io/backshelf/projammr-api
+  REGISTRY_WEB: ghcr.io/backshelf/projammr-web
+
+jobs:
+  # The tag names the version every manifest carries and the changelog has a
+  # section for it. The section becomes the release's body and the update
+  # feed's notes.
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - id: tag
+        run: bun packages/release/src/verify-tag.ts "$GITHUB_REF_NAME" "$RUNNER_TEMP/notes.md" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/notes.md
+          if-no-files-found: error
+
+  ci:
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  e2e:
+    needs: verify
+    uses: ./.github/workflows/e2e.yml
+    secrets: inherit
+
+  # `x.y.z` only: `x.y` and `latest` move in `publish`, after the smoke, so a
+  # failed release never leaves `latest` on an image that did not pass it.
+  images:
+    needs: [verify, ci, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: true
+      matrix:
+        image: [api, web]
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      # The runner is amd64; the arm64 half of each image builds under emulation.
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: date
+        run: echo "now=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      # `APP_VERSION` is read by the api stage alone: it is what `/api/health`
+      # reports. The Dockerfile's own labels stay; only the version is added.
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.image }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/backshelf/projammr-${{ matrix.image }}:${{ env.VERSION }}
+          labels: org.opencontainers.image.version=${{ env.VERSION }}
+          build-args: |
+            SOURCE_REVISION=${{ github.sha }}
+            BUILD_DATE=${{ steps.date.outputs.now }}
+            ${{ matrix.image == 'api' && format('APP_VERSION={0}', env.VERSION) || '' }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          provenance: mode=max
+          sbom: true
+      # Attestations need a public repository on this plan.
+      - if: ${{ vars.PUBLIC_REPO == 'true' }}
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ghcr.io/backshelf/projammr-${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # What a user runs: the pushed images through the shipped compose files, then
+  # the boot check against them, asserting the version the tag names.
+  smoke:
+    needs: [verify, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    env:
+      PROJAMMR_VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: bun apps/e2e/src/stack.ts up
+      - run: bun apps/e2e/src/smoke.ts
+        env:
+          E2E_CA_FILE: apps/e2e/.stack/ca.crt
+          E2E_EXPECT_VERSION: ${{ needs.verify.outputs.version }}
+      - name: Stack logs
+        if: failure()
+        run: bun apps/e2e/src/stack.ts logs
+      - name: Stack down
+        if: always()
+        run: bun apps/e2e/src/stack.ts down
+
+  # The signed, update-ready dit app (`dit-app-package.yml`, release leg).
+  app:
+    needs: [verify, ci, e2e]
+    uses: ./.github/workflows/dit-app-package.yml
+    with:
+      release: true
+    secrets: inherit
+
+  # The draft release: the app's assets, their checksums and the update feed.
+  draft:
+    needs: [verify, app]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.verify.outputs.version }}
+      PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dit-release
+          path: assets
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: notes
+      # The updater reads this file from `releases/latest/download/`, which
+      # resolves to a published release that is not a pre-release: a draft and
+      # an `-rc` tag never reach an installed app.
+      - name: Write the update feed and the checksums
+        working-directory: assets
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg version "$VERSION" \
+            --rawfile notes ../notes/notes.md \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --rawfile signature dit-macos-arm64.app.tar.gz.sig \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/dit-macos-arm64.app.tar.gz" \
+            '{
+              version: $version,
+              notes: ($notes | rtrimstr("\n")),
+              pub_date: $pub_date,
+              platforms: { "darwin-aarch64": { signature: ($signature | rtrimstr("\n")), url: $url } }
+            }' > latest.json
+          jq -e '.platforms["darwin-aarch64"] | (.signature | length > 0) and (.url | startswith("https://"))' latest.json
+          shasum -a 256 dit-macos-arm64.dmg dit-macos-arm64.app.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+      # Attestations need a public repository on this plan.
+      - if: ${{ vars.PUBLIC_REPO == 'true' }}
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            assets/dit-macos-arm64.dmg
+            assets/dit-macos-arm64.app.tar.gz
+            assets/SHA256SUMS
+      - name: Create the draft release
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" assets/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            flags=()
+            if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+            gh release create "$TAG" assets/* --draft --verify-tag --title "Projammr $VERSION" \
+              --notes-file notes/notes.md "${flags[@]}" --repo "$GITHUB_REPOSITORY"
+          fi
+
+  # Only a smoke-tested release goes out: `x.y` and `latest` move onto the
+  # image that passed (a release candidate keeps `x.y.z-rc.N` alone), then the
+  # draft is published.
+  publish:
+    needs: [verify, smoke, draft]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.verify.outputs.version }}
+      PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote the images
+        if: ${{ needs.verify.outputs.prerelease != 'true' }}
+        run: |
+          set -euo pipefail
+          minor="${VERSION%.*}"
+          for image in "$REGISTRY_API" "$REGISTRY_WEB"; do
+            docker buildx imagetools create -t "$image:$minor" -t "$image:latest" "$image:$VERSION"
+          done
+      - name: Publish the release
+        run: |
+          set -euo pipefail
+          if [ "$PRERELEASE" = "true" ]; then
+            gh release edit "$TAG" --draft=false --prerelease --repo "$GITHUB_REPOSITORY"
+          else
+            gh release edit "$TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"
+          fi

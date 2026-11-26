@@ -1,0 +1,32 @@
+{
+  "name": "@workspace/eslint-config",
+  "version": "0.9.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "format": "bun --bun prettier --write \"**/*.js\""
+  },
+  "exports": {
+    "./base": "./base.js",
+    "./next-js": "./next.js",
+    "./react": "./react.js",
+    "./react-internal": "./react-internal.js",
+    "./design-tokens": "./design-tokens.js",
+    "./react-hooks": "./react-hooks.js",
+    "./typescript": "./typescript.js"
+  },
+  "devDependencies": {
+    "@eslint-react/eslint-plugin": "^5.28.8",
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "^16.4.6",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-only-warn": "^1.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-turbo": "^2.11.10",
+    "globals": "^17.14.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2"
+  }
+}

@@ -1,0 +1,137 @@
+---
+/* dit's own page: what the menu bar app records, how it handles bounces and
+   old projects, how it connects, and the download. Lit by the mono cover, so
+   the page stays grey as dit's panel does. Every claim is from the dit docs
+   (`docs/agents/dit.md`) and the dit app's own copy. */
+import Close from "@/components/marketing/Close.astro";
+import DitDownload from "@/components/marketing/DitDownload.astro";
+import Hunk from "@/components/marketing/Hunk.astro";
+import MastheadArt from "@/components/marketing/MastheadArt.astro";
+import PageHead from "@/components/marketing/PageHead.astro";
+import SaveHistory from "@/components/marketing/SaveHistory.astro";
+import SessionDiff from "@/components/marketing/SessionDiff.astro";
+import { coverArt } from "@/data/covers";
+import SiteLayout from "@/layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="dit"
+  description="A menu bar app for the Mac you make music on: it records every save of an Ableton Live set and sends the history to your Projammr server."
+  art={coverArt("mono")}
+>
+  <MastheadArt slot="atmosphere" cover="mono" />
+
+  <PageHead
+    title="Every save of your set, kept."
+    lede="dit is a menu bar app for the Mac you make music on. It records each save of an Ableton Live set and sends the history to your Projammr server."
+  >
+    <div slot="actions" id="download">
+      <DitDownload class="on-art-soft" />
+    </div>
+  </PageHead>
+
+  <Hunk
+    id="records"
+    title="It keeps a set's saves as they were, and shows what changed."
+    lines={[
+      {
+        sign: "+",
+        text: "Each save of the set Live has open is recorded while dit is running.",
+      },
+      {
+        sign: "+",
+        text: "Tempo, key and time signature, every track and group, and each device chain.",
+      },
+      {
+        sign: "+",
+        text: "Plugins with their format and maker, and the samples a set points at.",
+      },
+      {
+        sign: "+",
+        text: "What changed between two saves: tempo, key, tracks, devices, clips and samples.",
+      },
+      {
+        sign: "~",
+        text: "Every save is kept, so any two can be compared and an earlier one brought back.",
+      },
+    ]}
+    link={{ href: "/docs/guide/session-history/", label: "Save history" }}
+  >
+    <SessionDiff />
+  </Hunk>
+
+  <Hunk
+    id="bounces"
+    title="It offers the bounces you make, and remembers your answer."
+    lines={[
+      {
+        sign: "+",
+        text: "A bounce that lands beside a set is offered as a render of it, for you to accept or turn down.",
+      },
+      {
+        sign: "+",
+        text: "Not the set's? Point it at another set of the repository instead.",
+      },
+      {
+        sign: "+",
+        text: "“Not a bounce” is remembered on every Mac you use.",
+      },
+      {
+        sign: "~",
+        text: "“Never here” keeps one folder on one Mac out of it.",
+      },
+    ]}
+  />
+
+  <Hunk
+    id="backfill"
+    title="The years before dit come with it."
+    lines={[
+      {
+        sign: "+",
+        text: "Bring in projects finds your Live project folders and proposes the track and the session each set belongs to.",
+      },
+      {
+        sign: "+",
+        text: "A session Projammr already has keeps its comments, versions and notes; the set's history is added to it.",
+      },
+      {
+        sign: "+",
+        text: "Live's Backup copies become earlier saves, so a set's history reaches back before dit.",
+      },
+      {
+        sign: "~",
+        text: "Nothing is brought in until you look over what it found and press Start.",
+      },
+    ]}
+  >
+    <SaveHistory />
+  </Hunk>
+
+  <Hunk
+    id="connect"
+    title="It connects to the server you run, and updates when you say."
+    lines={[
+      {
+        sign: "+",
+        text: "Point it at your instance's address and sign in. It keeps a token in the Mac's Keychain, never your password.",
+      },
+      {
+        sign: "+",
+        text: "It checks the latest release at launch and every six hours.",
+      },
+      {
+        sign: "~",
+        text: "An update installs only when you choose it, and waits for any push or backfill to finish.",
+      },
+    ]}
+  />
+
+  <Close id="get" title="For Apple silicon Macs. It reads Ableton Live.">
+    <p class="max-w-(--measure) text-lead text-pretty text-ink-soft">
+      Each DAW dit reads is a module of its own, and Ableton Live's is the one
+      there is.
+    </p>
+    <DitDownload />
+  </Close>
+</SiteLayout>

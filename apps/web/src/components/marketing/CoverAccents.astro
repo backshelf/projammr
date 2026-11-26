@@ -1,0 +1,79 @@
+---
+/* The four covers the demo catalogue uses, each beside the accent the server
+   takes from it: the swatch is that cover's `--art` in the current theme,
+   and the figures are the hue and chroma stored on its image row. The last
+   one has too little colour to name a hue, so its swatch is the grey every
+   page falls back to. Each cover carries its own light for the band it sits
+   in, so pointing at a cover lights the band with it. */
+import { Image } from "astro:assets";
+
+import { LABEL } from "@workspace/ui/lib/shell";
+
+import BandLight from "@/components/marketing/BandLight.astro";
+import { COVERS, coverArt, type CoverKey } from "@/data/covers";
+
+/** What each cover lights in the demo catalogue, and what it looks like. */
+const SHOWN: { cover: CoverKey; lights: string; alt: string }[] = [
+  {
+    cover: "teal",
+    lights: "Longshore",
+    alt: "Cover art: a soft field of teal light with an amber glow low on the left.",
+  },
+  {
+    cover: "magenta",
+    lights: "Low Tide",
+    alt: "Cover art: violet light over deep indigo, with a blue glow below it.",
+  },
+  {
+    cover: "sunset",
+    lights: "Harbour Lights",
+    alt: "Cover art: orange light over deep red, with a pink glow below it.",
+  },
+  {
+    cover: "mono",
+    lights: "Glasshouse",
+    alt: "Cover art: a grey glow on near-black.",
+  },
+];
+---
+
+<ul class="grid grid-cols-4 gap-x-5 gap-y-8 phone:grid-cols-2">
+  {SHOWN.map(({ cover, lights, alt }) => {
+    const { image, hue, chroma } = COVERS[cover];
+    return (
+      <li
+        class="band-relight flex min-w-0 flex-col gap-3"
+        style={coverArt(cover)}
+      >
+        <BandLight relight />
+        <Image
+          src={image}
+          alt={alt}
+          widths={[240, 320, 480, 640]}
+          sizes="(min-width: 1216px) 18rem, (min-width: 768px) 22vw, 45vw"
+          class="aspect-square w-full rounded-sm object-cover"
+        />
+        <span aria-hidden="true" class="block h-1 w-full rounded-full bg-art" />
+        <span class="flex flex-col gap-1">
+          <span class="text-small text-ink">{lights}</span>
+          <span
+            class:list={[
+              LABEL,
+              "flex flex-wrap gap-x-[1ch] text-ink-soft tabular-nums",
+            ]}
+          >
+            {(hue == null
+              ? ["No hue", "stays grey"]
+              : [`Hue ${hue.toFixed(1)}`, `chroma ${chroma.toFixed(3)}`]
+            ).map((pair, i, pairs) => (
+              <span class="whitespace-nowrap">
+                {pair}
+                {i < pairs.length - 1 && " ·"}
+              </span>
+            ))}
+          </span>
+        </span>
+      </li>
+    );
+  })}
+</ul>

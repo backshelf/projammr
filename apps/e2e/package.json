@@ -1,0 +1,24 @@
+{
+  "name": "e2e",
+  "version": "0.9.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stack": "bun src/stack.ts",
+    "smoke": "bun src/smoke.ts",
+    "test:e2e": "playwright test",
+    "format": "bun --bun prettier --write \"**/*.ts\"",
+    "typecheck": "bun check",
+    "lint": "bun --bun eslint ."
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.65.0",
+    "@types/bun": "^1.4.4",
+    "@workspace/eslint-config": "workspace:*",
+    "@workspace/typescript-config": "workspace:*",
+    "eslint": "^10.14.0",
+    "typescript": "^7.1.0-dev.20261010.1"
+  }
+}

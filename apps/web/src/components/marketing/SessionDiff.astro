@@ -1,0 +1,42 @@
+---
+/* Two saves of one set, diffed the way the app diffs them: the app's own
+   save diff card, fed by `diffSave` over two saves of the demo catalogue's
+   Halogen set and rendered as HTML only. The set is drawn as a skyline in its
+   tracks' own colours with what the save changed marked on it, the tempo's
+   move is set on its ruler, and the outline's groups and unchanged runs are
+   native disclosures, so they open and close with no script. */
+import { SaveDiffCard } from "@workspace/ui/components/session-structure/save-diff-card";
+import { diffSave } from "@workspace/session-diff";
+
+import ProofCaption from "@/components/marketing/ProofCaption.astro";
+import { HALOGEN_HISTORY, HALOGEN_SET } from "@/data/halogen-saves";
+
+type Props = { class?: string };
+
+const { class: className } = Astro.props;
+
+const [after, before] = HALOGEN_HISTORY;
+const diff = diffSave(before!.meta, after!.meta, HALOGEN_SET.capabilities);
+
+/* Past the last save, so its day reads as a date rather than "Today". */
+const asOf = new Date("2026-06-20T12:00:00+10:00");
+---
+
+<SaveDiffCard
+  as="figure"
+  diff={diff}
+  saves={{
+    before: { at: before!.at, machine: HALOGEN_SET.machine },
+    after: { at: after!.at, machine: HALOGEN_SET.machine },
+  }}
+  daw={HALOGEN_SET.daw}
+  collapseUnchanged
+  asOf={asOf}
+  timeZone={HALOGEN_SET.timeZone}
+  className={className}
+>
+  <ProofCaption
+    name={HALOGEN_SET.file}
+    detail={`${HALOGEN_SET.track} · the last two saves`}
+  />
+</SaveDiffCard>

@@ -1,0 +1,114 @@
+---
+/* The plans (`@/data/pricing`), what running Projammr yourself involves, and
+   what hosting will be. Hosting does not exist yet, so the page says nothing
+   about it beyond the app, its storage and its members, and every hosted
+   action reads "Coming soon". The stack drawing is the self-hosting docs'
+   own (`StackDiagram`), held against the compose file by its test. */
+import Action from "@/components/marketing/Action.astro";
+import Close from "@/components/marketing/Close.astro";
+import Hunk from "@/components/marketing/Hunk.astro";
+import MastheadArt from "@/components/marketing/MastheadArt.astro";
+import PageHead from "@/components/marketing/PageHead.astro";
+import PlanList from "@/components/marketing/PlanList.astro";
+import StackDiagram from "@/components/docs/StackDiagram.astro";
+import { coverArt } from "@/data/covers";
+import SiteLayout from "@/layouts/SiteLayout.astro";
+import { SITE } from "@/site";
+---
+
+<SiteLayout
+  title="Pricing"
+  description={`Projammr is free to run on your own server, open source under ${SITE.license}. Hosted plans, priced by storage and members, are coming soon.`}
+  art={coverArt("teal")}
+>
+  <MastheadArt slot="atmosphere" cover="teal" />
+
+  <PageHead
+    title="Free to run yourself."
+    lede={`Projammr is open source under ${SITE.license}. Run the whole app on your own server for nothing, or wait for hosting, priced by storage and members.`}
+  >
+    <Action slot="actions" href="/docs/self-hosting/quickstart/">
+      Self-host it
+    </Action>
+  </PageHead>
+
+  <Hunk
+    id="plans"
+    cover="teal"
+    title="Three plans, one app."
+    layout="stack"
+    lines={[
+      {
+        sign: "+",
+        text: "Every plan runs the same app. The hosted plans differ in storage and members.",
+      },
+      {
+        sign: "~",
+        text: "Hosting is not open yet, so there is nothing to sign up for.",
+      },
+    ]}
+  >
+    <PlanList />
+  </Hunk>
+
+  <Hunk
+    id="self-hosted"
+    title="Your server, your data, your copy of the code."
+    lines={[
+      {
+        sign: "+",
+        text: "It runs on a machine you control, with Docker Compose or without Docker.",
+      },
+      {
+        sign: "+",
+        text: "Your audio, your notes and the database stay on it, and so do the backups.",
+      },
+      {
+        sign: "+",
+        text: `The code is open source under ${SITE.license}: read it, change it, run it.`,
+      },
+      {
+        sign: "~",
+        text: "Storage has no cap unless you set one, per project or per account.",
+      },
+      {
+        sign: "~",
+        text: "Run a changed copy for other people, and the licence asks you to share your changes with them.",
+      },
+      { sign: "−", text: "Telemetry and analytics." },
+    ]}
+    link={{ href: "/docs/self-hosting/", label: "Self-hosting" }}
+  >
+    <StackDiagram />
+  </Hunk>
+
+  <Hunk
+    id="hosted"
+    title="Hosting will run the app for you."
+    lines={[
+      {
+        sign: "+",
+        text: "The same app, on a server you do not have to run.",
+      },
+      {
+        sign: "+",
+        text: "Storage and members set by the plan you choose.",
+      },
+      { sign: "~", text: "Coming soon." },
+    ]}
+  />
+
+  <Close id="start" cover="teal" title="Start on your own server today.">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div class="flex flex-wrap gap-3">
+        <Action href="/docs/self-hosting/quickstart/">Self-host it</Action>
+        <Action href="/docs/self-hosting/" variant="ghost">
+          Read the self-hosting docs
+        </Action>
+      </div>
+      <Action href={SITE.repository} variant="quiet">
+        Source on GitHub
+      </Action>
+    </div>
+  </Close>
+</SiteLayout>

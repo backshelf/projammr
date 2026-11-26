@@ -1,0 +1,103 @@
+---
+title: Conventions
+description: The engineering principles Projammr's code follows, how commits are written, and where the design system lives.
+sidebar:
+  order: 5
+---
+
+Projammr aims to stay minimal, elegant and correct, and the best code is the code never written. The principles
+below all serve that. They are written out in full in `AGENTS.md` at the root of the repository; this page is the
+short version.
+
+## Engineering principles
+
+**Don't repeat yourself, broadly.** Before writing something, look for what already does it, and import that. Two
+pieces of code that follow the same pattern, even if they are not identical, should become one. A comment that says
+"mirrors X" or "keep in sync with X" is a sign of duplication to fix, not to document.
+
+**Put code where it generalises.** A behaviour that applies to any entity belongs in the shared machinery (the
+server's entity registry, the web app's shared table and form code), not special-cased in one module. A behaviour
+that applies to any API call belongs in `@workspace/api`. If a second caller would have to copy a pattern, it is in
+the wrong place.
+
+**Default to modular.** When something has more than one variant, or will, each variant is a unit of its own behind
+one interface, and the code that uses it does not know which one it has. Adding a variant means adding a module and
+registering it, never adding a case to a central switch. The server's entity registry and the scanner's DAW modules
+are the models. Anything a type knows about itself lives on the type: consumers call methods, and never branch on
+which variant they were given.
+
+**State belongs to what it describes.** Keep a piece of state with the thing it is about, not with a parent that
+manages it on its behalf, even when splitting it out would make a type check or a render easier.
+
+**The server is the authority.** The database is the model. Persistent state lives on the server; the web app and
+the scanner hold only what they can rebuild from the API on the next fetch. Changes go up through the API, data comes
+down from it, and nothing keeps a hand-synced copy of server state. If a value seems to want to live in two places,
+the operation that created it is what needs fixing.
+
+**Do it properly.** No hacks, no hard-coding, no shortcuts. A bug is often a sign that the code around it is more
+complicated than it needs to be: before patching it, ask whether a restructure would make it impossible instead.
+
+**Every feature has a test, and every bug a regression test.** For a bug, write the test first, watch it fail
+against the unfixed code, then fix the code and watch it pass. A test that would have passed without the fix does not
+count.
+
+**Comments describe the code as it is.** Say what the code does and why it is there, never how it got that way: no
+"new", "now", "previously" or references to plans and tickets. If code needs a comment to be understood, try a
+better name first.
+
+**No backwards compatibility before the first release.** Projammr is pre-release. A breaking change to the API or
+the database is made directly, with every producer and consumer updated in the same change: no deprecated fields,
+no upgrade shims. Schema changes still go through migrations.
+
+**Credit what you borrow.** Code, algorithms or components taken from somewhere else (open-source projects, shadcn
+registries, papers, posts) carry a credit to the source and its author at the top of the file, or beside the
+borrowed fragment.
+
+**Never block the scanner.** Every call between the scanner's window and its main process is asynchronous, and
+long work in the main process (walking a folder tree, reading a set) is chunked or reports progress, so the window
+never freezes.
+
+## Commit messages
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org): a type, a scope, and a summary in the
+imperative, lowercase.
+
+```text
+feat(server): add a health endpoint
+fix(scanner): guard against a missing config.json
+refactor(ui): extract StatusPill from the track table
+```
+
+- **Types:** `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `perf`.
+- **Scopes:** the app or package the change touches (`server`, `client`, `scanner`, `web`, `ui`, `api`, `dsp`), or
+  a narrower area inside one when that reads better.
+- Work tracked in the project's issue tracker carries the issue's key after the scope, on every commit:
+  `feat(server): PROJ-<n> add a health endpoint`. A change with no tracked issue behind it leaves the key out
+  rather than inventing one.
+
+## Code style
+
+- Prettier formats everything: two-space indents, semicolons, double quotes, a print width of 80, and Tailwind
+  classes sorted by its plugin. `bun run format` applies it.
+- TypeScript is strict everywhere, with `noUncheckedIndexedAccess`.
+- Generated files are never edited by hand; regenerate them. See
+  [The repository](/docs/contributing/repository/#the-generated-api-types).
+
+## Design system
+
+Every surface (the web app, the scanner, the share page and this site) shares one design language: a dim listening
+room lit by the music's own artwork. `DESIGN.md` at the root of the repository defines it, and `PRODUCT.md` says
+who the product is for and the words it uses. Read both before changing anything a person sees.
+
+- **Colour comes from tokens, never Tailwind's palette.** Classes like `green-600` or `bg-black/50` are not used:
+  colour comes from the artwork tokens, the status and label colours, and the warning and danger tokens in
+  `packages/ui/src/styles/globals.css`. Lint enforces it where the design-tokens config is enabled.
+- **Components live in `@workspace/ui`.** New shadcn components are added from the root, pointed at the web app's
+  config, and land in `packages/ui/src/components`:
+
+  ```bash
+  bunx shadcn@latest add button -c apps/client
+  ```
+
+  Import them anywhere as `@workspace/ui/components/button`. The design language is deliberately quieter than
+  stock shadcn, so expect to adjust what arrives.

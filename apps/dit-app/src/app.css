@@ -1,0 +1,25 @@
+@import "@workspace/ui/fonts.css";
+@import "@workspace/ui/globals.css";
+
+/* Tailwind infers sources from the process cwd; naming the source tree makes
+   the class scan independent of where Vite is invoked from. */
+@source "./**/*.{ts,tsx}";
+
+#root {
+  min-height: 100vh;
+}
+
+/* The set screen's skyline readout (`set/skyline-readout.tsx`). A bar is 8px wide at most, so its hit area reaches
+   its neighbours and up the whole drawing. */
+.skyline-readout .skyline__bar {
+  position: relative;
+}
+.skyline-readout .skyline__bar::after {
+  content: "";
+  position: absolute;
+  inset: -2.5rem -0.5rem 0;
+}
+/* Under reduced motion a lit bar stays lit (that is state); only the fade between lit and dimmed goes. */
+.skyline-readout[data-reduced-motion] .skyline__bar {
+  transition: none;
+}

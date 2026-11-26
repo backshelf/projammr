@@ -1,0 +1,740 @@
+@custom-variant dark (&:is(.dark *));
+
+/* The two layout widths the page anatomy turns on: below `stack` the canvas
+   and the notes/artwork split collapse to one column and the rail unsticks
+   into a metadata grid; below `phone` the masthead shortens and the player
+   collapses. Named here so a component reads what the breakpoint means
+   instead of restating the pixel value. `phone` sits on Tailwind's `md`
+   floor, which is the same line `useIsMobile` switches on, so the CSS and JS
+   phone tiers cannot drift apart. */
+@custom-variant stack (@media (width <= 1180px));
+@custom-variant phone (@media (width < 768px));
+
+/* Input capability, which width cannot stand in for: an affordance revealed
+   on hover is unreachable on a touchscreen, and a target sized for a cursor
+   is not sized for a finger. */
+@custom-variant fine (@media (hover: hover) and (pointer: fine));
+@custom-variant coarse (@media (pointer: coarse));
+
+/* Reduced motion as the document asks for it: the OS preference, unless
+   `data-motion` on <html> overrides it — `reduce` reduces everywhere, `full`
+   never does. The two take over Tailwind's own names, so every
+   `motion-reduce:` and `motion-safe:` class and every `@variant motion-reduce`
+   block in the token layer follows the one switch. `:where()` adds nothing to
+   a rule's specificity, so each keeps the weight the bare media query gave it.
+   A rule on a pseudo-element (`body::after`, the view-transition tree) cannot
+   take a variant, which appends to the selector; motion.css writes those two
+   out by hand. */
+@custom-variant motion-reduce {
+  @media (prefers-reduced-motion: reduce) {
+    &:where(:root:not([data-motion="full"]) *) {
+      @slot;
+    }
+  }
+  &:where(:root[data-motion="reduce"] *) {
+    @slot;
+  }
+}
+@custom-variant motion-safe {
+  @media (prefers-reduced-motion: no-preference) {
+    &:where(:root:not([data-motion="reduce"]) *) {
+      @slot;
+    }
+  }
+  &:where(:root[data-motion="full"] *) {
+    @slot;
+  }
+}
+
+/* A rail block that sits under another rail block, and so carries the seam
+   between them. The second form reaches the first block of the group
+   `RailMore` folds away on a phone: from the phone tier up that group is
+   `display: contents`, so its blocks stack visually under the last shown
+   block without being its siblings. */
+@custom-variant rail-seam (&:where([data-slot="rail-block"] + *, [data-slot="rail-block"] + * > :first-child));
+
+:root {
+  /* Form controls, scrollbars and the phone's soft keyboard are drawn by the
+     platform, which reads this rather than the token layer. */
+  color-scheme: light;
+
+  --radius: 0.45rem;
+  --overlay-lift-alpha: 28%;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+
+  /* --- Token layer ---------------------------------------------------
+       Grayscale spine + artwork channel. Nothing here is chromatic except
+       the --art-* group (supplied per page from extracted artwork) and the
+       two semantic hues. */
+  --paper: oklch(0.995 0 0);
+  --paper-sunk: oklch(0.965 0 0);
+  --ink: oklch(0.09 0 0);
+  --ink-soft: oklch(0.44 0 0);
+  --ink-faint: oklch(0.63 0 0);
+  --rule: oklch(0.89 0 0);
+  --rule-strong: oklch(0.78 0 0);
+  --glass: oklch(1 0 0 / 62%);
+  --glass-edge: oklch(0.89 0 0);
+  --grain-opacity: 0.5;
+
+  /* Artwork channel — no-artwork fallbacks. A page with artwork sets
+     `--art-light` / `--art-dark` (see the resolver rules below), never `--art`
+     directly. */
+  --art: oklch(0.45 0 0);
+  --art-glow: oklch(0.65 0 0);
+  --art-ink: oklch(0.3 0 0);
+  --art-image: none;
+
+  --warn: oklch(0.58 0.16 65);
+  --danger: oklch(0.52 0.22 27);
+
+  /* Type scale — 1.25 ratio from a 1rem body, fluid display step. */
+  --t-micro: 0.6875rem;
+  --t-small: 0.75rem;
+  --t-body: 0.875rem;
+  --t-lead: 1rem;
+  --t-section: 1.5rem;
+  --t-subtitle: 1.75rem;
+  --t-title: 2.5rem;
+  --t-display: clamp(2.5rem, 6.5vw, 5.5rem);
+
+  --measure: 68ch;
+  --column: 52rem;
+  --rail: 20rem;
+  --gutter: clamp(1rem, 3vw, 2.5rem);
+  /* The factor a row's vertical padding is scaled by: entity-table cells and
+     the hairline `Row`. `data-density` sets it (Appearance, at the end). */
+  --density: 1;
+  /* Height of any app chrome above the scroll container that the rail must
+       clear. The sidebar and the player bar are the only chrome, and both sit
+       beside or below the page rather than above it, so nothing is deducted. */
+  --menubar: 0rem;
+
+  /* Height of the fixed player bar. Anything sitting at the bottom of the
+       window clears it by this much rather than by a guessed padding. */
+  --player-card: 8.5rem;
+
+  /* An entity page's masthead: the band its art fills and fades within
+       (`--masthead-h` on the art and the scrim), and the header's floor. The
+       phone tier shortens both, as `data-masthead="short"` does. */
+  --masthead-band: 82vh;
+  --masthead-head: 50vh;
+
+  /* The body face: the mono, or one of the platform's own faces when
+       `data-font` asks for it, so switching costs no font request. Code and
+       readouts name `--font-mono` itself and stay mono whichever is chosen. */
+  --font-body: var(--font-mono);
+  --font-system-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-system-serif:
+    ui-serif, "New York", "Iowan Old Style", Charter, Georgia, Cambria,
+    "Times New Roman", serif;
+
+  /* Duration scale. Each step names what it is long enough for, not a raw
+       number: the hand's own feedback, a reveal, a toggle or status change, a
+       surface taking its place, a page arriving, the art blooming on load. */
+  --dur-instant: 80ms;
+  --dur-quick: 140ms;
+  --dur-move: 240ms;
+  --dur-settle: 420ms;
+  --dur-arrive: 700ms;
+  --dur-bloom: 1100ms;
+
+  /* Arrival curve: a fast start that settles without overshoot. Leave curve:
+       gathers speed and is gone. */
+  --ease-arrive: cubic-bezier(0.2, 0, 0, 1);
+  --ease-leave: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+  /* Map the neutral spine onto the shadcn token names so untouched
+       components pick up the new palette for free. */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--paper-sunk);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-sunk);
+  --muted-foreground: var(--ink-soft);
+  --accent: var(--paper-sunk);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  --border: var(--rule);
+  --input: var(--rule);
+  --ring: var(--art);
+  --sidebar: var(--paper-sunk);
+  --sidebar-foreground: var(--ink-soft);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: color-mix(in oklab, var(--ink) 8%, transparent);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--art);
+
+  /* Chrome docked to the bottom edge on phones. Both the tab bar and the
+     mini-player row are only there some of the time — the tab bar is absent
+     outside a project, the mini-player row only while a track is loaded —
+     which the dock flags on <body> because it is a sibling of the scroll
+     containers and a custom property only cascades downward. --dock is the
+     single number every scroll container pads by, so nothing has to know
+     which of the two is present, or that neither is. The `-height` pair is
+     what each row is sized with: it never depends on the flag, so a bar is
+     never zero-height on the frame before the effect has run. */
+  --tabbar-height: 3.5rem;
+  --miniplayer-height: 4rem;
+  --tabbar: 0px;
+  --miniplayer: 0px;
+  --dock: 0px;
+}
+
+@media (width < 768px) {
+  :root {
+    --masthead-band: 52vh;
+    --masthead-head: 42vh;
+  }
+
+  /* Declared on body, not :root, because a var() is substituted on the element
+     that declares it: --dock has to sit on the same element the mini-player
+     flag lands on, or it would always read the :root value of --miniplayer. */
+  body {
+    --dock: calc(
+      var(--tabbar) + var(--miniplayer) + env(safe-area-inset-bottom)
+    );
+  }
+
+  /* The tab bar's presence depends only on the pathname, so :has() already
+     reflects it at first paint; :not([data-keyboard]) keeps the reservation
+     from winning a race with the keyboard-collapse rule below. */
+  body:has([data-slot="tabbar"]):not([data-keyboard]) {
+    --tabbar: var(--tabbar-height);
+  }
+
+  body[data-miniplayer] {
+    --miniplayer: var(--miniplayer-height);
+  }
+
+  /* The dock hides itself while the keyboard is up (Dock.tsx), so nothing
+     should reserve space for it. */
+  body[data-keyboard] {
+    --tabbar: 0px;
+    --miniplayer: 0px;
+  }
+}
+
+/* --pct drives the status conic-gradient pie; registered so it can animate. */
+@property --pct {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+/* --clipped is 1 only while a .clip-cell has inline overflow: the keyframe
+   sets it, and the animation is attached to the cell's own inline scroll
+   timeline, which is inactive (so the animation never applies) unless the
+   content is wider than the cell. This is how a table cell shows a fade at
+   its right edge when it is clipping without measuring anything in JS.
+   Without `animation-timeline` support (iOS 17/18 Safari) the animation
+   would instead run on the document timeline with a 0s duration and fill
+   forward, pinning --clipped: 1 on every cell whether or not it clips — so
+   the timeline-driven rule is confined to browsers that support it, and
+   --clipped stays 0 (no fade) everywhere else. */
+@property --clipped {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@keyframes clip-detect {
+  from,
+  to {
+    --clipped: 1;
+  }
+}
+
+.clip-cell {
+  position: relative;
+  overflow: hidden;
+}
+
+@supports (animation-timeline: scroll(self inline)) {
+  .clip-cell {
+    animation: clip-detect linear both;
+    animation-timeline: scroll(self inline);
+  }
+}
+
+.clip-cell::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  width: 2rem;
+  pointer-events: none;
+  background: linear-gradient(to left, var(--paper), transparent);
+  opacity: var(--clipped);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --overlay-lift-alpha: 65%;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+
+  /* --- Token layer (dark) ------------------------------------------ */
+  --paper: oklch(0.135 0 0);
+  --paper-sunk: oklch(0.105 0 0);
+  --ink: oklch(0.99 0 0);
+  --ink-soft: oklch(0.68 0 0);
+  --ink-faint: oklch(0.48 0 0);
+  --rule: oklch(1 0 0 / 11%);
+  --rule-strong: oklch(1 0 0 / 22%);
+  --glass: oklch(0.2 0 0 / 55%);
+  --glass-edge: oklch(1 0 0 / 11%);
+  --grain-opacity: 0.75;
+
+  --art: oklch(0.8 0 0);
+  --art-glow: oklch(0.38 0 0);
+  --art-ink: oklch(0.85 0 0);
+
+  --warn: oklch(0.78 0.15 70);
+  --danger: oklch(0.7 0.19 22);
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-sunk);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-sunk);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: color-mix(in oklab, var(--ink) 14%, transparent);
+  --secondary-foreground: var(--ink);
+  --muted: color-mix(in oklab, var(--ink) 14%, transparent);
+  --muted-foreground: var(--ink-soft);
+  --accent: color-mix(in oklab, var(--ink) 14%, transparent);
+  --accent-foreground: var(--ink);
+  --destructive: var(--danger);
+  --border: var(--rule);
+  --input: var(--rule-strong);
+  --ring: var(--art);
+  --sidebar: var(--paper-sunk);
+  --sidebar-foreground: var(--ink-soft);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: color-mix(in oklab, var(--ink) 12%, transparent);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--art);
+}
+
+/* The accent for pages with no artwork: `--art-fallback`, any CSS colour,
+   inline on <html> (or on any element that scopes one). It takes the
+   lightness and chroma cap an extracted cover would (`ACCENT_TONES` in
+   `lib/art.ts`), so a picked colour holds the same contrast in both themes,
+   and replaces the grayscale fallback on the element that carries it. The
+   four `--art-fallback-*` tokens reach every grayscale artwork pair below it
+   too (`artVarsFromAccent`), while a cover's own inline pair still wins: the
+   resolver rules that follow outlast these at equal weight. The selector
+   keeps its colon so it matches the property, not a value that names one of
+   the tokens. */
+[style*="--art-fallback:"] {
+  --art-fallback-light: oklch(
+    from var(--art-fallback) 0.55 min(c * 1.3, 0.19) h
+  );
+  --art-fallback-glow-light: oklch(
+    from var(--art-fallback) 0.72 min(c, 0.14) h
+  );
+  --art-fallback-dark: oklch(
+    from var(--art-fallback) 0.78 min(c * 1.25, 0.17) h
+  );
+  --art-fallback-glow-dark: oklch(from var(--art-fallback) 0.45 min(c, 0.14) h);
+  --art: var(--art-fallback-light);
+  --art-glow: var(--art-fallback-glow-light);
+}
+
+.dark[style*="--art-fallback:"],
+.dark [style*="--art-fallback:"] {
+  --art: var(--art-fallback-dark);
+  --art-glow: var(--art-fallback-glow-dark);
+}
+
+/* ArtProvider emits the accent as `--art-light` / `--art-dark` inline pairs
+   (a media query cannot live in a style attribute) and never `--art` itself —
+   an inline `--art` would outweigh these rules and pin the accent to one
+   theme. These resolve `--art` / `--art-glow` from whichever pair the active
+   theme calls for. */
+[style*="--art-light"] {
+  --art: var(--art-light);
+  --art-glow: var(--art-glow-light);
+}
+
+.dark [style*="--art-dark"] {
+  --art: var(--art-dark);
+  --art-glow: var(--art-glow-dark);
+}
+
+/* BlockNote's shadcn wrapper stamps its own `.dark` on `.bn-root`, which
+   re-fires the grayscale `--art` fallback from the `.dark` block above and
+   severs the page accent for everything inside the editor. The wrapper carries
+   no accent of its own, so hand the inherited value back. */
+.dark .bn-root {
+  --art: inherit;
+  --art-glow: inherit;
+}
+
+@theme inline {
+  /* The only three shadows (DESIGN.md Shadow Vocabulary): `shadow-overlay` for
+     dialogs, popovers and sheets, `shadow-menu` for menus, `shadow-float` for
+     a glass card detached over page content. */
+  --shadow-overlay: 0 24px 60px -20px oklch(0 0 0 / var(--overlay-lift-alpha));
+  --shadow-menu: 0 18px 44px -16px oklch(0 0 0 / 30%);
+  --shadow-float: 0 1px 2px oklch(0 0 0 / 8%), 0 12px 32px oklch(0 0 0 / 18%);
+  --ease-arrive: var(--ease-arrive);
+  --ease-leave: var(--ease-leave);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-heading);
+  --font-sub: var(--font-sub);
+  --font-display-clean: var(--font-display-clean);
+
+  --color-paper: var(--paper);
+  --color-paper-sunk: var(--paper-sunk);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-art: var(--art);
+  --color-art-glow: var(--art-glow);
+  --color-art-ink: var(--art-ink);
+  --color-glass: var(--glass);
+  --color-glass-edge: var(--glass-edge);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  --text-micro: var(--t-micro);
+  --text-small: var(--t-small);
+  --text-body: var(--t-body);
+  --text-lead: var(--t-lead);
+  --text-section: var(--t-section);
+  --text-subtitle: var(--t-subtitle);
+  --text-title: var(--t-title);
+  --text-display: var(--t-display);
+}
+
+/* Motion utilities for the stateless primitives server components render —
+   Motion cannot reach a component with no client boundary, so these carry
+   the same duration scale and arrival curve in plain CSS. */
+
+/* Colour only: ink, paper, rule, fill, stroke. Runs under reduced motion —
+   a colour change carries state and has no movement to remove. */
+@utility motion-ink {
+  transition-property:
+    color, background-color, border-color, fill, stroke, box-shadow;
+  transition-duration: var(--dur-instant);
+  transition-timing-function: var(--ease-arrive);
+}
+
+/* Opacity only: a hover-revealed control, a caption. Runs under reduced motion. */
+@utility motion-reveal {
+  transition-property: opacity;
+  transition-duration: var(--dur-quick);
+  transition-timing-function: var(--ease-arrive);
+}
+
+/* A control changing shape or place: a switch thumb, a chevron, a row folding
+   open. Movement, so reduced motion makes it instant. */
+@utility motion-move {
+  transition-property:
+    transform, translate, scale, rotate, opacity, grid-template-rows;
+  transition-duration: var(--dur-move);
+  transition-timing-function: var(--ease-arrive);
+  @variant motion-reduce {
+    transition-duration: 0s;
+  }
+}
+
+/* The hand's own feedback on a stateless control: its ink and its 2 % press
+   in one list, because an element carries only one transition-property and a
+   button needs both. Under reduced motion the ink still answers and the press
+   is instant. */
+@utility motion-press {
+  transition-property:
+    color, background-color, border-color, fill, stroke, box-shadow, scale;
+  transition-duration: var(--dur-quick);
+  transition-timing-function: var(--ease-arrive);
+  @variant motion-reduce {
+    transition-property:
+      color, background-color, border-color, fill, stroke, box-shadow;
+  }
+}
+
+/* A link whose navigation is still pending after 100ms: its content settles to
+   the soft ink and breathes until the page lands. The delay keeps a fast
+   navigation silent. Under reduced motion the dimmed state holds still. */
+@utility link-pending {
+  &:has(> [data-pending]) {
+    animation:
+      link-pending-in var(--dur-quick) var(--ease-arrive) 100ms forwards,
+      link-pending-breathe 1.6s ease-in-out 320ms infinite;
+    @variant motion-reduce {
+      animation-name: link-pending-in;
+    }
+  }
+}
+
+@keyframes link-pending-in {
+  to {
+    color: var(--ink-soft);
+    opacity: 0.72;
+  }
+}
+@keyframes link-pending-breathe {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* A surface or a status changing over a longer beat. */
+@utility motion-settle {
+  transition-property:
+    transform, translate, scale, opacity, width, grid-template-rows, color,
+    background-color, border-color, stroke, stroke-dasharray, --pct;
+  transition-duration: var(--dur-settle);
+  transition-timing-function: var(--ease-arrive);
+  @variant motion-reduce {
+    transition-property:
+      color, background-color, border-color, stroke, stroke-dasharray, --pct,
+      opacity;
+  }
+}
+
+/* Light passing over a surface that is still loading: a skeleton bar. shadcn's
+   `shimmer` clips its gradient to text, so a surface with no glyphs needs its
+   own. Paper is lighter than the sunk paper a skeleton sits on in both themes,
+   so the band always reads as light. Ambient, so reduced motion removes it. */
+@utility shimmer-surface {
+  background-image: linear-gradient(
+    100deg,
+    transparent 35%,
+    color-mix(in oklab, var(--paper) 70%, transparent) 50%,
+    transparent 65%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-surface var(--dur-bloom) linear infinite;
+  @variant motion-reduce {
+    animation: none;
+  }
+}
+
+@keyframes shimmer-surface {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  /* Keeps iOS from rubber-banding the empty document behind the fixed dock;
+     inner scroll containers keep their own overscroll-y-contain. */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+  body {
+    @apply bg-background text-foreground;
+    touch-action: manipulation;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-mono;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Ultrawide: widen the rail and cap the column so proportions hold. Both are
+   tokens the layout classes read, so the breakpoint belongs here rather than
+   on any one component. */
+@media (min-width: 1800px) {
+  :root {
+    --rail: 24rem;
+    --column: 74rem;
+  }
+}
+
+/* ── Appearance ──────────────────────────────────────────────────────────────
+   One attribute per appearance preference on <html> (`APPEARANCE` in
+   `lib/appearance.ts` holds the names and values). Each rule moves tokens,
+   never a component, and the value a preference defaults to has no rule at
+   all: a page carrying it renders exactly as a page carrying nothing. The
+   grain, the glow and ambient motion are in atmosphere.css and motion.css,
+   the editor's type in doc.css. */
+
+/* Density: row padding, as a factor of the comfortable default. Halving and
+   half again keep every padding on a whole pixel (a cell's 8px becomes 4 or
+   12, a hairline row's 10px 5 or 15), so rows and their hairlines never land
+   between pixels. */
+:root[data-density="compact"] {
+  --density: 0.5;
+}
+
+:root[data-density="spacious"] {
+  --density: 1.5;
+}
+
+/* Text size: the whole scale moves as one, so the hierarchy holds. The body
+   steps take the change in full (13, 16 and 18px bodies around today's 14);
+   the headings grow less, since they were never the hard part to read, and
+   `--t-micro` does not drop below the floor it sits on at the default.
+   Tailwind's stock steps, which shadcn's primitives still set in places, are
+   pointed at the same scale, so a menu or a button grows with the page. */
+:root:is([data-text="sm"], [data-text="lg"], [data-text="xl"]) {
+  --text-xs: var(--t-small);
+  --text-sm: var(--t-body);
+  --text-base: var(--t-lead);
+}
+
+:root[data-text="sm"] {
+  --t-micro: 0.6875rem;
+  --t-small: 0.71875rem;
+  --t-body: 0.8125rem;
+  --t-lead: 0.9375rem;
+  --t-section: 1.375rem;
+  --t-subtitle: 1.625rem;
+  --t-title: 2.25rem;
+  --t-display: clamp(2.25rem, 6vw, 5rem);
+}
+
+:root[data-text="lg"] {
+  --t-micro: 0.75rem;
+  --t-small: 0.8125rem;
+  --t-body: 1rem;
+  --t-lead: 1.125rem;
+  --t-section: 1.625rem;
+  --t-subtitle: 1.875rem;
+  --t-title: 2.75rem;
+  --t-display: clamp(2.75rem, 7vw, 6rem);
+}
+
+:root[data-text="xl"] {
+  --t-micro: 0.8125rem;
+  --t-small: 0.875rem;
+  --t-body: 1.125rem;
+  --t-lead: 1.25rem;
+  --t-section: 1.75rem;
+  --t-subtitle: 2rem;
+  --t-title: 3rem;
+  --t-display: clamp(3rem, 7.5vw, 6.5rem);
+}
+
+/* Corner radius: the base every `--radius-*` step derives from; pills and
+   dots are `rounded-full` and keep their shape. Past 0.65rem the furniture
+   starts reading as rounded SaaS panels, so `lg` stops there. */
+:root[data-radius="none"] {
+  --radius: 0rem;
+}
+
+:root[data-radius="sm"] {
+  --radius: 0.25rem;
+}
+
+:root[data-radius="lg"] {
+  --radius: 0.65rem;
+}
+
+/* Page width: the content column, the prose measure and the page gutter.
+   Wide gives a large screen's room to the column, and still caps prose at
+   80ch, past which a line is hard to follow back to its start. */
+:root[data-width="wide"] {
+  --column: 72rem;
+  --measure: 80ch;
+  --gutter: clamp(1rem, 2.5vw, 2rem);
+}
+
+@media (min-width: 1800px) {
+  :root[data-width="wide"] {
+    --column: 100rem;
+  }
+}
+
+/* Masthead height: the art band and the header's floor, at both tiers. */
+:root[data-masthead="short"] {
+  --masthead-band: 56vh;
+  --masthead-head: 32vh;
+}
+
+@media (width < 768px) {
+  :root[data-masthead="short"] {
+    --masthead-band: 40vh;
+    --masthead-head: 30vh;
+  }
+}
+
+/* Body font. The document's face moves; anything that names `font-mono`
+   (code, numerals, readouts) stays mono. */
+:root[data-font="sans"] {
+  --font-body: var(--font-system-sans);
+  font-family: var(--font-body);
+}
+
+:root[data-font="serif"] {
+  --font-body: var(--font-system-serif);
+  font-family: var(--font-body);
+}

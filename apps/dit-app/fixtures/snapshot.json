@@ -1,0 +1,425 @@
+{
+  "auth": {
+    "state": "signing-in",
+    "host": "https://projammr.example",
+    "pending": {
+      "userCode": "WDJB-MJHT",
+      "verificationUri": "https://projammr.example/device"
+    }
+  },
+  "machine": {
+    "name": "Studio Mac",
+    "refused": null
+  },
+  "connection": "online",
+  "barTitle": "science123 ● 2",
+  "live": true,
+  "open": {
+    "path": "/Users/me/Music/science Project/science123.als",
+    "name": "science123",
+    "repo": "/Users/me/Music/science Project",
+    "branch": "main",
+    "signal": "script",
+    "webPath": "/project/4/session/812"
+  },
+  "saves": [
+    {
+      "id": "a1b2c3d4e5f60718a1b2c3d4e5f60718a1b2c3d4e5f60718a1b2c3d4e5f60718",
+      "at": 1760000000000,
+      "file": "science123.als",
+      "unreadable": false,
+      "push": "pushing",
+      "meta": {
+        "tempo": "124",
+        "timeSignature": "4/4",
+        "rootNote": "F",
+        "scale": "Minor",
+        "tracksCount": 4,
+        "scenesCount": 8,
+        "dawVersion": "12.4.6",
+        "samplePaths": ["Samples/Imported/kick.wav"],
+        "structure": {
+          "tracks": [
+            {
+              "kind": "audio",
+              "name": "Drums",
+              "devices": ["Drum Rack"],
+              "id": 1,
+              "color": "#ff3a68"
+            },
+            {
+              "kind": "midi",
+              "name": "Bass",
+              "devices": ["Operator", "EQ Eight"],
+              "id": 2,
+              "color": "#3dc300"
+            },
+            {
+              "kind": "audio",
+              "name": "Pad",
+              "devices": [],
+              "id": 3,
+              "groupId": 1
+            },
+            {
+              "kind": "master",
+              "name": "Master",
+              "devices": []
+            }
+          ],
+          "clips": {
+            "audio": 4,
+            "midi": 2
+          },
+          "scenes": 8
+        }
+      }
+    },
+    {
+      "id": "0f1e2d3c4b5a69780f1e2d3c4b5a69780f1e2d3c4b5a69780f1e2d3c4b5a6978",
+      "at": 1759999000000,
+      "file": "science123.als",
+      "unreadable": true,
+      "push": "pending",
+      "meta": null
+    }
+  ],
+  "lastCommit": {
+    "message": "added strings",
+    "at": 1759990000000,
+    "push": "pushed"
+  },
+  "timeSinceCommit": 8040,
+  "firstCommit": false,
+  "headMeta": {
+    "tempo": "120",
+    "timeSignature": "4/4",
+    "rootNote": "F",
+    "scale": "Minor",
+    "tracksCount": 3,
+    "scenesCount": 8,
+    "dawVersion": "12.4.6",
+    "samplePaths": ["Samples/Imported/kick.wav"],
+    "structure": {
+      "tracks": [
+        {
+          "kind": "audio",
+          "name": "Drums",
+          "devices": ["Drum Rack"],
+          "id": 1,
+          "color": "#ff3a68"
+        },
+        {
+          "kind": "midi",
+          "name": "Bass",
+          "devices": ["Operator"],
+          "id": 2,
+          "color": "#3dc300"
+        },
+        {
+          "kind": "master",
+          "name": "Master",
+          "devices": []
+        }
+      ],
+      "clips": {
+        "audio": 4,
+        "midi": 2
+      },
+      "scenes": 8
+    }
+  },
+  "latestMeta": {
+    "tempo": "124",
+    "timeSignature": "4/4",
+    "rootNote": "F",
+    "scale": "Minor",
+    "tracksCount": 4,
+    "scenesCount": 8,
+    "dawVersion": "12.4.6",
+    "samplePaths": ["Samples/Imported/kick.wav"],
+    "structure": {
+      "tracks": [
+        {
+          "kind": "audio",
+          "name": "Drums",
+          "devices": ["Drum Rack"],
+          "id": 1,
+          "color": "#ff3a68"
+        },
+        {
+          "kind": "midi",
+          "name": "Bass",
+          "devices": ["Operator", "EQ Eight"],
+          "id": 2,
+          "color": "#3dc300"
+        },
+        {
+          "kind": "audio",
+          "name": "Pad",
+          "devices": [],
+          "id": 3,
+          "groupId": 1
+        },
+        {
+          "kind": "master",
+          "name": "Master",
+          "devices": []
+        }
+      ],
+      "clips": {
+        "audio": 4,
+        "midi": 2
+      },
+      "scenes": 8
+    }
+  },
+  "clauses": [
+    {
+      "kind": "tracks",
+      "text": "+1 track"
+    },
+    {
+      "kind": "devices",
+      "text": "+EQ Eight on Bass"
+    },
+    {
+      "kind": "tempo",
+      "text": "tempo 120 → 124"
+    }
+  ],
+  "tracksChanged": ["Bass"],
+  "liveTracks": [
+    {
+      "kind": "midi",
+      "name": "Bass",
+      "devices": ["Operator", "EQ Eight"],
+      "id": 2
+    }
+  ],
+  "draft": "+EQ Eight on Bass, kick tightened",
+  "artwork": {
+    "assetPath": "images/9f2c.webp",
+    "accentHue": 262.5,
+    "accentChroma": 0.14
+  },
+  "trackProposal": {
+    "choices": [
+      {
+        "label": "Canopy",
+        "track": "12"
+      },
+      {
+        "label": "Canopy (demo)",
+        "track": "31"
+      }
+    ],
+    "newTrack": "science"
+  },
+  "push": {
+    "state": "waiting",
+    "pending": 1,
+    "message": "The hub is unreachable.",
+    "progress": null
+  },
+  "script": {
+    "state": "connected",
+    "live": "12.4.6",
+    "path": "/Users/me/Music/Ableton/User Library/Remote Scripts/dit"
+  },
+  "repos": [
+    {
+      "path": "/Users/me/Music/science Project",
+      "name": "science Project",
+      "unreachable": null,
+      "busy": false,
+      "lastCommit": {
+        "message": "added strings",
+        "at": 1759990000000
+      },
+      "lastActiveAt": 1760000000000,
+      "webPath": "/session/812"
+    },
+    {
+      "path": "/Volumes/Gone/other Project",
+      "name": "other Project",
+      "unreachable": "No such file or directory",
+      "busy": true,
+      "lastCommit": null,
+      "lastActiveAt": null,
+      "webPath": null
+    }
+  ],
+  "adoptOffer": {
+    "folder": "/Users/me/Music/new Project",
+    "set": "/Users/me/Music/new Project/new.als",
+    "name": "new Project",
+    "setCount": 8,
+    "syncedBy": "Dropbox",
+    "projects": [
+      {
+        "id": 4,
+        "name": "Album"
+      },
+      {
+        "id": 7,
+        "name": "EP"
+      }
+    ],
+    "projectId": 4
+  },
+  "renders": [
+    {
+      "id": 41,
+      "name": "science123 v4",
+      "state": "proposed",
+      "files": [
+        {
+          "path": "/Users/me/Music/science Project/Exports/science123 v4.wav",
+          "size": 40960000
+        }
+      ],
+      "batch": null,
+      "uploadedFile": null,
+      "pairNote": null,
+      "progress": null,
+      "score": 0.82,
+      "reasons": [
+        "Named like \u201cscience123\u201d",
+        "4 min after your last save"
+      ],
+      "sessionId": 812,
+      "message": null,
+      "durationMs": 222000,
+      "set": "science123",
+      "otherSets": [
+        {
+          "sessionId": 813,
+          "name": "science123 remix"
+        }
+      ],
+      "bouncedAfterMs": 240000,
+      "reasonKinds": { "named": true, "inFolder": true, "nearSave": true }
+    },
+    {
+      "id": 42,
+      "name": "Mix",
+      "state": "uploading",
+      "files": [
+        {
+          "path": "/Users/me/Music/out/Mix.mp3",
+          "size": 9000000
+        },
+        {
+          "path": "/Users/me/Music/out/Mix.wav",
+          "size": 48000000
+        }
+      ],
+      "batch": null,
+      "uploadedFile": 1,
+      "pairNote": "Mix.mp3 + Mix.wav: uploading Mix.wav",
+      "progress": {
+        "sent": 12000000,
+        "total": 48000000
+      },
+      "score": 0.61,
+      "reasons": [],
+      "sessionId": null,
+      "message": null,
+      "durationMs": null,
+      "set": null,
+      "otherSets": [],
+      "bouncedAfterMs": null,
+      "reasonKinds": { "named": false, "inFolder": false, "nearSave": false }
+    },
+    {
+      "id": 43,
+      "name": "Demo",
+      "state": "over-limit",
+      "files": [
+        {
+          "path": "/Users/me/Music/out/Demo.wav",
+          "size": 210000000
+        }
+      ],
+      "batch": 3,
+      "uploadedFile": null,
+      "pairNote": null,
+      "progress": null,
+      "score": null,
+      "reasons": [],
+      "sessionId": 812,
+      "message": "No file is under your 12 MB limit.",
+      "durationMs": 612000,
+      "set": "science123",
+      "otherSets": [],
+      "bouncedAfterMs": null,
+      "reasonKinds": { "named": false, "inFolder": false, "nearSave": false }
+    }
+  ],
+  "permissions": {
+    "screenRecording": false
+  },
+  "settings": {
+    "shortcut": "Alt+Shift+D",
+    "shortcutError": null,
+    "maxUploadMb": 12,
+    "watchRoots": ["/Users/me"],
+    "excluded": ["/Users/me/Library"],
+    "autostart": true,
+    "machineName": "Studio Mac",
+    "cliInstalled": "/usr/local/bin/dit",
+    "builtInExcluded": [
+      "Library",
+      "Application Support",
+      "node_modules",
+      "Trash",
+      "Ableton",
+      "Backup",
+      "Samples",
+      "Freeze",
+      "Recorded",
+      "Ableton Project Info",
+      "Names starting with a dot (.git, .Trash, .DS_Store)"
+    ],
+    "rejectedFiles": [
+      {
+        "fingerprint": "dit:2048:9f2c7a",
+        "name": "kick loop.wav",
+        "folder": "/Users/me/Music/out"
+      },
+      {
+        "fingerprint": "dit:4096:aa01bb",
+        "name": null,
+        "folder": null
+      }
+    ],
+    "neverHereFolders": ["/Users/me/Music/Samples from friends"]
+  },
+  "notices": [
+    "Another of your machines is called Studio Mac. Pick another name."
+  ],
+  "pendingRestore": {
+    "commitId": 41,
+    "message": "added strings",
+    "set": "science123",
+    "branch": "restore-a1b2c3d",
+    "problem": null
+  },
+  "restore": {
+    "state": "writing",
+    "file": "science123 @restore-a1b2c3d.als"
+  },
+  "adopting": {
+    "folder": "/Users/me/Music/new Project",
+    "name": "new Project",
+    "setCount": 3,
+    "sets": [
+      { "name": "new", "state": "saved" },
+      { "name": "new 2", "state": "saving" },
+      { "name": "new remix", "state": "saving" }
+    ]
+  },
+  "update": { "state": "available", "version": "0.10.0" },
+  "backfill": { "state": "paused" }
+}

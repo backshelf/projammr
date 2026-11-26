@@ -1,0 +1,6 @@
+# Cloudflare Pages project for the marketing site. The build itself is
+# configured on the Pages project (see docs/agents/web.md, Deploying); this
+# file names the output directory for `wrangler pages` and the dashboard.
+name = "projammr-web"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-09-01"

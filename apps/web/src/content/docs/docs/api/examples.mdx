@@ -1,0 +1,175 @@
+---
+title: Worked examples
+description: Real tasks end to end with curl — list your projects, upload a new version of a track, and read what changed in a session.
+sidebar:
+  order: 6
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+Each example below is a complete task, run from a shell with `curl` and [`jq`](https://jqlang.org) to pick fields
+out of the answers. They build on each other: the ids the first one finds are the ones the later ones use.
+
+## Set up
+
+Put your instance's address and a token in two variables, and every command below can be pasted as it is. Getting
+the token is covered in [Authentication](/docs/api/authentication/#get-a-token-for-a-script).
+
+```bash
+export PROJAMMR_URL='https://music.example.com'
+export PROJAMMR_TOKEN=$(
+  curl -s -X POST "$PROJAMMR_URL/api/auth/sign-in/email" \
+    -H 'content-type: application/json' \
+    -d '{"email":"you@example.com","password":"your password"}' | jq -r '.token'
+)
+```
+
+## List your projects
+
+`GET /api/me/projects` answers every project you are a member of, with a count of its tracks and when anything in
+it last changed:
+
+```bash
+curl -s "$PROJAMMR_URL/api/me/projects" \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN" |
+  jq -r '.[] | "\(.id)\t\(.name)\t\(.trackCount) tracks"'
+```
+
+```text
+1	My project	12 tracks
+2	Side project	3 tracks
+```
+
+To find one track in a project by its title, read the project's track summaries, which are small enough to fetch
+whole:
+
+```bash
+curl -s "$PROJAMMR_URL/api/projects/1/tracks/summary" \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN" |
+  jq '.[] | select(.title == "Track 3") | .id'
+```
+
+```text
+7
+```
+
+For full track rows (status, collections, sessions, loudness, labels), page through
+`GET /api/projects/1/tracks/paginated` instead; [Requests and errors](/docs/api/conventions/#lists) covers its
+parameters.
+
+## Upload a new version of a track
+
+Adding a bounce to a track is three requests: upload the file, link it to the track, and wait for the analysis
+that measures it.
+
+<Steps>
+
+1. Upload the file into the track's project. The answer is the new file; keep its `id`.
+
+   ```bash
+   ASSET=$(
+     curl -s -X POST "$PROJAMMR_URL/api/assets/upload" \
+       -H "Authorization: Bearer $PROJAMMR_TOKEN" \
+       -F 'file=@"Track 3 v2.wav";type=audio/wav' \
+       -F projectId=1 | jq '.id'
+   )
+   ```
+
+2. Link it to the track as a version, and make it the primary one. The answer lists the track's versions and the
+   ids of the analysis jobs it started; keep the job id.
+
+   ```bash
+   JOB=$(
+     curl -s -X POST "$PROJAMMR_URL/api/tracks/7/audios" \
+       -H "Authorization: Bearer $PROJAMMR_TOKEN" \
+       -H 'content-type: application/json' \
+       -d "{\"assetIds\":[$ASSET],\"primaryAssetId\":$ASSET}" | jq '.analysisJobIds[0]'
+   )
+   ```
+
+3. Wait for the analysis to finish:
+
+   ```bash
+   while :; do
+     STATUS=$(curl -s "$PROJAMMR_URL/api/jobs/$JOB" \
+       -H "Authorization: Bearer $PROJAMMR_TOKEN" | jq -r '.status')
+     echo "$STATUS"
+     case "$STATUS" in queued|running) sleep 2 ;; *) break ;; esac
+   done
+   ```
+
+   It ends `done`, or `failed` with the reason in the job's `error`.
+
+4. Read the track's versions, now measured:
+
+   ```bash
+   curl -s "$PROJAMMR_URL/api/tracks/7/audios" \
+     -H "Authorization: Bearer $PROJAMMR_TOKEN" |
+     jq -c '.[] | {version, isPrimary, durationMs, lufs, name: .asset.name}'
+   ```
+
+   ```text
+   {"version":1,"isPrimary":false,"durationMs":201000,"lufs":-9.4,"name":"Track 3 v1.wav"}
+   {"version":2,"isPrimary":true,"durationMs":203500,"lufs":-8.9,"name":"Track 3 v2.wav"}
+   ```
+
+</Steps>
+
+<Aside>
+  A script that uploads many files can follow all their jobs at once through the project's event stream instead of
+  polling each one. See [Jobs and event streams](/docs/api/jobs/#follow-a-projects-event-stream).
+</Aside>
+
+## Read what changed in a session
+
+Every time the scanner sees a set saved, it records the save with a snapshot of the set: tempo, time signature, key,
+counts of tracks and scenes, and its structure. Reading a session's changes is reading those snapshots in order.
+
+<Steps>
+
+1. Find the track's sessions:
+
+   ```bash
+   curl -s "$PROJAMMR_URL/api/tracks/7/sessions" \
+     -H "Authorization: Bearer $PROJAMMR_TOKEN" |
+     jq -c '.[] | {id, name, main}'
+   ```
+
+   ```text
+   {"id":3,"name":"Track 3","main":true}
+   ```
+
+2. Read its saves, newest first. `limit` caps how many come back (100 unless you say, at most 500):
+
+   ```bash
+   curl -s "$PROJAMMR_URL/api/sessions/3/saves?limit=2" \
+     -H "Authorization: Bearer $PROJAMMR_TOKEN" |
+     jq -c '.[] | {fileUpdatedAt, tempo: .meta.tempo, tracks: .meta.tracksCount}'
+   ```
+
+   ```text
+   {"fileUpdatedAt":"2026-09-22T11:00:00.000Z","tempo":"124","tracks":9}
+   {"fileUpdatedAt":"2026-09-22T10:00:00.000Z","tempo":"120","tracks":8}
+   ```
+
+   Comparing each save's `meta` with the one after it is the change: here the tempo went from 120 to 124 and a
+   track was added. `meta.structure` holds the set's tracks, clips, scenes and plugins, for a finer comparison.
+
+</Steps>
+
+For the same thing across a whole project, `GET /api/projects/{id}/saves` lists the project's saves newest first,
+each carrying the save before it as `previousMeta`, so every entry is already a before-and-after pair:
+
+```bash
+curl -s "$PROJAMMR_URL/api/projects/1/saves?limit=10" \
+  -H "Authorization: Bearer $PROJAMMR_TOKEN" |
+  jq -r '.[] | select(.previousMeta != null) |
+    "\(.fileUpdatedAt)  \(.session.name): \(.previousMeta.tempo) → \(.meta.tempo) BPM, \(.previousMeta.tracksCount) → \(.meta.tracksCount) tracks"'
+```
+
+```text
+2026-09-22T11:00:00.000Z  Track 3: 120 → 124 BPM, 8 → 9 tracks
+```
+
+It narrows by `trackId`, `collectionId`, `labelId` or `daw`, and `day` (`YYYY-MM-DD`, read in the time zone `tz`)
+limits it to one day's saves.

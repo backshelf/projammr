@@ -1,0 +1,165 @@
+name: dit app package
+
+# Not on pull requests: a macOS runner bills at ten times a Linux one.
+on:
+  # A release (`release.yml`) calls this with `release: true`; a run started by
+  # hand can do the same to rehearse one without a tag.
+  workflow_call:
+    inputs:
+      release:
+        description: Sign with the release identity and build the update artefacts
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Sign with the release identity and build the update artefacts
+        type: boolean
+        default: false
+
+concurrency:
+  group: dit-app-package-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Both the signing identity's name and the bundle identifier; `codesign` finds
+  # the certificate in the temporary keychain by this name.
+  SIGNING_IDENTITY: app.projammr.dit
+
+jobs:
+  package:
+    # The release leg pins the runner image so a new macOS or Xcode never
+    # changes the signed build between two tags.
+    runs-on: ${{ inputs.release && 'macos-15' || 'macos-latest' }}
+    steps:
+      - uses: actions/checkout@v7
+      # The Rust toolchain and cache stay (the Tauri crate needs both); wasm-opt
+      # is an x86_64 Linux binary and nothing here optimises WebAssembly.
+      - uses: ./.github/actions/setup
+        with:
+          wasm-opt: "false"
+      # `typegen` imports the Hono app, whose env module throws without these.
+      # Throwaway values: nothing built here is served or shipped.
+      - name: Generate throwaway server secrets
+        run: |
+          echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+          echo "NOTES_MASTER_KEY=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+      - run: bun run typegen
+      - name: Build and typecheck the panel
+        working-directory: apps/dit-app
+        run: bun run build
+      - name: Check Rust formatting
+        working-directory: apps/dit-app
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - name: Lint the Rust shell
+        working-directory: apps/dit-app
+        run: bun run lint:rust
+      - name: Test the Rust shell
+        working-directory: apps/dit-app
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      # `tauri.conf.json` signs ad hoc (`signingIdentity "-"`): a pull request's
+      # build has a new code identity every time and no secrets.
+      - name: Package the app and the dmg
+        if: ${{ !inputs.release }}
+        working-directory: apps/dit-app
+        run: bun run package
+      # The release is signed with a self-signed identity, `app.projammr.dit`, so
+      # every release has the same code identity and the Keychain item and the
+      # Screen Recording grant survive an update. Tauri's own certificate import
+      # (`APPLE_CERTIFICATE`) resolves only Apple-named identities, so the
+      # identity goes into a temporary keychain here and `APPLE_SIGNING_IDENTITY`
+      # names it. The secrets are named `DIT_SIGNING_*` so Tauri never sees an
+      # `APPLE_CERTIFICATE`.
+      - name: Import the signing identity
+        if: ${{ inputs.release }}
+        env:
+          P12: ${{ secrets.DIT_SIGNING_P12 }}
+          P12_PASSWORD: ${{ secrets.DIT_SIGNING_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$P12" && test -n "$P12_PASSWORD" || { echo "::error::DIT_SIGNING_P12 and DIT_SIGNING_P12_PASSWORD must be set"; exit 1; }
+          keychain="$RUNNER_TEMP/dit-signing.keychain-db"
+          keychain_password=$(openssl rand -hex 16)
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/dit-signing.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          # `-f pkcs12` is explicit: the p12 is written with the older ciphers
+          # macOS reads, and format detection fails on some.
+          security import "$RUNNER_TEMP/dit-signing.p12" -k "$keychain" -f pkcs12 -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/dit-signing.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
+          # codesign looks the identity up by name across the user's search list.
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          security find-identity -p codesigning "$keychain" | grep -F "$SIGNING_IDENTITY"
+          echo "DIT_SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+      - name: Package the signed app, the dmg and the update bundle
+        if: ${{ inputs.release }}
+        working-directory: apps/dit-app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ env.SIGNING_IDENTITY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bun run package -c src-tauri/tauri.release.conf.json
+      - name: Assert the bundle
+        working-directory: apps/dit-app/src-tauri/target/release/bundle
+        run: |
+          apps=(macos/*.app)
+          app="${apps[0]}"
+          echo "bundle: $app"
+          test -x "$app/Contents/MacOS/dit-app"
+          plist="$app/Contents/Info.plist"
+          test "$(plutil -extract LSUIElement raw "$plist")" = "true"
+          # The `projammr` scheme lands in CFBundleURLTypes with the deep-link
+          # plugin; assert it here then:
+          # plutil -extract CFBundleURLTypes xml1 -o - "$plist" | grep -q projammr
+          ls dmg/*.dmg
+      # The app and the cli inside it carry the release identity, not an ad hoc
+      # one, and the seal holds over every file.
+      - name: Assert the signature
+        if: ${{ inputs.release }}
+        working-directory: apps/dit-app/src-tauri/target/release/bundle
+        run: |
+          set -euo pipefail
+          apps=(macos/*.app)
+          app="${apps[0]}"
+          for path in "$app" "$app/Contents/MacOS/dit"; do
+            details=$(codesign -dvv "$path" 2>&1)
+            echo "$details"
+            grep -qx "Authority=$SIGNING_IDENTITY" <<< "$details"
+          done
+          codesign --verify --strict --deep --verbose=2 "$app"
+      # `latest/download/` addresses assets by name, so the names carry no
+      # version; `release.yml` builds `latest.json` from these three files.
+      - name: Name the release assets
+        if: ${{ inputs.release }}
+        working-directory: apps/dit-app/src-tauri/target/release/bundle
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/dit-release"
+          cp dmg/*.dmg "$RUNNER_TEMP/dit-release/dit-macos-arm64.dmg"
+          cp macos/*.app.tar.gz "$RUNNER_TEMP/dit-release/dit-macos-arm64.app.tar.gz"
+          cp macos/*.app.tar.gz.sig "$RUNNER_TEMP/dit-release/dit-macos-arm64.app.tar.gz.sig"
+          ls -l "$RUNNER_TEMP/dit-release"
+      - name: Remove the signing keychain
+        if: ${{ always() && inputs.release }}
+        run: |
+          if [ -n "${DIT_SIGNING_KEYCHAIN:-}" ]; then
+            security delete-keychain "$DIT_SIGNING_KEYCHAIN" || true
+          fi
+      - uses: actions/upload-artifact@v7
+        if: ${{ !inputs.release }}
+        with:
+          name: dit-dmg
+          path: apps/dit-app/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: ${{ inputs.release }}
+        with:
+          name: dit-release
+          path: ${{ runner.temp }}/dit-release/*
+          if-no-files-found: error

@@ -1,0 +1,23 @@
+---
+/* The light a cover throws behind a band: the page wash's tones, haze and
+   dither with the band's own key light (site.css, `.band__light`). It fills
+   the nearest positioned ancestor, which is the band, and takes its colour
+   from the accent it inherits. `relight` makes it a second light, carried by
+   an element in the band marked `band-relight` with an accent of its own: it
+   stays hidden until the pointer rests on that element, and the band then
+   takes that accent in place of its own. */
+type Props = { relight?: boolean };
+
+const { relight = false } = Astro.props;
+---
+
+<div
+  class:list={["band__light", relight && "band__light--relight"]}
+  aria-hidden="true"
+>
+  <div class="wash">
+    <span class="band__key"></span>
+    <span class="wash__lobe wash__lobe--deep"></span>
+    <span class="wash__lobe wash__lobe--lift"></span>
+  </div>
+</div>

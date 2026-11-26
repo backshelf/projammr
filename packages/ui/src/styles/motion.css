@@ -1,0 +1,531 @@
+/* ==========================================================================
+   Motion
+
+   What is left here is what Motion cannot reach: ambient loops that never
+   rest, registered custom properties, and the view transitions that run on
+   pseudo-elements. The page entrance and every surface's own motion belong to
+   Motion, in `@workspace/ui/lib/motion`.
+   ========================================================================== */
+
+/* The blurred field's tuning, held on the masthead rather than on the field
+   layer so the per-breakpoint and playing-state rules below have one place to
+   set it; the field inherits every custom property. */
+.masthead__art {
+  --art-blur: 64px;
+  --art-sat-low: 1.3;
+  --art-sat-mid: 1.7;
+  --art-sat-high: 1.9;
+  --art-opacity: 0.85;
+}
+
+/* The blur and the colour live on a tone layer the size of the masthead, and
+   the image on a field layer inside it, 150% of the masthead each way, so the
+   drift can travel without pulling an edge into view. The drift moves the
+   field with `translate`, which the compositor animates without repainting,
+   where shifting `background-position` repainted and re-blurred the whole
+   field every frame. The tone layer clips the field before it blurs, so the
+   colour still softens toward the masthead's edges as it did when the image
+   was the masthead's own background.
+
+   A translate of -p/3 on a 150% layer lands the image exactly where
+   `background-position: p` did on a 150%-sized background, so the waypoints
+   below are the old ones converted. The resting translate is the old 38% 34%
+   resting position — what shows under reduced motion, on phones, or before
+   the animation's first frame. */
+.masthead__tone {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  filter: blur(var(--art-blur)) saturate(var(--art-sat-mid));
+  /* The art's resting light. The frame above it is Motion's — the entrance
+     and the scroll write its opacity — so the two multiply and neither has to
+     know about the other. The transition carries the playing state's step up
+     and, when `PlayingLight` drops its inline opacity, the way back down. */
+  opacity: var(--art-opacity);
+  transition: opacity var(--dur-bloom) var(--ease-arrive);
+}
+
+.masthead__field {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 150%;
+  height: 150%;
+  background-size: 100% 100%;
+  translate: -12.667% -11.333%;
+}
+
+.dark .masthead__art {
+  --art-opacity: 0.7;
+}
+
+/* The room brightens while the page's own record is playing. A state, not
+   motion: the tone layer's resting light steps up and eases there, over the
+   same `--art-opacity` the layer already rests on, so raising it here is all
+   the light needs. Declared on the tone layer rather than inherited from the
+   frame, which is where the theme's resting value lives, so it outranks it.
+   `data-playing` is set by `PlayingLight` on the `ArtProvider` container. */
+[data-playing] .masthead__tone {
+  --art-opacity: 1;
+}
+
+.dark [data-playing] .masthead__tone {
+  --art-opacity: 0.85;
+}
+
+.masthead__tone {
+  @variant motion-reduce {
+    transition: none;
+  }
+}
+
+@media (width < 768px) {
+  .masthead__art {
+    --art-blur: 32px;
+    --art-sat-low: 1.85;
+    --art-sat-mid: 2;
+    --art-sat-high: 2.15;
+  }
+}
+
+/* Artwork glow (`data-glow` on <html>), the field's half: `soft` keeps the
+   field but calms it, its saturation cycling close to the cover's own and its
+   resting light dimmer. The playing state still steps the light up. The
+   wash's half, and `off`, are in atmosphere.css. */
+:root[data-glow="soft"] .masthead__art {
+  --art-sat-low: 1;
+  --art-sat-mid: 1.1;
+  --art-sat-high: 1.2;
+  --art-opacity: 0.6;
+}
+
+:root.dark[data-glow="soft"] .masthead__art {
+  --art-opacity: 0.5;
+}
+
+/* A slow drift that never rests, so a page sitting untouched still feels lit
+   rather than printed. At a 64px blur, moving the field moves the colour
+   masses visibly while the image itself reads as still.
+
+   The waypoints trace a closed circuit rather than a there-and-back, so the
+   field is always travelling somewhere new and never reverses along the path
+   it just took. Paired with a linear timing function, that is what keeps the
+   motion constant: an eased curve settles into every waypoint and reads as
+   breathing. Scale and size stay put — moving them zooms the artwork, which
+   reads as the picture inflating rather than as light shifting across it.
+   Position and saturation carry the whole effect: position on the field,
+   saturation and hue on the tone layer, two keyframe sets sharing one
+   duration and start so they stay in step. */
+@keyframes art-drift {
+  0%,
+  100% {
+    translate: -12.667% -11.333%;
+  }
+  25% {
+    translate: -19.333% -13.333%;
+  }
+  50% {
+    translate: -20.667% -18.667%;
+  }
+  75% {
+    translate: -14% -16.333%;
+  }
+}
+
+@keyframes art-tone {
+  0%,
+  100% {
+    filter: blur(var(--art-blur)) saturate(var(--art-sat-low)) hue-rotate(-3deg);
+  }
+  25% {
+    filter: blur(var(--art-blur)) saturate(var(--art-sat-high)) hue-rotate(2deg);
+  }
+  50% {
+    filter: blur(var(--art-blur)) saturate(var(--art-sat-mid)) hue-rotate(4deg);
+  }
+  75% {
+    filter: blur(var(--art-blur)) saturate(var(--art-sat-high))
+      hue-rotate(-1deg);
+  }
+}
+
+/* The drift runs inside the masthead, not on it, so it never has to share an
+   element with the entrance Motion writes on the frame above. */
+.masthead__field {
+  animation: art-drift 28s linear infinite both;
+}
+
+.masthead__tone {
+  animation: art-tone 28s linear infinite both;
+}
+
+/* Waveform bars sweep in from the left as a single gesture, so the wave reads
+   as being drawn rather than as 160 separate animations. Bars are 2px, not
+   1px: a 1px bar landing on a fractional x from space-between is antialiased
+   across two pixels, so every other bar half-vanishes and the played run reads
+   as a checkerboard. */
+@keyframes bar-in {
+  from {
+    transform: scaleY(0.06);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* The playing track's dot on a collection's key wheel sends a ring out once a
+   beat, at the track's detected tempo (`--beat`, set inline). At rest the ring
+   is invisible; under reduced motion it never leaves. */
+.key-beat {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: key-beat var(--beat, 0.5s) var(--ease-arrive) infinite;
+}
+
+@keyframes key-beat {
+  from {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(3.2);
+  }
+}
+
+.key-beat {
+  @variant motion-reduce {
+    animation: none;
+  }
+}
+
+.wave i {
+  display: block;
+  width: 2px;
+  height: var(--h, 30%);
+  transform-origin: center;
+  /* The bars mount when the peaks arrive, which is a fetch after the page has
+     drawn, so the sweep is timed from its own mount rather than from the
+     page-load stagger. Playback never touches the bars themselves, so the
+     sweep is not replayed by it. */
+  animation: bar-in var(--dur-settle) var(--ease-arrive) both;
+  /* The stagger is a fraction of the settle each bar takes rather than a
+     figure of its own: at the widest the wave goes (160 bars) the last one
+     starts as the first finishes, and a narrower wave sweeps proportionally
+     sooner. */
+  animation-delay: calc(var(--i, 0) / 160 * var(--dur-settle));
+  transition: background 0.18s var(--ease-arrive);
+}
+
+/* A set's skyline rises the way a waveform sweeps in, one gesture from the
+   left, each bar growing from the baseline it stands on. The stagger is a
+   share of the settle spread across the whole set (`--n` bars), so a set of
+   ninety tracks rises in the same beat as a set of nine. */
+.skyline__bar {
+  transform-origin: bottom;
+  animation: bar-in var(--dur-settle) var(--ease-arrive) both;
+  animation-delay: calc(var(--i, 0) / var(--n, 1) * var(--dur-settle));
+}
+
+/* A heatmap swept in on mount (`Heatmap`'s `sweep`) rises the way a skyline
+   does: each dated cell grows from the baseline of its row, staggered by its
+   `--i` over the `--n` cells the grid carries. */
+.heatmap__cell--sweep {
+  transform-origin: bottom;
+  animation: bar-in var(--dur-settle) var(--ease-arrive) both;
+  animation-delay: calc(var(--i, 0) / var(--n, 1) * var(--dur-settle));
+}
+
+/* A ruler caret that moved (`RulerScale`'s `was`) travels from where it
+   pointed to where it points, once the scale has drawn. It is a layer as wide
+   as the ruler, so `--caret-from`, a percentage of the ruler, is a
+   percentage of the layer; at rest it points at the value it names. */
+@keyframes caret-travel {
+  from {
+    translate: var(--caret-from, 0) 0;
+  }
+}
+
+.ruler-caret {
+  animation: caret-travel var(--dur-arrive) var(--ease-arrive)
+    calc(var(--dur-settle) * 0.5) both;
+}
+
+/* A bar is lit once the playhead is past it. The wave container carries
+   `--played`, the count of bars behind the playhead, written outside React so
+   progress never re-renders a bar; the clamp is 1 for every bar whose `--i` is
+   below it and 0 for the rest. A wave without `--played` stays unlit. */
+.wave i {
+  background: color-mix(
+    in oklab,
+    var(--art) calc(clamp(0, var(--played, 0) - var(--i, 0), 1) * 100%),
+    var(--ink-faint)
+  );
+}
+
+/* The lava field draws at 96 px and is stretched over the sheet, so the blur
+   is what turns five gradients into a continuous field. */
+.miniplayer__field {
+  filter: blur(40px) saturate(1.3);
+  transform: scale(1.2); /* keep the blur's soft edges outside the surface */
+}
+
+/* The status pie fills to its percentage rather than appearing at it. It is
+   CSS because it animates a registered custom property on a pseudo-element,
+   which Motion cannot reach; the page's arrival root carries `data-arrival`
+   for the length of the entrance, which is what keys it to a first load and
+   not to a navigation. Scoped to the masthead and rail because a table's
+   status column is many chips at once, and filling all of them would turn one
+   deliberate gesture into a flock of them. */
+@keyframes pie {
+  from {
+    --pct: 0;
+  }
+}
+
+[data-arrival="load"] .masthead [data-slot^="status"],
+[data-arrival="load"] .masthead [data-slot="status-chip"],
+[data-arrival="load"] .rail [data-slot^="status"],
+[data-arrival="load"] .rail [data-slot="status-chip"] {
+  animation: pie var(--dur-settle) var(--ease-arrive) 0.5s both;
+}
+
+[data-arrival="load"] .masthead [data-slot^="status"],
+[data-arrival="load"] .rail [data-slot^="status"] {
+  @variant motion-reduce {
+    animation: none;
+  }
+}
+
+/* Phones get the same resting art as reduced motion: the ambient drift is a
+   loop nobody asked for, and it costs a small device a repaint of a blurred,
+   full-width field every frame. The page's entrance is untouched — it is a
+   single gesture, not ambient motion. The wash keeps its key light and drops
+   the second lobe rather than both: at this viewport the two lobes mostly
+   overlap, so the second one is redundant weight on a masked, full-viewport
+   layer rather than a visible feature. */
+@media (width < 768px) {
+  .masthead__field,
+  .masthead__tone {
+    animation: none;
+  }
+
+  .wash__lobe--lift {
+    display: none;
+  }
+}
+
+/* Ambient art motion off (`data-ambient` on <html>): the resting art and a
+   still wash, as reduced motion shows them, with every other motion left
+   alone. The phone rule above holds whatever the attribute says, so `on`
+   never brings the drift back to a phone. */
+:root[data-ambient="off"]
+  :is(.masthead__field, .masthead__tone, .wash__lobe--deep, .wash__lobe--lift) {
+  animation: none;
+}
+
+/* ── View transitions ─────────────────────────────────────────────────────
+   Navigation motion, run by React's <ViewTransition> (`MastheadArtMorph`,
+   `MastheadMorph`, `RailMorph`, `CoverMorph`): the running-order step and the
+   cover morph. Only named groups animate: the root is a
+   live capture that swaps instantly, so the page never freezes behind a stale
+   snapshot and a click mid-flight lands on the real page. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-old(root) {
+  display: none;
+}
+
+::view-transition-new(root) {
+  animation: none;
+}
+
+/* A running-order step: the two records' fields cross-fade in place, above
+   the page and below the header. */
+::view-transition-group(.art-step) {
+  z-index: 1;
+  animation: none;
+}
+
+::view-transition-old(.art-step) {
+  animation: art-step-out var(--dur-arrive) var(--ease-arrive) both;
+}
+
+::view-transition-new(.art-step) {
+  animation: art-step-in var(--dur-arrive) var(--ease-arrive) both;
+}
+
+@keyframes art-step-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes art-step-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The masthead's and the rail's groups exist to paint above the art while it
+   morphs — a named group is not clipped by the page, so the art would
+   otherwise cover them. Between two pages they neither move nor fade: the new
+   one is simply live, running its own reveal. */
+::view-transition-group(.hold),
+::view-transition-group(.masthead-next),
+::view-transition-group(.masthead-prev) {
+  /* Groups stack in the order their names were first captured, which is the
+     old page's: a row's thumb sits below the old masthead, so the art would
+     land above the new one. The order is set here instead. */
+  z-index: 2;
+  animation: none;
+}
+
+::view-transition-old(.hold) {
+  display: none;
+}
+
+::view-transition-new(.hold) {
+  animation: none;
+}
+
+/* A step slides the header the way the running order went: out quickly
+   towards where it came from, the next one in from the side it lies on. */
+::view-transition-old(.masthead-next) {
+  --step: -3rem;
+  animation: masthead-leave var(--dur-move) var(--ease-leave) both;
+}
+
+::view-transition-new(.masthead-next) {
+  --step: 3rem;
+  animation: masthead-arrive var(--dur-settle) var(--ease-arrive)
+    calc(var(--dur-move) * 0.25) both;
+}
+
+::view-transition-old(.masthead-prev) {
+  --step: 3rem;
+  animation: masthead-leave var(--dur-move) var(--ease-leave) both;
+}
+
+::view-transition-new(.masthead-prev) {
+  --step: -3rem;
+  animation: masthead-arrive var(--dur-settle) var(--ease-arrive)
+    calc(var(--dur-move) * 0.25) both;
+}
+
+@keyframes masthead-leave {
+  to {
+    opacity: 0;
+    transform: translateX(var(--step));
+  }
+}
+
+@keyframes masthead-arrive {
+  from {
+    opacity: 0;
+    transform: translateX(var(--step));
+  }
+}
+
+/* The dock's cover growing into the now-playing sheet's, and back. Both ends
+   are the same square picture, so the default cross-fade between them is
+   invisible and only the move reads; the crop keeps a rounded-rectangle
+   thumb and a larger cover from stretching into each other. */
+::view-transition-group(.cover-morph) {
+  z-index: 3;
+  animation-duration: var(--dur-settle);
+  animation-timing-function: var(--ease-arrive);
+}
+
+::view-transition-old(.cover-morph),
+::view-transition-new(.cover-morph) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: var(--dur-settle);
+}
+
+/* The ambient loops and the pseudo-element view transitions Motion cannot
+   reach, gathered into one block. The status pie keeps its own cancel beside
+   the rule it cancels, because that one is scoped and this one is not.
+   Placed at the end so it wins over every rule it cancels: cancel and
+   cancelled selector share equal specificity, so only source order decides,
+   and nothing later in the file re-declares any of these animations.
+
+   A selector list under a variant flattens to one `:is()`, which takes the
+   weight of its heaviest member, so `.wave i` sits in a list of its own and
+   every cancel keeps the specificity of the rule it cancels. The grain and
+   the view-transition tree are pseudo-elements, which a variant cannot
+   reach, so their two conditions are written out: the OS asking and
+   `data-motion` not overriding it, or `data-motion="reduce"` alone. */
+.wash__lobe--deep,
+.wash__lobe--lift,
+.masthead__field,
+.masthead__tone,
+.skyline__bar,
+.heatmap__cell--sweep,
+.ruler-caret {
+  @variant motion-reduce {
+    animation: none;
+  }
+}
+
+.wave i {
+  @variant motion-reduce {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(:root:not([data-motion="full"])) body::after {
+    opacity: calc(var(--grain-opacity) * 0.03);
+  }
+
+  :where(:root:not([data-motion="full"]))::view-transition-old(*),
+  :where(:root:not([data-motion="full"]))::view-transition-new(*),
+  :where(:root:not([data-motion="full"]))::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}
+
+:where(:root[data-motion="reduce"]) body::after {
+  opacity: calc(var(--grain-opacity) * 0.03);
+}
+
+:where(:root[data-motion="reduce"])::view-transition-old(*),
+:where(:root[data-motion="reduce"])::view-transition-new(*),
+:where(:root[data-motion="reduce"])::view-transition-group(*) {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
+
+/* ── Toasts ────────────────────────────────────────────────────────────────
+   Sonner injects its stylesheet into <head> after this one, so the toast's
+   motion is taken back by specificity rather than source order. A toast is
+   an optical surface: it fades up out of the wash on the arrival curve and
+   leaves on the leave curve; the stack's own height change stays theirs. */
+[data-sonner-toaster] [data-sonner-toast].cn-toast {
+  transition:
+    transform var(--dur-settle) var(--ease-arrive),
+    opacity var(--dur-move) var(--ease-arrive),
+    height var(--dur-settle) var(--ease-arrive);
+}
+
+[data-sonner-toaster] [data-sonner-toast].cn-toast[data-removed="true"] {
+  transition:
+    transform var(--dur-move) var(--ease-leave),
+    opacity var(--dur-move) var(--ease-leave);
+}
+
+[data-sonner-toaster] [data-sonner-toast].cn-toast[data-swipe-out="true"] {
+  animation-duration: var(--dur-move);
+}
+
+[data-sonner-toaster] [data-sonner-toast].cn-toast {
+  @variant motion-reduce {
+    transition-property: opacity, height;
+  }
+}

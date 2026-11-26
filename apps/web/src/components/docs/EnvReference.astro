@@ -1,0 +1,100 @@
+---
+/* The self-hosting configuration reference, built from the root
+   `.env.example` (each variable and the comment above it) and the compose
+   files, `docker-compose.yml` and its Tailscale override (what compose does
+   with it), when the site builds, so the page can only ever say what those
+   files say. */
+import { LABEL } from "@workspace/ui/lib/shell";
+
+import tailscaleComposeFile from "../../../../../docker-compose.tailscale.yml?raw";
+import composeFile from "../../../../../docker-compose.yml?raw";
+import envExample from "../../../../../.env.example?raw";
+import {
+  type ComposeUse,
+  composeUse,
+  type EnvVariable,
+  inlineCode,
+  parseEnvExample,
+} from "./env-reference";
+
+const entries = parseEnvExample(envExample).map((entry) => ({
+  ...entry,
+  variables: entry.variables.map((variable) => ({
+    ...variable,
+    use: composeUse(`${composeFile}\n${tailscaleComposeFile}`, variable.name),
+  })),
+}));
+
+const STATUS: Record<ComposeUse["kind"], string> = {
+  required: "Required",
+  default: "Compose default",
+  passed: "Optional",
+  unread: "Outside Docker only",
+};
+
+/** The example value is worth showing only when it says more than the default. */
+const example = (variable: EnvVariable & { use: ComposeUse }) =>
+  variable.value !== "" &&
+  !(variable.use.kind === "default" && variable.use.value === variable.value);
+
+const anchor = (name: string) => name.toLowerCase().replaceAll("_", "-");
+const CODE = "rounded-sm bg-ink/6 px-1 font-mono text-ink";
+---
+
+<dl class="not-content @container my-8 border-t border-rule">
+  {entries.map((entry) => (
+    <div
+      class="grid gap-x-8 gap-y-3 border-b border-rule py-5 @xl:grid-cols-[13rem_minmax(0,1fr)] @xl:grid-rows-[repeat(var(--names),auto)_1fr]"
+      style={`--names: ${entry.variables.length}`}
+    >
+      {entry.variables.map((variable) => (
+        <dt
+          id={anchor(variable.name)}
+          class="flex flex-col gap-1.5 @xl:col-start-1"
+        >
+          <code class="font-mono text-small font-semibold [overflow-wrap:anywhere] text-ink">
+            {variable.name}
+          </code>
+          <span class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span
+              class:list={[
+                LABEL,
+                variable.use.kind === "required"
+                  ? "text-ink"
+                  : "text-ink-faint",
+              ]}
+            >
+              {STATUS[variable.use.kind]}
+            </span>
+            {variable.use.kind === "default" && (
+              <code class:list={[CODE, "text-micro"]}>
+                {variable.use.value}
+              </code>
+            )}
+          </span>
+        </dt>
+      ))}
+      <dd class="flex min-w-0 flex-col gap-3 text-small text-ink-soft @xl:col-start-2 @xl:row-span-full">
+        {entry.paragraphs.map((paragraph) => (
+          <p>
+            {inlineCode(paragraph).map((segment) =>
+              segment.code ? (
+                <code class={CODE}>{segment.text}</code>
+              ) : (
+                segment.text
+              )
+            )}
+          </p>
+        ))}
+        {entry.variables.filter(example).map((variable) => (
+          <p class="flex flex-wrap items-baseline gap-x-2">
+            <span class:list={[LABEL, "text-ink-faint"]}>Example</span>
+            <code class:list={[CODE, "[overflow-wrap:anywhere]"]}>
+              {variable.name}={variable.value}
+            </code>
+          </p>
+        ))}
+      </dd>
+    </div>
+  ))}
+</dl>

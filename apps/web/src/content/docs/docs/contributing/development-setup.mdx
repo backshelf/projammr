@@ -1,0 +1,127 @@
+---
+title: Development setup
+description: Install the prerequisites, configure the env files, and run the web app, the API, the scanner and this site on your machine.
+sidebar:
+  order: 3
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+A working development setup runs four things from one checkout: the API on port 8080, the web app on 3000, the
+scanner's window, and this site on 4321. Setting it up takes a database, two env files and one install.
+
+## Prerequisites
+
+- **[Bun](https://bun.sh) 1.4.3**, the version `package.json` pins in `packageManager`. Bun is the package manager,
+  the runtime of the API, and the test runner everywhere.
+- **PostgreSQL 17**, the version CI and the Docker images use. Any server you can reach works; a container is the
+  quickest way to get one.
+- **ffmpeg**, which the API runs to decode and transcode audio.
+- **Rust 1.97.1 through [rustup](https://rustup.rs)**, with the `wasm32-unknown-unknown` target, for
+  `packages/dsp`. The toolchain is pinned in `packages/dsp/rust/rust-toolchain.toml`, so rustup installs the right
+  version, the target, clippy and rustfmt on the first build.
+- **`wasm-opt` 116 or later** on your `PATH`, from `cargo install wasm-opt` or your distribution's `binaryen`
+  package.
+
+The WebAssembly that `packages/dsp` builds is not committed, and both the API and the web app need it, so Rust and
+`wasm-opt` are needed even if you never touch the audio code. `bun run dev` builds it before anything starts.
+
+## Set up
+
+<Steps>
+
+1. Clone the repository and install its dependencies:
+
+   ```bash
+   git clone https://github.com/backshelf/projammr.git
+   cd projammr
+   bun install
+   ```
+
+2. Start a PostgreSQL 17 server with an empty database, if you do not have one:
+
+   ```bash
+   docker run -d --name projammr-db \
+     -e POSTGRES_PASSWORD=projammr -e POSTGRES_DB=projammr \
+     -p 5432:5432 postgres:17
+   ```
+
+3. Create the API's env file, `apps/server/.env`. Generate each secret with `openssl rand -base64 32`:
+
+   ```bash title="apps/server/.env"
+   DATABASE_URL=postgres://postgres:projammr@localhost:5432/projammr
+   BETTER_AUTH_SECRET=<a secret>
+   NOTES_MASTER_KEY=<a different secret>
+   FFMPEG_PATH=ffmpeg
+   ```
+
+   - `BETTER_AUTH_SECRET` signs session cookies; the API refuses to start without it.
+   - `NOTES_MASTER_KEY` is the root of the notebook's encryption keys. It has to be 32 bytes, base64-encoded, which
+     is what the `openssl` command prints.
+   - `FFMPEG_PATH=ffmpeg` uses the ffmpeg on your `PATH`. Without it, the API looks for a copy at
+     `apps/server/deps/ffmpeg/bin/ffmpeg`.
+
+4. Create the web app's env file, `apps/client/.env`, with the **same** `BETTER_AUTH_SECRET`:
+
+   ```bash title="apps/client/.env"
+   BETTER_AUTH_SECRET=<the same secret as the API's>
+   ```
+
+   The web app verifies the session cookie itself rather than asking the API on every render, so the two have to
+   agree.
+
+5. Create the folders the API stores uploads and analysis in, then run the database migrations:
+
+   ```bash
+   mkdir -p apps/server/static/assets apps/server/static/images apps/server/static/analysis
+   cd apps/server && bun run migrate && cd ../..
+   ```
+
+</Steps>
+
+Everything else has a development default: the web app finds the API at `http://localhost:8080`, and the API trusts
+requests from `http://localhost:3000`.
+
+## Run it
+
+```bash
+bun run dev
+```
+
+Turborepo builds `packages/dsp` first, then starts every app's development server:
+
+| What          | Where                   | Started by                              |
+| ------------- | ----------------------- | --------------------------------------- |
+| The API       | `http://localhost:8080` | `bun --watch src/server.ts`             |
+| The web app   | `http://localhost:3000` | `next dev`                              |
+| The scanner   | its own window          | `electron-vite dev`                     |
+| This site     | `http://localhost:4321` | `astro dev`                             |
+
+Each one also runs on its own: `bun run dev` inside `apps/server`, `apps/client`, `apps/scanner` or `apps/web`. The
+API takes another port from `PORT`, the web app from `next dev -p`, and this site from `WEB_PORT`.
+
+Open `http://localhost:3000` and create an account. The first account on an instance becomes its admin and closes
+registration behind it; after that, others join by invite, or once [the admin opens registration](/docs/admin/registration/) again. Create a
+project, and the app is ready to use.
+
+To sync real sessions, open the scanner, enter `http://localhost:8080` as the server on its sign-in screen, sign in
+with the same account, pick the project, and add a folder of Ableton projects.
+
+<Aside>
+  In development the web app forwards `/api/*` to the API itself, so the browser only ever talks to port 3000. The
+  scanner talks to the API directly.
+</Aside>
+
+## Changing the database
+
+The schema lives in `apps/server/src/db/schema/`, one file per area. After changing it, generate a migration and
+apply it:
+
+```bash
+cd apps/server
+bun run generate   # writes a new migration under src/db/migrations/
+bun run migrate
+```
+
+Commit the migration with the schema change. Projammr is pre-release, so a schema change is made directly: no
+compatibility shims, and existing development data can be thrown away.

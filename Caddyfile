@@ -1,0 +1,73 @@
+# The HTTPS front door of the docker compose stack. Caddy terminates TLS and
+# is the only way in from the host: `api` is not published, so a bearer-token
+# client (the dit app) reaches it the same way the browser does, through the
+# routes below. `docker-compose.tailscale.yml` replaces this proxy with a
+# Tailscale node serving the same routes (`tailscale-serve.json`).
+#
+# PUBLIC_HOST is the one name the stack is opened by, lowercase, without a
+# scheme or port; compose passes it through from .env. Caddy's own local
+# certificate authority signs the certificate ("tls internal"), so no
+# certificate or tooling has to exist on the Docker host. Each device that
+# opens the site trusts that CA's root once, and the root is served in the
+# clear at http://<host>/ca.crt so a device that does not trust it yet can
+# fetch it.
+#
+# The single `tls internal` line below is the only certificate source.
+{
+	# The container has no trust store worth writing to; Caddy would only
+	# log an error trying.
+	skip_install_trust
+}
+
+# `reverse_proxy` below sets X-Forwarded-For itself, appending the address it
+# actually saw the connection from — and ignoring anything already on the
+# header, since a browser is never a trusted proxy — so a caller cannot claim
+# an address of its own choosing this way. `TRUSTED_PROXY_HOPS` (the api
+# service's environment, docker-compose.yml) reads that many entries in from
+# the right of the chain the API eventually sees, one of which is this hop's.
+#
+# No response headers are set here: the API and the web app each send the
+# security headers themselves (`@workspace/security-headers`).
+http://{$PUBLIC_HOST} {
+	handle /ca.crt {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		# The image has no MIME table, so the type has to be spelled out;
+		# without it browsers show the PEM as text instead of offering to
+		# install it. The filename is what the download and the trust-store
+		# entry are called.
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition `attachment; filename="projammr-ca.crt"`
+		file_server
+	}
+	handle {
+		redir https://{host}{uri} 308
+	}
+}
+
+https://{$PUBLIC_HOST} {
+	tls internal
+
+	# Same destination Next's own /api rewrite forwards to, so a browser
+	# request through the web service and a bearer-token request straight
+	# from the dit app land on the same route. No body limit here: the API
+	# enforces MAX_UPLOAD_MB itself, with room for the form around the file,
+	# so a proxy limit could only ever refuse first, with a bare 413 in place
+	# of the app's error.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	# /static/* is the API's own mount for uploaded audio and images;
+	# /media is the external name every client already uses (the browser's
+	# same-origin cookie, the dit app's bearer token — both authenticate
+	# the API directly now that this is the only way to reach it).
+	handle_path /media/* {
+		rewrite * /static{uri}
+		reverse_proxy api:8080
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -1,0 +1,218 @@
+---
+/* The compose stack drawn as a signal chain: requests come in down the left
+   rail through the one published service, the proxy, which branches to the
+   web app and straight to the API; the API reaches the database. Hairlines
+   and tracked-caps labels only, no boxes, per DESIGN.md's Line Not Box Rule.
+   The data is `stack.ts`, which `test/stack.test.ts` holds against the
+   compose file, the Caddyfile and the Dockerfile. */
+import { LABEL } from "@workspace/ui/lib/shell";
+
+import {
+  ROUTES,
+  SERVICES,
+  type StackService,
+  type StackVolume,
+  VOLUMES,
+} from "./stack";
+
+const { proxy, web, api, db, backup } = SERVICES;
+
+/** The HTTPS paths the proxy sends to one service, for the branch into it. */
+const pathsTo = (service: StackService) =>
+  ROUTES.filter(
+    (route) => route.scheme === "https" && route.service === service.name
+  ).map((route) => route.path ?? "anything else");
+
+const blocks = [
+  { service: web, from: pathsTo(web), wire: "INTERNAL_API_URL" },
+  { service: api, from: pathsTo(api), wire: "DATABASE_URL" },
+  { service: db, from: [] as string[], wire: null },
+];
+
+const ports = proxy.published.map((port) => port.split(":").at(-1)).join(" · ");
+const mounts = (volume: StackVolume) =>
+  volume.mounts
+    .map((mount) => `${mount.service}${mount.readOnly ? " (read-only)" : ""}`)
+    .join(", ");
+
+const RAIL = "pointer-events-none absolute bg-rule-strong";
+const HEAD = "flex flex-wrap items-baseline gap-x-2";
+const NAME = "font-mono text-small font-semibold text-ink";
+const FACT = "flex flex-wrap items-baseline gap-x-2 text-small";
+---
+
+<figure class="not-content my-8 flex flex-col gap-8">
+  <div class="grid grid-cols-[1.25rem_minmax(6.5rem,auto)_minmax(0,1fr)] text-small text-ink-soft">
+    <div class="col-span-3 border-l border-rule-strong pb-3 pl-4">
+      <p class:list={[LABEL, "text-ink-soft"]}>Your network</p>
+      <p class="mt-1">
+        Browsers, phones and dit, all opening{" "}
+        <code class="font-mono text-ink">https://PUBLIC_HOST</code>
+      </p>
+    </div>
+
+    <div class="col-span-3 flex border-l border-rule-strong py-3 pl-4">
+      <p class={FACT}>
+        <span class:list={[LABEL, "text-ink-soft"]}>Published on the host</span>
+        <span class="text-ink">{ports}</span>
+      </p>
+    </div>
+
+    <div class="col-span-3 flex flex-col gap-3 border-t border-l border-rule-strong pt-3 pb-4 pl-4">
+      <div class={HEAD}>
+        <span class={NAME}>{proxy.name}</span>
+        <span>{proxy.runs}</span>
+      </div>
+      <ul class="m-0 flex list-none flex-col p-0">
+        {ROUTES.map((route) => (
+          <li class="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-3 border-t border-rule py-1.5">
+            <span class:list={[LABEL, "pt-0.5 text-ink-soft"]}>
+              {route.scheme}
+            </span>
+            <span class="flex flex-wrap items-baseline gap-x-2">
+              <code class="font-mono text-ink">
+                {route.path ?? "anything else"}
+              </code>
+              <span aria-hidden="true" class="text-ink-faint">
+                →
+              </span>
+              <span>{route.to}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    {blocks.map(({ service, from, wire }) => (
+      <>
+        <div class="relative" aria-hidden="true">
+          {from.length > 0 && (
+            <>
+              <span
+                class:list={[
+                  RAIL,
+                  "top-0 left-0 w-px",
+                  service.name === "web" ? "bottom-0" : "bottom-1/2",
+                ]}
+              />
+              <span class:list={[RAIL, "top-1/2 right-0 left-0 h-px"]} />
+            </>
+          )}
+        </div>
+        <div class="relative grid grid-rows-[1fr_1fr] pr-3">
+          {(from.length > 0 || service.name === "db") && (
+            <>
+              <span class="flex flex-col items-start self-end pr-2 pb-1">
+                {service.name === "db" ? (
+                  <>
+                    <span class={NAME}>{backup.name}</span>
+                    <span class:list={[LABEL, "text-ink-faint"]}>
+                      Profile {backup.profile}
+                    </span>
+                  </>
+                ) : (
+                  from.map((path) => (
+                    <code class="font-mono text-micro text-ink-soft">
+                      {path}
+                    </code>
+                  ))
+                )}
+              </span>
+              <span
+                aria-hidden="true"
+                class:list={[RAIL, "top-1/2 right-1.5 left-0 h-px"]}
+              />
+              <span
+                aria-hidden="true"
+                class="pointer-events-none absolute top-1/2 right-0 -translate-y-1/2 border-y-4 border-l-6 border-y-transparent border-l-rule-strong"
+              />
+            </>
+          )}
+        </div>
+        <div class="flex flex-col gap-1.5 border-l border-rule py-3 pl-4">
+          <div class={HEAD}>
+            <span class={NAME}>{service.name}</span>
+            {service.port && (
+              <span class="font-mono text-micro text-ink-faint">
+                :{service.port}
+              </span>
+            )}
+            <span class:list={[LABEL, "text-ink-faint"]}>Not published</span>
+          </div>
+          <p>{service.runs}</p>
+          {service.health && (
+            <p class={FACT}>
+              <span class:list={[LABEL, "text-ink-faint"]}>Health</span>
+              <span class="font-mono text-ink-soft">{service.health}</span>
+            </p>
+          )}
+          {service.after && (
+            <p class={FACT}>
+              <span class:list={[LABEL, "text-ink-faint"]}>Waits for</span>
+              <span class="font-mono text-ink-soft">
+                {service.after}, healthy
+              </span>
+            </p>
+          )}
+        </div>
+        {wire && (
+          <>
+            <div class="relative" aria-hidden="true">
+              {service.name === "web" && (
+                <span class:list={[RAIL, "inset-y-0 left-0 w-px"]} />
+              )}
+            </div>
+            <div />
+            <div class="relative flex min-h-12 items-center py-2 pl-7">
+              <span
+                aria-hidden="true"
+                class:list={[RAIL, "top-0 bottom-1.5 left-4 w-px"]}
+              />
+              <span
+                aria-hidden="true"
+                class="pointer-events-none absolute bottom-0 left-4 -translate-x-1/2 border-x-4 border-t-6 border-x-transparent border-t-rule-strong"
+              />
+              <code class="font-mono text-micro text-ink-faint">{wire}</code>
+            </div>
+          </>
+        )}
+      </>
+    ))}
+  </div>
+
+  <div class="flex flex-col gap-2">
+    <p class:list={[LABEL, "text-ink-soft"]}>Volumes</p>
+    <table class="w-full border-collapse text-left text-small text-ink-soft">
+      <thead>
+        <tr class="border-b border-rule">
+          <th class:list={[LABEL, "py-1.5 pr-4 font-normal text-ink-faint"]}>
+            Volume
+          </th>
+          <th class:list={[LABEL, "py-1.5 pr-4 font-normal text-ink-faint"]}>
+            Mounted by
+          </th>
+          <th class:list={[LABEL, "py-1.5 font-normal text-ink-faint"]}>
+            Holds
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {VOLUMES.map((volume) => (
+          <tr class="border-b border-rule align-baseline">
+            <td class="py-2 pr-4 whitespace-nowrap">
+              <code class="font-mono text-ink">{volume.name}</code>
+            </td>
+            <td class="py-2 pr-4 font-mono">{mounts(volume)}</td>
+            <td class="py-2">{volume.holds}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <figcaption class="text-small text-ink-faint">
+    The compose stack. Only the proxy is published on the host; the other
+    services reach each other by name on the compose network, and the backup
+    service runs only when you call it.
+  </figcaption>
+</figure>

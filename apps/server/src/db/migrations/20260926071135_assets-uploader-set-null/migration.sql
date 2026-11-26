@@ -1,0 +1,1 @@
+ALTER TABLE "assets" DROP CONSTRAINT "assets_created_by_user_users_id_fkey", ADD CONSTRAINT "assets_created_by_user_users_id_fkey" FOREIGN KEY ("created_by_user") REFERENCES "users"("id") ON DELETE SET NULL;

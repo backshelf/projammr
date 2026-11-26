@@ -1,0 +1,72 @@
+---
+/* The one shape every call to action on the marketing pages takes. `primary`
+   is the ink button, `ghost` its hairline sibling, `quiet` a text link with an
+   arrow. An action whose destination does not exist yet (a hosted plan, an
+   installer nobody has published) has `href={null}`: it renders as an
+   unavailable button with the reason beside its label, never as a link to
+   nowhere, and becomes a real link the moment an `href` is set. */
+import { IconArrowRight } from "@tabler/icons-react";
+
+import ComingSoon from "@/components/marketing/ComingSoon.astro";
+
+type Props = {
+  href: string | null;
+  variant?: "primary" | "ghost" | "quiet";
+  /** What an unavailable action says in place of going anywhere. */
+  unavailable?: string;
+  class?: string;
+};
+
+const {
+  href,
+  variant = "primary",
+  unavailable = "Coming soon",
+  class: className,
+} = Astro.props;
+
+const BUTTON =
+  "inline-flex min-h-10 items-center justify-center gap-2.5 rounded-md px-4 text-body whitespace-nowrap coarse:min-h-11";
+const FOCUS =
+  "focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none";
+
+const shape = {
+  primary: [
+    BUTTON,
+    FOCUS,
+    "bg-ink text-paper motion-ink hover:bg-ink/80 active:translate-y-px",
+  ],
+  ghost: [
+    BUTTON,
+    FOCUS,
+    "border border-rule-strong text-ink motion-ink hover:bg-ink/4 active:translate-y-px",
+  ],
+  quiet: [
+    FOCUS,
+    "group inline-flex min-h-10 items-center gap-2 rounded-sm text-body text-ink-soft motion-ink hover:text-ink coarse:min-h-11",
+  ],
+}[variant];
+---
+
+{href === null ? (
+  <span
+    aria-disabled="true"
+    class:list={[
+      BUTTON,
+      "cursor-default border border-dashed border-rule-strong text-ink-soft",
+      className,
+    ]}
+  >
+    <slot />
+    <ComingSoon text={unavailable} />
+  </span>
+) : (
+  <a href={href} class:list={[shape, className]}>
+    <slot />
+    {variant === "quiet" && (
+      <IconArrowRight
+        className="size-4 shrink-0 motion-move group-hover:translate-x-0.5"
+        aria-hidden="true"
+      />
+    )}
+  </a>
+)}

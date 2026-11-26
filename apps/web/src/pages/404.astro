@@ -1,0 +1,49 @@
+---
+/* The page for an address with nothing at it, set as a hunk that removed the
+   one line it had, and showing that line struck. Grey, since there is no
+   record here to light it. The header's one count is the header, so it is
+   in the header's ink rather than a removal's faint mark. */
+import { LABEL } from "@workspace/ui/lib/shell";
+
+import Action from "@/components/marketing/Action.astro";
+import HunkLine from "@/components/marketing/HunkLine.astro";
+import MastheadArt from "@/components/marketing/MastheadArt.astro";
+import PageHead from "@/components/marketing/PageHead.astro";
+import { coverArt } from "@/data/covers";
+import SiteLayout from "@/layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Not found"
+  description="There is nothing at this address."
+  art={coverArt("mono")}
+>
+  <MastheadArt slot="atmosphere" cover="mono" />
+
+  <PageHead
+    title="Nothing was saved here."
+    lede="The page may have moved, or the link was never right. Everything else is where you left it."
+  >
+    <div slot="before" class="flex flex-col gap-4">
+      <p aria-hidden="true" class:list={[LABEL, "on-art-soft flex gap-2"]}>
+        <span>@@</span>
+        <span>−1</span>
+        <span>@@</span>
+      </p>
+      <ul class="hunk-lines">
+        <HunkLine sign="−" text="A page at this address." />
+      </ul>
+    </div>
+    <div slot="actions" class="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div class="flex flex-wrap gap-3">
+        <Action href="/">Home</Action>
+        <Action href="/docs/" variant="ghost">
+          The docs
+        </Action>
+      </div>
+      <Action href="/dit/" variant="quiet">
+        dit, the Mac app
+      </Action>
+    </div>
+  </PageHead>
+</SiteLayout>

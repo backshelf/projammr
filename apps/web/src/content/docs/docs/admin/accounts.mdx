@@ -1,0 +1,89 @@
+---
+title: Accounts
+description: See every account on the instance, disable one, and get someone back in with a password reset link.
+sidebar:
+  order: 71
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+The **Users** page of the instance's settings (Settings → Instance → Users) lists every account on the instance.
+From it you can make someone an admin, disable an account, and create a password reset link for someone who is
+locked out.
+
+## The accounts list
+
+Accounts are listed oldest first, twenty to a page. Each row shows:
+
+- **Name** and **Email**.
+- **Role**: `Admin` or `User`. This is the instance role, not a project role.
+- **Last seen**: how long ago the account last used Projammr, or `Never`.
+- **Storage**: how much the files this account has uploaded take up, across every project.
+- **Projects**: how many projects the account is a member of.
+
+The actions at the end of each row are **Make admin** (or **Remove admin**), **Disable** (or **Enable**) and
+**Create reset link**. [Running your instance](/docs/admin/) covers the admin role.
+
+People who comment on a share page without signing in are not accounts, so they never appear in this list.
+
+## Disable an account
+
+**Disable** stops an account from using Projammr without deleting anything. The server treats a disabled
+account as signed out and ends its sessions, so the person is signed out everywhere; a browser tab that was
+already open can keep working for up to five minutes before it notices. Their projects, uploads, comments and
+activity all stay as they were.
+
+**Enable** lets them sign in again with their existing password.
+
+You cannot disable the last admin who can sign in. Make someone else an admin first.
+
+## Create a password reset link
+
+Projammr can only email a reset link to someone who forgot their password when the instance is [set up to send
+mail](/docs/self-hosting/configuration/). Without mail, the sign-in page tells people to "Ask your instance admin for a password reset link.", and
+this is how you make one.
+
+<Steps>
+
+1. On the **Users** page, choose **Create reset link** on the person's row.
+
+2. Copy the link from the **Reset link** dialog with **Copy reset link**.
+
+3. Send it to them yourself, in whatever way you usually reach them.
+
+</Steps>
+
+<Screenshot
+  id="admin-reset-link"
+  alt="The Reset link dialog open over the Users page, with the one-time link in a read-only field beside a copy button"
+/>
+
+The link works once and expires after an hour. It is shown only in that dialog: once you close it, the only
+way to get another is to create a new one. Opening the link takes the person to a page where they choose a new
+password, then on to sign in.
+
+Creating a reset link also lifts any sign-in lockout on that account, so it is the way to let someone back in
+early after too many wrong passwords.
+
+<Aside type="caution">
+  Treat a reset link like a password: anyone who opens it within the hour can
+  set the account's password. Send it to the person directly, not to a shared
+  channel.
+</Aside>
+
+## Sign-in lockout
+
+Projammr slows down password guessing on each email address. Five failed sign-ins within 15 minutes are
+allowed. Each failure after that locks the address for longer: one minute, then two, four, eight, and so on,
+up to an hour. While locked, the sign-in form answers "Too many failed sign-in attempts. Try again later."
+whether or not the account exists.
+
+A lockout ends on its own when the time runs out. A successful sign-in clears the count, and so does a reset
+link you create for the account.
+
+## Deleting accounts
+
+There is no way for an admin to delete someone's account. Disabling it is the admin's tool. Account holders
+can [delete their own account from their profile](/docs/guide/settings-and-profile/#deleting-your-account); Projammr refuses while they are the only owner of a project
+that other people are still in, and refuses for the instance's last admin.

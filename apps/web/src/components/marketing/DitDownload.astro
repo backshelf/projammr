@@ -1,0 +1,25 @@
+---
+/* dit's download: the one action that fetches the dmg, with what it needs
+   and the Gatekeeper line under it, from `DIT_DOWNLOAD`. `class` sets the
+   colour of the two lines under the button, which differs on a cover's
+   masthead (`on-art-soft`) and on plain paper (`text-ink-soft`). */
+import Action from "@/components/marketing/Action.astro";
+import { DIT_DOWNLOAD } from "@/site";
+
+type Props = { class?: string };
+
+const { class: className = "text-ink-soft" } = Astro.props;
+---
+
+<div class="flex flex-col items-start gap-3">
+  <Action href={DIT_DOWNLOAD.href}>{DIT_DOWNLOAD.label}</Action>
+  <p
+    class:list={[
+      "flex max-w-[52ch] flex-col gap-1 text-body text-pretty",
+      className,
+    ]}
+  >
+    <span>{DIT_DOWNLOAD.requirements}</span>
+    <span>{DIT_DOWNLOAD.gatekeeper}</span>
+  </p>
+</div>

@@ -1,0 +1,102 @@
+---
+title: The waveform, comments and comparing
+description: Scrub a version on its waveform, pin feedback to a moment in the mix, and switch between two versions to hear what changed.
+sidebar:
+  order: 26
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+A track's page opens on the waveform of the version you are looking at. It is where you listen, where feedback
+gets pinned to the exact moment it is about, and where you set two versions side by side.
+
+## The waveform
+
+Click anywhere on the waveform to play from there, or drag along it to scrub. If nothing is playing yet, clicking
+it starts the track.
+
+With the waveform selected, the keyboard moves the playhead:
+
+| Key                             | Moves                  |
+| ------------------------------- | ---------------------- |
+| <kbd>←</kbd> / <kbd>→</kbd>     | 5 seconds back or on   |
+| <kbd>Shift</kbd> with an arrow  | 30 seconds back or on  |
+| <kbd>Home</kbd> / <kbd>End</kbd> | the start or the end   |
+
+Under the waveform, strips can show the song's loudness, its spectrogram and where it changed since the last
+version. See [Loudness, spectrum and measurements](/docs/guide/loudness-and-spectrum/#the-strips-under-the-waveform).
+
+## Timecoded comments
+
+Comments on a version belong to that version, and each can be pinned to a moment in it. They show as small marks
+above the waveform, so you can see at a glance where the feedback is.
+
+<Screenshot
+  id="track-comment-pin"
+  alt="A comment mark above the waveform, hovered to show who left it, when in the song, and the start of what they said"
+/>
+
+- **Hover a mark** to see who left it, the time it is pinned to, and how it starts.
+- **Select a mark** to jump the playhead there and open the comment.
+
+### Leaving a comment on a version
+
+<Steps>
+
+1. Play the version, and pause or keep playing at the moment you want to talk about.
+
+2. Open the version's comments from the button at the right of the line under the waveform, such as "3 comments
+   on v2". A version with none says "Comments on v2".
+
+3. Start writing. The stamp beside the box reads "At 1:04", the time the playhead was at when you started, and
+   pins the comment there. Select the stamp to make it a general comment about the whole version instead.
+
+4. Select **Comment**.
+
+</Steps>
+
+Every comment with a time shows it as a stamp; select the stamp ("Jump to this point") to play from there. A reply
+belongs to the same moment as the comment it answers.
+
+Switching to another version switches to its comments. For comments about the song as a whole, use the track's own
+**Comments** section further down the page; see [Comments and activity](/docs/guide/comments-and-activity/).
+
+<Aside>
+  Anyone in the project can read and post comments, viewers included. You can edit or delete your own.
+</Aside>
+
+## Comparing two versions
+
+Compare lets you flip between two versions at the same point in the song, so you hear exactly what a new mix
+changed.
+
+<Screenshot
+  id="track-compare"
+  alt="Comparing two versions of a track: both waveforms, the A/B switch, Match loudness, and where the two differ"
+/>
+
+<Steps>
+
+1. On the track, select **Compare** at the right of the line under the waveform, and pick the version to compare
+   with.
+
+2. Projammr gets both ready, showing "Preparing comparison" with its progress.
+
+3. Switch between them with the **A/B** switch, or press <kbd>V</kbd>. The playhead stays where it is.
+
+4. Select the **×** to finish. If you finish on B, B keeps playing and becomes the version the page shows.
+
+</Steps>
+
+While comparing:
+
+- **Match loudness** plays the two at the same loudness, so the louder one does not just sound better. Both
+  versions need a loudness measurement first.
+- **The change strip** under the waveforms shows where the two differ, second by second.
+
+<Aside>
+  On a phone, Compare switches between the versions without matching their loudness, and says "Levels not matched"
+  (with how much louder B is, when it knows). The change strip and the Lab are not available while comparing
+  there.
+</Aside>

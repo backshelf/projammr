@@ -1,0 +1,131 @@
+name: CI
+
+# A pull request gets one job: the build and every test suite. The static
+# gates (lint, format, typecheck, knip, audit) are local ones
+# (`.claude/scripts/run-gates.sh`) and run here only for a release.
+on:
+  pull_request:
+    branches: [master]
+  # `release.yml` calls this on a tag, with `secrets: inherit` for the CI_* secrets.
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          POSTGRES_DB: projammr_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://ci:${{ secrets.CI_DB_PASSWORD }}@localhost:5432/projammr_ci
+      # typegen imports the Hono app, whose env module throws without these,
+      # and turbo runs server#typegen ahead of the build and the suites.
+      BETTER_AUTH_SECRET: ${{ secrets.CI_BETTER_AUTH_SECRET }}
+      NOTES_MASTER_KEY: ${{ secrets.CI_NOTES_MASTER_KEY }}
+      FFMPEG_PATH: ffmpeg
+      LOG_LEVEL: error
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      # First, so the server suite below finds pkg/dsp.wasm and pkg/dit.wasm:
+      # it runs outside turbo and nothing else builds them.
+      - run: bun run build
+      # One package at a time: every suite already runs `bun test --parallel`
+      # across the runner's cores, and the Rust packages compile, so running
+      # packages side by side starves the rest.
+      - run: bun run test:ci
+      # storeUpload writes with flag "wx" and never creates the directory.
+      - run: mkdir -p static/assets static/images static/analysis
+        working-directory: apps/server
+      # The runner ships pg_dump 16 and the service container is postgres 17;
+      # pg_dump refuses to dump a server newer than itself. The api image
+      # pins postgresql-client-17 to the same major, so the pairing that
+      # actually ships is covered there, and a dump of a throwaway CI
+      # database is worth nothing anyway. migrator.test.ts still exercises
+      # the dump path against a stubbed pg_dump.
+      - run: bun run migrate
+        working-directory: apps/server
+        env:
+          MIGRATE_BACKUP: "0"
+      - run: bun run test
+        working-directory: apps/server
+
+  lint:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # only-warn turns every rule into a warning locally; lint:ci passes
+      # --max-warnings 0 through turbo so any of them fails the job.
+      - run: bun run lint:ci
+      # Jira keys stay out of source and docs. Migrations are excluded: they are
+      # squashed at the 1.0 baseline. `git grep` covers tracked files only, so
+      # it never walks node_modules.
+      - name: No Jira keys in source
+        run: "! git grep -nE 'PROJ-[0-9]+' -- apps packages ':!apps/server/src/db/migrations'"
+      # Every workspace manifest and the Rust crate carry the root package.json's version.
+      - run: bun run version:check
+
+  format:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # turbo only reaches workspaces that declare a `format` script, so the
+      # gate is that running the real thing changes nothing. A separate
+      # `--check` pass could cover a different set of files and miss exactly
+      # the drift this is here to catch.
+      - run: bun run format
+      - name: Formatting is up to date
+        run: git diff --exit-code
+
+  typecheck:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      # typegen imports the Hono app, whose env module throws without these.
+      BETTER_AUTH_SECRET: ${{ secrets.CI_BETTER_AUTH_SECRET }}
+      NOTES_MASTER_KEY: ${{ secrets.CI_NOTES_MASTER_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      # turbo runs server#typegen ahead of it.
+      - run: bun run typecheck
+      - name: Committed API enums match the generator
+        run: git diff --exit-code packages/api/src/enums.ts
+      # Here rather than in lint: knip resolves imports of the gitignored
+      # v1.d.ts and routeTree.gen.ts, which the step above generates.
+      - run: bun run knip
+
+  audit:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      # The root script carries an --ignore flag for each advisory with no
+      # fixed release: braces (GHSA-vfj7-8cjw-p6xm), reached only through dev
+      # tooling. Drop each flag once a fix ships.
+      - run: bun run audit

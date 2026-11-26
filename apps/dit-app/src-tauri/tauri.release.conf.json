@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENGOTVEMTcyNUFBMDMxMTAKUldRUU1hQmFjdEdWejE3OEVEaW83ZGs2SVJSMUx0Wi95TkZsRVkxUHRpUzJoMkhjUFA0L1l0eW0K",
+      "endpoints": [
+        "https://github.com/backshelf/projammr/releases/latest/download/latest.json"
+      ]
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true
+  }
+}

@@ -1,0 +1,6 @@
+# A bare `bun test` here would run every package's tests in one shared global,
+# without their own preloads, isolation or the server's serial pass. Test files
+# are ignored at the root so it finds nothing; run `bun run test` (turbo, every
+# package but the server) or `bun run test` inside a package.
+[test]
+pathIgnorePatterns = ["apps/**", "packages/**"]

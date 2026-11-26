@@ -1,0 +1,88 @@
+---
+title: The player and the queue
+description: Play tracks and whole collections, line up what plays next, and open the now-playing sheet.
+sidebar:
+  order: 28
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+The player keeps going while you move around the app, so you can listen to a mix while you read the comments on
+it, change its status or look something up in another project.
+
+## Playing something
+
+Anything that can play has a play button: a track's masthead, a collection's masthead, each row of the tracks and
+collections tables, and audio attachments. The **⋮** beside a play button chooses how it plays:
+
+- **Play collection** plays a whole collection in its running order. On a track opened from a collection,
+  **Play from here** plays the collection starting at this track. A track on its own just has **Play**.
+- **Play next** puts it straight after what is playing now.
+- **Add to queue** (or **Queue collection**) puts it at the end of the queue.
+- **Download** saves a copy. See [Versions and uploads](/docs/guide/audio-versions/#downloading).
+
+Playing a collection replaces the queue with its tracks, in order.
+
+A track plays its primary version, unless you have picked another version on its page.
+
+## The player
+
+On a computer the player sits at the bottom of the sidebar, and floats in the corner when you hide the sidebar. On
+a phone it becomes a strip above the bar along the bottom; see [Projammr on your phone](/docs/guide/phones/).
+
+<Screenshot id="player-queue" alt="The player playing a track, with the queue open above it" />
+
+Its controls, left to right: **Shuffle**, **Previous**, play and pause, **Next**, **Repeat** (select it to go
+from off to repeating everything to repeating one), and **Mute** with the **Volume** slider. On iPhone and iPad
+there is only **Mute**, because iOS sets the volume itself.
+
+**More controls** holds **Speed**, and quick switches from [the Lab](/docs/guide/the-lab/): **Mono**, **Dim** and
+**−14 LUFS**, with **Open Lab** for the rest.
+
+## The queue
+
+Select **Queue** on the player to see what is coming up, headed with how many tracks it holds.
+
+- Drag a track by its handle to move it up or down the queue.
+- Select a track to jump to it.
+- The **×** on a track takes it out of the queue.
+- **Clear** empties the queue.
+
+## Now playing
+
+The now-playing sheet gives the music the whole screen, with its cover behind everything. Open it with the
+**Now playing** button on the player. It is headed "Now playing", or "Playing from" and the collection's name
+when you are playing a collection.
+
+<Screenshot id="now-playing" viewport="phone" alt="The now-playing sheet on a phone: the cover, the transport, and the live loudness meter" />
+
+The sheet has three panes, switched by the buttons under the transport:
+
+- **The player**: the cover, the title and artists, the live **Loudness** meter and, on a tall enough screen, the
+  **Spectrum**. When the track has several versions, you can switch between them here, and the menu has **Go to**
+  the track.
+- **Queue**, as above.
+- **Lab**, the [listening tools](/docs/guide/the-lab/).
+
+## Keyboard shortcuts for playback
+
+These work anywhere in the app while you are not typing:
+
+| Key                                 | Does                     |
+| ----------------------------------- | ------------------------ |
+| <kbd>Space</kbd>                    | Play or pause            |
+| <kbd>←</kbd> / <kbd>→</kbd>         | Back or forward 5 seconds  |
+| <kbd>Shift</kbd> <kbd>←</kbd> / <kbd>Shift</kbd> <kbd>→</kbd> | Back or forward 30 seconds |
+| <kbd>[</kbd> / <kbd>]</kbd>         | Previous or next in the queue |
+| <kbd>M</kbd>                        | Mute                     |
+| <kbd>L</kbd>                        | Open or close the Lab    |
+
+The [command palette](/docs/guide/search-and-shortcuts/) plays things by name, too. Inside a project, type `play`,
+`queue` or `playnext` and a space, then part of a track's title. While something is playing, `volume` takes a
+percentage, `speed` a speed from 0.5 to 2, `pitch` a number of semitones from −12 to 12, and `seek` a time such as
+`1:30`.
+
+<Aside>
+  Speed and pitch are for listening only. They change what you hear in this browser, never the file.
+</Aside>

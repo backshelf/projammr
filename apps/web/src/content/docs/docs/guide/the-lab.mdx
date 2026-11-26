@@ -1,0 +1,83 @@
+---
+title: The Lab
+description: Change how you hear a track while it plays, with speed and pitch, EQ, compression, reverb, and auditions like mono or a car stereo, and bounce the result.
+sidebar:
+  order: 29
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+The Lab is a set of listening tools that sit between the player and your speakers. Slow a part down to learn it,
+check the mix in mono, hear it roughly the way it would sound on a phone or in a car, or try a little EQ before you
+go back to the session. Nothing in the Lab changes the file: it shapes only what you hear, in your browser, and
+your settings stay in that browser for next time.
+
+## Opening the Lab
+
+Play something, then:
+
+- press <kbd>L</kbd>;
+- choose **Open Lab** from the player's **More controls**; or
+- open the [now-playing sheet](/docs/guide/player-and-queue/#now-playing) and switch to its Lab pane.
+
+The [command palette](/docs/guide/search-and-shortcuts/) has **Open the Lab** while something is playing.
+
+<Screenshot id="player-lab" alt="The Lab open beside the player: time and pitch, the EQ curve over the live spectrum, and the auditions" />
+
+## Time and pitch
+
+**Time & pitch** changes speed and pitch in four ways:
+
+- **Speed only**: faster or slower at the same pitch.
+- **Pitch only**: higher or lower at the same speed.
+- **Linked**: speed and pitch move together, like a record played faster or slower.
+- **Independent**: set each on its own.
+
+Speed goes from half speed to double, and pitch from 12 semitones down to 12 up. **Reset** puts both back.
+
+## The rack
+
+Three effects, each with its own on and off switch:
+
+- **EQ**: eight bands, drawn as a curve over the live spectrum. Drag the curve to shape it. **Bands** lists the
+  active bands with their filter type, frequency, gain and Q, and **Add band** adds another.
+- **Comp**: a compressor with **Threshold**, **Ratio**, **Attack**, **Release** and **Makeup**, and a meter showing
+  how much it is turning the music down.
+- **Verb**: a reverb with four rooms (**Booth**, **Room**, **Hall** and **Club**), how much of it you hear
+  (**Wet**) and how long before it starts (**Pre-delay**).
+
+## Hear it as
+
+Auditions let you check a mix the way an engineer would, without touching it.
+
+| Row     | Choices                                                                                                           |
+| ------- | ----------------------------------------------------------------------------------------------------------------- |
+| Stereo  | **Mono**, **Mid**, **Side**, **L**, **R**, and **Ø R**, which flips the right channel's polarity                  |
+| Monitor | **Crossfeed**; **Dim −20**, which turns everything down 20 dB; and **−14 LUFS**, which plays the version at the streaming level |
+| Bands   | **Low**, **Low-mid**, **Mid**, **High-mid** and **Air**: solo one or more parts of the frequency range             |
+| Device  | **Phone**, **Laptop**, **Earbuds**, **Car**, **Club** and **Radio**: an impression of hearing it on that kind of speaker |
+
+**−14 LUFS** needs the version to have been measured first.
+
+Two auditions have their own keys: press <kbd>H</kbd> then <kbd>M</kbd> for mono, and <kbd>H</kbd> then
+<kbd>D</kbd> for dim. In the command palette, `lab` and a space toggles any audition by name.
+
+### Match EQ
+
+**Match EQ to** picks another version of the same track, and shapes the one you are hearing toward that version's
+tone. Use it to hear whether a new mix has drifted from one you liked. It needs at least one other version that
+has been measured.
+
+## Bounce
+
+**Bounce** records exactly what the Lab is playing, with every setting, and attaches it to the track as a 24-bit
+FLAC file. The version's waveform fills in as it renders, the caption counts through "Rendering" and "Uploading"
+to "Bounced", and the finished file is linked by name.
+
+Anyone in the project can use the Lab. Bouncing adds a file to the track, so it needs an editor, admin or owner.
+
+<Aside type="caution" title="On a phone">
+  While the Lab is shaping the sound, playback stops when the screen locks. The now-playing sheet warns you:
+  "Lab on · playback stops when the screen locks".
+</Aside>

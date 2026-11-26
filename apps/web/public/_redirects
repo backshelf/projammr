@@ -1,0 +1,3 @@
+# Cloudflare Pages redirects: the scanner's page and docs, retired with the scanner.
+/scanner/ /dit/ 301
+/docs/scanner/* /docs/ 301

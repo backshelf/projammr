@@ -1,0 +1,82 @@
+---
+title: Writing lyrics
+description: Count syllables, see your rhyme scheme, split a song into sections, and look up rhymes and synonyms as you write.
+sidebar:
+  order: 38
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Screenshot from "@/components/Screenshot.astro";
+
+Lyrics mode turns a note into a lyric sheet. Every line counts its syllables, lines that rhyme are marked and
+coloured, and a couple of keys bring up rhymes and synonyms without leaving the page. The same tools work in the
+notebook and in a track's **Lyrics** section.
+
+<Screenshot
+  id="lyrics-editor"
+  alt="A lyric in lyrics mode: syllable counts beside each line, rhyme letters, and the rhyming words underlined in matching colours"
+/>
+
+## Turning lyrics mode on
+
+New notes start in lyrics mode. For any other note, tick **Lyrics mode** in the note's **⋮** menu.
+
+In lyrics mode every line is its own line, whether you press <kbd>Enter</kbd> or <kbd>Shift</kbd>
+<kbd>Enter</kbd>, because the counts and rhymes work line by line. Switching a note into lyrics mode splits any
+paragraphs into their lines for the same reason.
+
+## Sections
+
+Type a section name in square brackets on its own line, such as `[Verse 1]`, `[Chorus]` or `[Bridge]`, and it
+becomes a section heading. You can also type <kbd>/</kbd> and choose **Section**.
+
+Each section heading counts its lines and their average number of syllables, such as "8 lines · 7.5 avg", so you
+can check that two verses scan the same way.
+
+## Syllables
+
+Each line shows its syllable count at the right. Projammr counts from a pronouncing dictionary. For a word the
+dictionary does not know, such as a name or a made-up word, it guesses from the spelling and shows the count with a
+`~` in front, such as "~7".
+
+## Rhymes
+
+Within each section, lines whose last words rhyme get the same letter beside their counts (A, B, C and on), so you
+can read the rhyme scheme down the page. A capital letter is a perfect rhyme and a lowercase one a near rhyme. A
+line that rhymes with nothing else in its section gets no letter. The letters start again at A in each section.
+
+The rhyming word at the end of each line is underlined in a colour for its rhyme: a solid line for a perfect rhyme
+and a dashed one for a near rhyme.
+
+## Looking up rhymes and synonyms
+
+While you write, type `\` and then a word to see what rhymes with it, or `~` and a word for other words that mean
+the same.
+
+- **Rhymes** list **Perfect** rhymes first, then **Near** ones, each with its number of syllables.
+- **Synonyms** are grouped by part of speech, each with the meaning it comes from, so you can tell the senses of a
+  word apart.
+
+Pick one and it takes the place of what you typed. So typing `\night` and picking "light" leaves "light" in the
+line.
+
+<Aside>
+  If you use `\` or `~` in your lyrics, change the keys that open these lists in
+  [Settings](/docs/guide/settings-and-profile/#lyrics-suggestions), under **Editor**.
+</Aside>
+
+## Lyrics on a track
+
+A track's page has a **Lyrics** section. With no lyrics yet, it offers:
+
+- **+ Lyrics**, to start writing on the spot. The lyrics are a note in your notebook, linked to the track.
+- **Link a note**, to make one of your existing notes the track's lyrics.
+
+Once linked, the lyrics sit on the track's page with every tool above, and everyone in the project can read them.
+The **⋮** menu there adds **Open in Notebook**. See
+[Turning a note into lyrics](/docs/guide/notebook/#turning-a-note-into-lyrics) for who can change them.
+
+<Screenshot
+  id="track-lyrics"
+  alt="A track's Lyrics section, grouped into sections with rhyme colouring"
+/>
