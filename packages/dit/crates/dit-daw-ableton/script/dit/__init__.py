@@ -41,6 +41,7 @@ def _live_version():
 class DitSurface(ControlSurface):
     def __init__(self, c_instance):
         super(DitSurface, self).__init__(c_instance)
+        self._log_message = getattr(c_instance, "log_message", None) or getattr(self, "log_message", None)
         self._sock = None
         self._connected = False
         self._backoff = protocol.Backoff()
@@ -51,6 +52,18 @@ class DitSurface(ControlSurface):
         self._ticks = 0
         self._alive = True
         self.schedule_message(TICK, self._tick)
+
+    def _song(self):
+        # `ableton.v2` exposes `song` as a property; legacy `_Framework` exposes it as a method.
+        song = self.song
+        return song() if callable(song) else song
+
+    def _log(self, message):
+        if self._log_message is not None:
+            try:
+                self._log_message(message)
+            except Exception:
+                pass
 
     def disconnect(self):
         self._alive = False
@@ -70,7 +83,7 @@ class DitSurface(ControlSurface):
         try:
             self._step()
         except Exception as error:  # a broken tick must not take Live's thread with it
-            self.log_message("dit: %s" % (error,))
+            self._log("dit: %s" % (error,))
             self._drop()
         if self._alive:
             self.schedule_message(TICK, self._tick)
@@ -89,7 +102,7 @@ class DitSurface(ControlSurface):
         if self._sock is None:
             return
         messages = self._reporter.poll(
-            self.song(), int(now * 1000), with_tracks=self._ticks % TRACK_EVERY == 0
+            self._song(), int(now * 1000), with_tracks=self._ticks % TRACK_EVERY == 0
         )
         for message in messages:
             self._outbox.push(protocol.encode(message))

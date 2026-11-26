@@ -620,7 +620,7 @@ time store's `Source` is the same type), `OpenSet { path, signal, at }`, `Script
 
 **Log files** (`openset.rs`; read from a real Live 12.4.6, formats in the module's header). `Log.txt`,
 `Indexer.txt` and `Library.cfg` are in the newest `~/Library/Preferences/Ableton/Live <version>/` (versions compared
-as numbers). The log is read from its last `info: Started: Live …` line (the tail read in doubling chunks from 256 KiB,
+as numbers, with beta suffixes like `13.0b26` sorting before their release). The log is read from its last `info: Started: Live …` line (the tail read in doubling chunks from 256 KiB,
 so a multi-megabyte log costs its last run). Running means no `Live App: GlobalExit(): Start` after that line. The set
 is the last `Loading document "<path>"` (paths are absolute and unescaped) that is not Live's own: a load under
 `<User Library>/Templates` is a new unsaved set (none); any other load under the User Library, or inside an `.app`
@@ -639,7 +639,7 @@ reconnect after 1, 2, 4, then 5 seconds. `Song.file_path` has no listener, so it
 wire in the plan's C5: `hello` (nonce, Live version, script version), then `document`, `tracks`, `song`, `transport`
 and `closed` (from `disconnect`, which Live calls when the set closes), each sent when it changes and all again after a
 reconnect. The app answers `greeting` and nothing else. `protocol.py` and `tracks.py` are pure Python 3.9-compatible;
-their tests are `script/tests/test_protocol.py`, run by `python3 -m unittest discover -s
+their tests are `script/tests/` (`test_protocol.py`, `test_surface.py`), run by `python3 -m unittest discover -s
 crates/dit-daw-ableton/script/tests` and by `cargo test -p dit-daw-ableton` (`tests/script_python.rs`, which skips
 with a message when `python3` is missing). Bump `SCRIPT_VERSION` in `protocol.py` and `VERSION` in `script.rs`
 together; a test checks they agree.
