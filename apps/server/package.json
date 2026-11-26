@@ -33,7 +33,7 @@
     "@workspace/settings": "workspace:*",
     "better-auth": "^1.7.19",
     "cmu-pronouncing-dictionary": "^3.0.0",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.10",
     "drizzle-orm": "1.0.0-rc.4",
     "hono": "^4.13.17",
     "hono-openapi": "^1.5.0",
