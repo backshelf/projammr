@@ -7,6 +7,7 @@ import { rawInstanceRoleEnum } from "../schema/enums.js";
 import { storageUsage } from "../schema/storage-usage.js";
 import { recordAdminAction } from "./admin-audit.js";
 import { revokeUserSessions } from "./auth-sessions.js";
+import { invalidateMembershipCache } from "./authorization.js";
 import { offsetOf, pageResponseSchema } from "./pagination.js";
 
 /**
@@ -310,6 +311,10 @@ export async function changeInstanceUser(
       );
     }
   });
+
+  if (patch.disabled !== undefined) {
+    invalidateMembershipCache(userId);
+  }
 
   return getInstanceUser(userId, database);
 }

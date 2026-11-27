@@ -31,6 +31,17 @@ import { fileResponse } from "./lib/serve-file.js";
 const INLINE_MIME = /^(audio|image)\//;
 
 const CACHE_CONTROL = "private, max-age=3600";
+const VARIANT_CACHE_CONTROL = "private, max-age=31536000, immutable";
+
+/**
+ * Cache-Control header for a static response. Resized image variants are
+ * derived from content-immutable UUID keys at fixed width/format parameters, so
+ * they can be cached immutably for a year; original files keep a shorter
+ * private cache window.
+ */
+export function staticCacheControl(width: VariantWidth | undefined): string {
+  return width !== undefined ? VARIANT_CACHE_CONTROL : CACHE_CONTROL;
+}
 
 /**
  * The width a request is asking for, or `undefined` when it wants the original.
@@ -160,16 +171,18 @@ staticFiles.use("/static/*", async (c) => {
     width ? `-w${width}-${format}` : ""
   }"`;
 
+  const cacheControl = staticCacheControl(width);
+
   // Validated after the gate, so an outsider holding a tag from elsewhere is
   // still refused rather than told the file is unchanged.
   if (matchesEtag(c.req.header("if-none-match"), etag)) {
     c.header("ETag", etag);
-    c.header("Cache-Control", CACHE_CONTROL);
+    c.header("Cache-Control", cacheControl);
     return c.body(null, 304);
   }
 
   const filename = basename(record.name);
-  const headers = { ETag: etag, "Cache-Control": CACHE_CONTROL };
+  const headers = { ETag: etag, "Cache-Control": cacheControl };
 
   if (width) {
     return fileResponse(

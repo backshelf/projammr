@@ -4,10 +4,17 @@ import { addVariantUsage } from "../db/queries/storage-usage.js";
 import {
   readStoredBytes,
   removeStoredFile,
+  storageBackend,
   storeBytes,
   storedFileExists,
   storedFilePath,
+  withLocalStoredFile,
 } from "./storage.js";
+
+// Cap libvips' thread pool and operation cache so image resizing cannot contend
+// with ffmpeg or retain large decoded buffers in memory.
+sharp.concurrency(1);
+sharp.cache({ memory: 32, files: 0, items: 64 });
 
 /**
  * The widths a stored image is offered at, chosen from what the client actually
@@ -92,6 +99,43 @@ export const imageKeyStem = (key: string): string =>
 
 const inFlight = new Map<string, Promise<string>>();
 
+function encodeVariant(
+  input: string | Uint8Array,
+  width: VariantWidth,
+  format: VariantFormat
+): Promise<Buffer> {
+  const resized = sharp(input).resize({
+    width,
+    withoutEnlargement: true,
+  });
+  const encoded =
+    format === "jpeg"
+      ? resized.jpeg({ quality: 82 })
+      : format === "png"
+        ? resized.png()
+        : resized.webp({ quality: 82 });
+  return encoded.toBuffer();
+}
+
+/**
+ * Resizes and encodes one stored image into the requested variant buffer.
+ * On local storage, passes the file path straight to libvips rather than
+ * buffering the whole original image in JS memory; remote backends fall back
+ * to reading the stored bytes.
+ */
+export async function renderVariant(
+  key: string,
+  width: VariantWidth,
+  format: VariantFormat = "webp"
+): Promise<Buffer> {
+  if (storageBackend().kind === "local") {
+    return withLocalStoredFile(key, (localPath) =>
+      encodeVariant(localPath, width, format)
+    );
+  }
+  return encodeVariant(await readStoredBytes(key), width, format);
+}
+
 /**
  * Stored key of the cached variant, generating it through the active storage
  * backend if it is missing.
@@ -116,18 +160,7 @@ export function ensureVariantKey(
   const work = (async () => {
     if (await storedFileExists(targetKey)) return targetKey;
 
-    const original = await readStoredBytes(key);
-    const resized = sharp(original).resize({
-      width,
-      withoutEnlargement: true,
-    });
-    const encoded =
-      format === "jpeg"
-        ? resized.jpeg({ quality: 82 })
-        : format === "png"
-          ? resized.png()
-          : resized.webp({ quality: 82 });
-    const buffer = await encoded.toBuffer();
+    const buffer = await renderVariant(key, width, format);
 
     await storeBytes(targetKey, buffer, VARIANT_CONTENT_TYPES[format]);
 

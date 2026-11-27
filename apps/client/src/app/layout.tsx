@@ -102,6 +102,7 @@ const fontDisplayClean = localFont({
   variable: "--font-display-clean",
   weight: "400",
   display: "swap",
+  preload: false,
 });
 
 const fontSub = localFont({

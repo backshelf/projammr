@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { access, constants } from "node:fs/promises";
+import { setPriority } from "node:os";
 import { promisify } from "node:util";
 import { loadDsp } from "@workspace/dsp/host/bun";
 import type { Dsp } from "@workspace/dsp/runtime";
@@ -245,7 +246,17 @@ export function ffmpegStderr(maxChars = MAX_FFMPEG_STDERR_CHARS) {
 /** The rate and channel count every decode feeds the analysis session at. */
 export const DECODE_SAMPLE_RATE = 48_000;
 export const DECODE_CHANNELS = 2;
-const DECODE_ARGS_HEAD = ["-hide_banner", "-nostats", "-loglevel", "info"];
+/** Cap ffmpeg's thread pool so background media work cannot starve API requests. */
+const FFMPEG_THREAD_ARGS = ["-threads", "1"] as const;
+/** Lower scheduling priority applied to spawned ffmpeg processes on Linux (`nice -n 10`). */
+const FFMPEG_NICE_PRIORITY = 10;
+const DECODE_ARGS_HEAD = [
+  "-hide_banner",
+  "-nostats",
+  "-loglevel",
+  "info",
+  ...FFMPEG_THREAD_ARGS,
+];
 const DECODE_ARGS_TAIL = [
   "-vn",
   "-f",
@@ -327,6 +338,42 @@ const inputGuards = () => [
   String(maxMediaSeconds()),
 ];
 
+/** Builds the argv list for decoding `path` into interleaved stereo f32 PCM. */
+export function buildDecodeArgs(path: string): string[] {
+  return [
+    ...DECODE_ARGS_HEAD,
+    ...inputGuards(),
+    "-i",
+    path,
+    ...DECODE_ARGS_TAIL,
+  ];
+}
+
+/** Builds the argv list for transcoding `input` into `output` under `format`. */
+export function buildConvertArgs(
+  input: string,
+  output: string,
+  format: AudioExtension,
+  kbps = 320
+): string[] {
+  const codec =
+    format === ".mp3" ? ["-c:a", "libmp3lame", "-b:a", `${kbps}k`] : [];
+  return [
+    "-y",
+    "-hide_banner",
+    "-nostats",
+    ...FFMPEG_THREAD_ARGS,
+    ...inputGuards(),
+    "-i",
+    input,
+    ...FFMPEG_THREAD_ARGS,
+    ...codec,
+    "-progress",
+    "pipe:1",
+    output,
+  ];
+}
+
 /**
  * Spawns ffmpeg with `args` under `deadlineMs`, the one place `decodeInto`,
  * `convertAudio` and `probeMediaSeconds` all get a child, an abort that
@@ -355,6 +402,13 @@ function spawnFfmpeg(
     );
   }
   const child = spawn(FFMPEG_PATH, args, { stdio: ["ignore", "pipe", "pipe"] });
+  if (process.platform === "linux" && child.pid !== undefined) {
+    try {
+      setPriority(child.pid, FFMPEG_NICE_PRIORITY);
+    } catch {
+      // Child may have already exited or the container policy may disallow renicing.
+    }
+  }
   const onAbort = () => child.kill("SIGKILL");
   combined.addEventListener("abort", onAbort, { once: true });
 
@@ -410,7 +464,7 @@ export async function probeMediaSeconds(
     exit,
     cleanup,
     signal: deadline,
-  } = spawnFfmpeg([...inputGuards(), "-i", path], {
+  } = spawnFfmpeg([...FFMPEG_THREAD_ARGS, ...inputGuards(), "-i", path], {
     signal,
     deadlineMs: timeoutMs,
   });
@@ -510,7 +564,7 @@ export async function decodeInto(
 
   const decodeDeadlineMs = deadlineMs ?? mediaDeadlineMs(probedSeconds ?? 0);
   const { child, durationMs, exit, cleanup, timedOut } = spawnFfmpeg(
-    [...DECODE_ARGS_HEAD, ...inputGuards(), "-i", path, ...DECODE_ARGS_TAIL],
+    buildDecodeArgs(path),
     {
       signal,
       deadlineMs: decodeDeadlineMs,
@@ -624,25 +678,12 @@ export async function convertAudio(
           maxSeconds,
         });
 
-  const codec =
-    format === ".mp3" ? ["-c:a", "libmp3lame", "-b:a", `${kbps}k`] : [];
   const convertDeadlineMs = deadlineMs ?? mediaDeadlineMs(probedSeconds ?? 0);
   const { child, durationMs, stderrTail, exit, cleanup, timedOut } =
-    spawnFfmpeg(
-      [
-        "-y",
-        "-hide_banner",
-        "-nostats",
-        ...inputGuards(),
-        "-i",
-        input,
-        ...codec,
-        "-progress",
-        "pipe:1",
-        output,
-      ],
-      { signal, deadlineMs: convertDeadlineMs }
-    );
+    spawnFfmpeg(buildConvertArgs(input, output, format, kbps), {
+      signal,
+      deadlineMs: convertDeadlineMs,
+    });
 
   let carry = "";
   let lastReport = 0;
@@ -652,7 +693,7 @@ export async function convertAudio(
       carry += chunk;
       let newlineAt: number;
       while ((newlineAt = carry.indexOf("\n")) !== -1) {
-        const line = carry.slice(0, newlineAt);
+        const line = carry.slice(0, newlineAt).trimEnd();
         carry = carry.slice(newlineAt + 1);
         const match = /^out_time_us=(\d+)$/.exec(line);
         const now = Date.now();

@@ -5,6 +5,7 @@ import { errorFields, log } from "../../lib/log.js";
 import { startPolicyTimer } from "../../lib/policy-timer.js";
 import { authSessions, users } from "../schema/auth.js";
 import { comments } from "../schema/comments.js";
+import { invalidateMembershipCache } from "./authorization.js";
 
 const logger = log("guests");
 
@@ -68,6 +69,8 @@ export async function reapAnonymousUsers(
       )
     )
     .returning({ id: users.id });
+
+  for (const row of deleted) invalidateMembershipCache(row.id);
 
   return deleted.length;
 }

@@ -270,7 +270,9 @@ describe("image variants", () => {
     const res = await app.request(`${staticPath}?w=256`, { headers: auth });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/webp");
-    expect(res.headers.get("cache-control")).toBe("private, max-age=3600");
+    expect(res.headers.get("cache-control")).toBe(
+      "private, max-age=31536000, immutable"
+    );
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("etag")).toMatch(/^"image-\d+-\d+-w256-webp"$/);
 

@@ -123,10 +123,11 @@ startDeviceCodeReaper();
 // interval; the writing process has already applied its own.
 startInstanceSettingsRefresh();
 
-// The pronouncing dictionary and WordNet each cost a few hundred
-// milliseconds and tens of megabytes to index, so they are kept out of
-// module scope — every test file and the typegen script import the app —
-// and warmed here instead, where the first lyrics request will not have to
-// wait for them.
-void loadPronunciation();
-void loadThesaurus();
+// The pronouncing dictionary and WordNet each cost a few hundred milliseconds
+// and tens of megabytes to index, so they load lazily on the first lyrics
+// request by default. Hosts with memory headroom can opt into boot-time
+// warming with `PREWARM_LYRICS_DICTS=1`.
+if (process.env.PREWARM_LYRICS_DICTS === "1") {
+  void loadPronunciation();
+  void loadThesaurus();
+}

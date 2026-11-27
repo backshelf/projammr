@@ -1,0 +1,37 @@
+# Memory and concurrency limits tuned for a 2-vCPU / 4 GB VM (e.g. GCP
+# e2-medium). Layered over docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.e2-medium.yml up -d
+#
+# Or persist it in .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.e2-medium.yml
+#
+# Container limits sum to 3328 MiB, leaving ~768 MiB for the host kernel,
+# Docker daemon, and page cache.
+services:
+  db:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=384MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=96MB
+      - -c
+      - max_connections=35
+    mem_limit: 768m
+
+  api:
+    environment:
+      DB_POOL_MAX: ${DB_POOL_MAX:-8}
+      MEDIA_CONCURRENCY: ${MEDIA_CONCURRENCY:-1}
+    mem_limit: 1600m
+
+  web:
+    mem_limit: 768m
+
+  proxy:
+    mem_limit: 192m

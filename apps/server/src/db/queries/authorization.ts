@@ -88,19 +88,148 @@ export function roleSatisfies(role: MemberRole, minRole: MemberRole) {
   return roleRank[role] >= roleRank[minRole];
 }
 
+/** How long a cached `(userId, projectId)` membership role stays fresh. */
+export const MEMBERSHIP_CACHE_TTL_MS = 15_000;
+
+/** Upper bound on cached membership entries to prevent unbounded memory growth. */
+const MEMBERSHIP_CACHE_MAX_ENTRIES = 4_096;
+
+type MembershipCacheEntry = {
+  userId: string;
+  projectId: number;
+  role: MemberRole | null;
+  expiresAt: number;
+};
+
 /**
- * The caller's role in a project, or null when they are not a member. One
- * query, reused by the route middleware and the static-file handler.
+ * Bounded, short-TTL in-memory cache of `(userId, projectId) -> MemberRole | null`.
+ * Tracks an invalidation generation so an in-flight DB read that started before
+ * a mutation cannot populate a stale entry after invalidation.
+ */
+export function createMembershipCache({
+  ttlMs = MEMBERSHIP_CACHE_TTL_MS,
+  maxEntries = MEMBERSHIP_CACHE_MAX_ENTRIES,
+  now = Date.now,
+}: {
+  ttlMs?: number;
+  maxEntries?: number;
+  now?: () => number;
+} = {}) {
+  const entries = new Map<string, MembershipCacheEntry>();
+  let generation = 0;
+
+  const cacheKey = (userId: string, projectId: number) =>
+    `${userId}:${projectId}`;
+
+  const evictIfNeeded = (currentTime: number) => {
+    if (entries.size < maxEntries) return;
+    for (const [key, entry] of entries) {
+      if (entry.expiresAt <= currentTime) entries.delete(key);
+    }
+    while (entries.size >= maxEntries) {
+      const oldest = entries.keys().next().value;
+      if (oldest === undefined) break;
+      entries.delete(oldest);
+    }
+  };
+
+  return {
+    get(userId: string, projectId: number): MemberRole | null | undefined {
+      const key = cacheKey(userId, projectId);
+      const entry = entries.get(key);
+      if (!entry) return undefined;
+      if (entry.expiresAt <= now()) {
+        entries.delete(key);
+        return undefined;
+      }
+      return entry.role;
+    },
+
+    set(userId: string, projectId: number, role: MemberRole | null): void {
+      const currentTime = now();
+      const key = cacheKey(userId, projectId);
+      if (!entries.has(key)) evictIfNeeded(currentTime);
+      entries.set(key, {
+        userId,
+        projectId,
+        role,
+        expiresAt: currentTime + ttlMs,
+      });
+    },
+
+    async getOrLoad(
+      userId: string,
+      projectId: number,
+      load: () => Promise<MemberRole | null>
+    ): Promise<MemberRole | null> {
+      const cached = this.get(userId, projectId);
+      if (cached !== undefined) return cached;
+
+      const startGeneration = generation;
+      const role = await load();
+      if (generation === startGeneration) {
+        this.set(userId, projectId, role);
+      }
+      return role;
+    },
+
+    invalidate(userId?: string, projectId?: number): void {
+      generation++;
+      if (userId !== undefined && projectId !== undefined) {
+        entries.delete(cacheKey(userId, projectId));
+        return;
+      }
+      if (userId === undefined && projectId === undefined) {
+        entries.clear();
+        return;
+      }
+      for (const [key, entry] of entries) {
+        if (
+          (userId !== undefined && entry.userId === userId) ||
+          (projectId !== undefined && entry.projectId === projectId)
+        ) {
+          entries.delete(key);
+        }
+      }
+    },
+
+    get size(): number {
+      return entries.size;
+    },
+  };
+}
+
+const membershipCache = createMembershipCache();
+
+/**
+ * Drops cached membership roles for a single `(userId, projectId)` pair, all
+ * projects of a user, all members of a project, or the entire cache when called
+ * with no arguments. Call after any mutation that alters project membership,
+ * project existence, or account status.
+ */
+export function invalidateMembershipCache(
+  userId?: string,
+  projectId?: number
+): void {
+  membershipCache.invalidate(userId, projectId);
+}
+
+/**
+ * The caller's role in a project, or null when they are not a member. Cached
+ * briefly in memory (invalidated on every membership/project/account mutation)
+ * and reused by the route middleware, MCP gates, and the static-file handler.
  */
 export async function memberRole(
   userId: string,
   projectId: number
 ): Promise<MemberRole | null> {
-  const [row] = await db
-    .select({ role: members.role })
-    .from(members)
-    .where(and(eq(members.userId, userId), eq(members.projectId, projectId)));
-  return row?.role ?? null;
+  return membershipCache.getOrLoad(userId, projectId, async () => {
+    const [row] = await db
+      .select({ role: members.role })
+      .from(members)
+      .where(and(eq(members.userId, userId), eq(members.projectId, projectId)));
+    return row?.role ?? null;
+  });
 }
 
 export async function isMemberAtLeast(
@@ -287,50 +416,55 @@ export async function changeMembership(
   targetUserId: string,
   change: MemberChange
 ) {
-  return db.transaction(async (tx) => {
-    const rows = await tx
-      .select({ userId: members.userId, role: members.role })
-      .from(members)
-      .where(eq(members.projectId, projectId))
-      .for("update");
+  return db
+    .transaction(async (tx) => {
+      const rows = await tx
+        .select({ userId: members.userId, role: members.role })
+        .from(members)
+        .where(eq(members.projectId, projectId))
+        .for("update");
 
-    const actor = rows.find((row) => row.userId === actorId);
-    const target = rows.find((row) => row.userId === targetUserId);
-    if (!actor) throw new HTTPException(403);
-    if (!target) throw new HTTPException(404);
+      const actor = rows.find((row) => row.userId === actorId);
+      const target = rows.find((row) => row.userId === targetUserId);
+      if (!actor) throw new HTTPException(403);
+      if (!target) throw new HTTPException(404);
 
-    if (roleRank[actor.role] < roleRank[target.role]) {
-      throw new HTTPException(403, {
-        message: "Cannot change a member who outranks you",
-      });
-    }
-    if (change.kind === "role") assertMayGrant(actor.role, change.role);
+      if (roleRank[actor.role] < roleRank[target.role]) {
+        throw new HTTPException(403, {
+          message: "Cannot change a member who outranks you",
+        });
+      }
+      if (change.kind === "role") assertMayGrant(actor.role, change.role);
 
-    const owners = rows.filter((row) => row.role === "owner").length;
-    const losesAnOwner = target.role === "owner";
-    if (losesAnOwner && owners <= 1) {
-      throw new HTTPException(409, {
-        message: "A project must keep at least one owner",
-      });
-    }
+      const owners = rows.filter((row) => row.role === "owner").length;
+      const losesAnOwner = target.role === "owner";
+      if (losesAnOwner && owners <= 1) {
+        throw new HTTPException(409, {
+          message: "A project must keep at least one owner",
+        });
+      }
 
-    const where = and(
-      eq(members.projectId, projectId),
-      eq(members.userId, targetUserId)
-    );
+      const where = and(
+        eq(members.projectId, projectId),
+        eq(members.userId, targetUserId)
+      );
 
-    if (change.kind === "remove") {
-      const [removed] = await tx.delete(members).where(where).returning();
-      return removed!;
-    }
+      if (change.kind === "remove") {
+        const [removed] = await tx.delete(members).where(where).returning();
+        return removed!;
+      }
 
-    const [updated] = await tx
-      .update(members)
-      .set({ role: change.role })
-      .where(where)
-      .returning();
-    return updated!;
-  });
+      const [updated] = await tx
+        .update(members)
+        .set({ role: change.role })
+        .where(where)
+        .returning();
+      return updated!;
+    })
+    .then((result) => {
+      invalidateMembershipCache(targetUserId, projectId);
+      return result;
+    });
 }
 
 /**
@@ -348,33 +482,39 @@ export async function transferOwnership(
     throw new HTTPException(400, { message: "Already the owner" });
   }
 
-  return db.transaction(async (tx) => {
-    const rows = await tx
-      .select({ userId: members.userId, role: members.role })
-      .from(members)
-      .where(eq(members.projectId, projectId))
-      .for("update");
+  return db
+    .transaction(async (tx) => {
+      const rows = await tx
+        .select({ userId: members.userId, role: members.role })
+        .from(members)
+        .where(eq(members.projectId, projectId))
+        .for("update");
 
-    const from = rows.find((row) => row.userId === fromUserId);
-    if (from?.role !== "owner") throw new HTTPException(403);
-    if (!rows.some((row) => row.userId === toUserId)) {
-      throw new HTTPException(404, { message: "Not a member" });
-    }
+      const from = rows.find((row) => row.userId === fromUserId);
+      if (from?.role !== "owner") throw new HTTPException(403);
+      if (!rows.some((row) => row.userId === toUserId)) {
+        throw new HTTPException(404, { message: "Not a member" });
+      }
 
-    await tx
-      .update(members)
-      .set({ role: "owner" })
-      .where(
-        and(eq(members.projectId, projectId), eq(members.userId, toUserId))
-      );
+      await tx
+        .update(members)
+        .set({ role: "owner" })
+        .where(
+          and(eq(members.projectId, projectId), eq(members.userId, toUserId))
+        );
 
-    const [previous] = await tx
-      .update(members)
-      .set({ role: "admin" })
-      .where(
-        and(eq(members.projectId, projectId), eq(members.userId, fromUserId))
-      )
-      .returning();
-    return previous!;
-  });
+      const [previous] = await tx
+        .update(members)
+        .set({ role: "admin" })
+        .where(
+          and(eq(members.projectId, projectId), eq(members.userId, fromUserId))
+        )
+        .returning();
+      return previous!;
+    })
+    .then((previous) => {
+      invalidateMembershipCache(fromUserId, projectId);
+      invalidateMembershipCache(toUserId, projectId);
+      return previous;
+    });
 }

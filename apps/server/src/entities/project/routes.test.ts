@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { waitFor } from "@workspace/test/wait-for";
 import { app } from "../../app.js";
 import { db } from "../../db/index.js";
+import { invalidateMembershipCache } from "../../db/queries/authorization.js";
 import { getJob } from "../../db/queries/jobs.js";
 import { withProjectPolicyForTest } from "../../db/queries/project-policy.js";
 import { MAX_SEARCH_LIMIT } from "../../db/queries/search.js";
@@ -752,11 +753,13 @@ describe("membership ranks", () => {
           set: { role },
         });
     }
+    invalidateMembershipCache(undefined, rosterProjectId);
 
     try {
       return await run(rosterProjectId);
     } finally {
       await db.delete(projects).where(eq(projects.id, rosterProjectId));
+      invalidateMembershipCache(undefined, rosterProjectId);
     }
   }
 

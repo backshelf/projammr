@@ -8,6 +8,7 @@ import { removeStoredFile } from "../../lib/storage.js";
 import { db, type Tx } from "../../db/index.js";
 import { artworkForProject, withArtwork } from "../../db/queries/artwork.js";
 import type { StaticFileKind } from "../../db/queries/assets.js";
+import { invalidateMembershipCache } from "../../db/queries/authorization.js";
 import { seedPriorityLevels } from "../../db/queries/priority-levels.js";
 import { seedRelationTypes } from "../../db/queries/track-relation-types.js";
 import { projectPolicy } from "../../db/queries/project-policy.js";
@@ -118,24 +119,29 @@ export async function createProject(
   project: NewProject,
   ownerId: string
 ): Promise<Project> {
-  return db.transaction(async (tx) => {
-    const [result] = await tx
-      .insert(projects)
-      .values(project)
-      .onConflictDoNothing()
-      .returning();
+  return db
+    .transaction(async (tx) => {
+      const [result] = await tx
+        .insert(projects)
+        .values(project)
+        .onConflictDoNothing()
+        .returning();
 
-    if (!result)
-      throw new HTTPException(400, { message: "Project already exists" });
+      if (!result)
+        throw new HTTPException(400, { message: "Project already exists" });
 
-    await tx
-      .insert(members)
-      .values({ userId: ownerId, projectId: result.id, role: "owner" });
-    await seedPriorityLevels(tx, result.id);
-    await seedRelationTypes(tx, result.id);
+      await tx
+        .insert(members)
+        .values({ userId: ownerId, projectId: result.id, role: "owner" });
+      await seedPriorityLevels(tx, result.id);
+      await seedRelationTypes(tx, result.id);
 
-    return result;
-  });
+      return result;
+    })
+    .then((result) => {
+      invalidateMembershipCache(ownerId, result.id);
+      return result;
+    });
 }
 
 /**
@@ -198,6 +204,8 @@ export async function deleteProject(projectId: number): Promise<Project> {
   );
 
   if (!result) throw new HTTPException(404, { message: "Project not found" });
+
+  invalidateMembershipCache(undefined, projectId);
 
   for (const { kind, assetPath } of stored) {
     await removeStoredFile(assetPath);

@@ -1,14 +1,22 @@
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import {
   ensureVariant,
   isVariantWidth,
   removeVariants,
+  renderVariant,
   variantPath,
   VARIANT_WIDTHS,
 } from "./images.js";
-import { storedFilePath } from "./storage.js";
+import {
+  LocalStorageBackend,
+  setStorageBackend,
+  type StorageBackend,
+  storedFilePath,
+} from "./storage.js";
 
 /**
  * The functions under test take a stored key, so the fixtures are named as
@@ -23,6 +31,112 @@ describe("isVariantWidth", () => {
       expect(isVariantWidth(width)).toBe(true);
     for (const width of [0, 63, 65, 300, 2048, -64, Number.NaN]) {
       expect(isVariantWidth(width)).toBe(false);
+    }
+  });
+});
+
+describe("sharp resource caps and storage reading", () => {
+  it("caps sharp concurrency and libvips cache at module init", () => {
+    expect(sharp.concurrency()).toBe(1);
+    const cache = sharp.cache();
+    expect(cache.memory.max).toBe(32);
+    expect(cache.files.max).toBe(0);
+    expect(cache.items.max).toBe(64);
+  });
+
+  it("reads local storage straight from disk without calling readBytes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "images-local-test-"));
+    const key = `images/${crypto.randomUUID()}.png`;
+    const sample = await sharp({
+      create: {
+        width: 400,
+        height: 200,
+        channels: 3,
+        background: { r: 10, g: 120, b: 220 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const backend = new LocalStorageBackend(root);
+    await backend.putBytes(key, sample);
+
+    let withLocalCalls = 0;
+    const spyBackend: StorageBackend = {
+      kind: "local",
+      exists: (k) => backend.exists(k),
+      stat: (k) => backend.stat(k),
+      readBytes: () => {
+        throw new Error("readBytes should not be called for local storage");
+      },
+      readStream: (k, r) => backend.readStream(k, r),
+      putBytes: (k, b) => backend.putBytes(k, b),
+      putFromFile: (k, p) => backend.putFromFile(k, p),
+      putObjects: (f) => backend.putObjects(f),
+      remove: (k) => backend.remove(k),
+      listEntries: () => backend.listEntries(),
+      withLocalFile: (k, fn) => {
+        withLocalCalls++;
+        return backend.withLocalFile(k, fn);
+      },
+    };
+
+    setStorageBackend(spyBackend);
+    try {
+      const rendered = await renderVariant(key, 64, "webp");
+      expect(withLocalCalls).toBe(1);
+      const meta = await sharp(rendered).metadata();
+      expect(meta.format).toBe("webp");
+      expect(meta.width).toBe(64);
+    } finally {
+      setStorageBackend(null);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to readBytes for non-local backends", async () => {
+    const sample = await sharp({
+      create: {
+        width: 400,
+        height: 200,
+        channels: 3,
+        background: { r: 220, g: 100, b: 30 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    let readBytesCalls = 0;
+    const remoteBackend: StorageBackend = {
+      kind: "s3",
+      exists: async () => true,
+      stat: async () => null,
+      readBytes: async () => {
+        readBytesCalls++;
+        return new Uint8Array(sample);
+      },
+      readStream: () => {
+        throw new Error("unused");
+      },
+      putBytes: async () => {},
+      putFromFile: async () => {},
+      putObjects: async () => {},
+      remove: async () => true,
+      listEntries: async () => [],
+      withLocalFile: () => {
+        throw new Error("withLocalFile should not be called for s3 variants");
+      },
+    };
+
+    setStorageBackend(remoteBackend);
+    try {
+      const rendered = await renderVariant("images/remote.png", 64, "jpeg");
+      expect(readBytesCalls).toBe(1);
+      const meta = await sharp(rendered).metadata();
+      expect(meta.format).toBe("jpeg");
+      expect(meta.width).toBe(64);
+    } finally {
+      setStorageBackend(null);
     }
   });
 });

@@ -20,6 +20,7 @@ import { instanceValues } from "./settings.js";
 import {
   type AssignableRole,
   assertMayGrant,
+  invalidateMembershipCache,
   type MemberRole,
   type ProjectResolution,
   roleSatisfies,
@@ -258,45 +259,53 @@ export async function acceptInvite(
   token: string,
   user: { id: string; email: string }
 ) {
-  return db.transaction(async (tx) => {
-    const [invite] = await tx
-      .select()
-      .from(invites)
-      .where(eq(invites.token, token))
-      .for("update");
+  return db
+    .transaction(async (tx) => {
+      const [invite] = await tx
+        .select()
+        .from(invites)
+        .where(eq(invites.token, token))
+        .for("update");
 
-    if (!invite) throw new HTTPException(404, { message: "Invite not found" });
-    if (invite.acceptedAt) {
-      throw new HTTPException(409, { message: "Invite already accepted" });
-    }
-    if (invite.expiresAt.getTime() < Date.now()) {
-      throw new HTTPException(410, { message: "Invite has expired" });
-    }
-    if (invite.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) {
-      throw new ApiError(403, {
-        code: "invite_email_mismatch",
-        message: "This invite was sent to a different email address",
-      });
-    }
+      if (!invite)
+        throw new HTTPException(404, { message: "Invite not found" });
+      if (invite.acceptedAt) {
+        throw new HTTPException(409, { message: "Invite already accepted" });
+      }
+      if (invite.expiresAt.getTime() < Date.now()) {
+        throw new HTTPException(410, { message: "Invite has expired" });
+      }
+      if (
+        invite.email.trim().toLowerCase() !== user.email.trim().toLowerCase()
+      ) {
+        throw new ApiError(403, {
+          code: "invite_email_mismatch",
+          message: "This invite was sent to a different email address",
+        });
+      }
 
-    await tx
-      .insert(members)
-      .values({
-        projectId: invite.projectId,
-        userId: user.id,
-        role: invite.role,
-      })
-      .onConflictDoUpdate({
-        target: [members.userId, members.projectId],
-        set: { role: invite.role },
-      });
+      await tx
+        .insert(members)
+        .values({
+          projectId: invite.projectId,
+          userId: user.id,
+          role: invite.role,
+        })
+        .onConflictDoUpdate({
+          target: [members.userId, members.projectId],
+          set: { role: invite.role },
+        });
 
-    const [accepted] = await tx
-      .update(invites)
-      .set({ acceptedAt: new Date() })
-      .where(eq(invites.id, invite.id))
-      .returning();
+      const [accepted] = await tx
+        .update(invites)
+        .set({ acceptedAt: new Date() })
+        .where(eq(invites.id, invite.id))
+        .returning();
 
-    return accepted!;
-  });
+      return accepted!;
+    })
+    .then((accepted) => {
+      invalidateMembershipCache(user.id, accepted.projectId);
+      return accepted;
+    });
 }

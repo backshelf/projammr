@@ -17,6 +17,8 @@ import { makeStallingFifo, writeTone } from "../test/media.js";
 import { mediaQueue } from "./jobs.js";
 import {
   AUDIO_SIGNATURE_BYTES,
+  buildConvertArgs,
+  buildDecodeArgs,
   convertAudio,
   decodeInto,
   DECODE_CHANNELS,
@@ -455,5 +457,39 @@ describe("convertAudio", () => {
         deadlineMs: 25,
       })
     ).rejects.toBeInstanceOf(MediaTimeoutError);
+  });
+});
+
+describe("ffmpeg thread capping", () => {
+  const threadIndices = (args: string[]) =>
+    args.reduce<number[]>((indices, arg, index) => {
+      if (arg === "-threads" && args[index + 1] === "1") indices.push(index);
+      return indices;
+    }, []);
+
+  it("passes -threads 1 before -i when decoding", () => {
+    const args = buildDecodeArgs("/tmp/input.wav");
+    const inputAt = args.indexOf("-i");
+    expect(inputAt).toBeGreaterThan(0);
+    expect(threadIndices(args).some((i) => i < inputAt)).toBe(true);
+  });
+
+  it("passes -threads 1 for both decoder and encoder when converting", () => {
+    const mp3Args = buildConvertArgs(
+      "/tmp/in.wav",
+      "/tmp/out.mp3",
+      ".mp3",
+      192
+    );
+    const mp3InputAt = mp3Args.indexOf("-i");
+    const mp3Threads = threadIndices(mp3Args);
+    expect(mp3Threads.some((i) => i < mp3InputAt)).toBe(true);
+    expect(mp3Threads.some((i) => i > mp3InputAt)).toBe(true);
+
+    const wavArgs = buildConvertArgs("/tmp/in.flac", "/tmp/out.wav", ".wav");
+    const wavInputAt = wavArgs.indexOf("-i");
+    const wavThreads = threadIndices(wavArgs);
+    expect(wavThreads.some((i) => i < wavInputAt)).toBe(true);
+    expect(wavThreads.some((i) => i > wavInputAt)).toBe(true);
   });
 });

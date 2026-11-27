@@ -7,6 +7,7 @@ import { notes } from "../schema/notes.js";
 import { members, projects } from "../schema/projects.js";
 import { tracks } from "../schema/tracks.js";
 import { seedScale } from "../../test/priority.js";
+import { invalidateMembershipCache } from "./authorization.js";
 import { moveTrackToProject } from "./move.js";
 import { withDefaultLevel } from "./priority-levels.js";
 import {
@@ -58,11 +59,14 @@ async function seedProject(label: string): Promise<number> {
   return row!.id;
 }
 
-const seedMember = (
+const seedMember = async (
   project: number,
   userId: string,
   role: "viewer" | "editor" | "admin" | "owner"
-) => db.insert(members).values({ projectId: project, userId, role });
+) => {
+  await db.insert(members).values({ projectId: project, userId, role });
+  invalidateMembershipCache(userId, project);
+};
 
 async function seedTrack(project = projectId): Promise<number> {
   const [row] = await db
@@ -211,6 +215,7 @@ describe("access", () => {
     await db
       .delete(members)
       .where(and(eq(members.userId, author), eq(members.projectId, projectId)));
+    invalidateMembershipCache(author, projectId);
 
     const read = await getNote(note.id, author);
     expect(read.can).toEqual({ write: true, unlink: true, delete: true });

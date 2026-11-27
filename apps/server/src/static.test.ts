@@ -345,6 +345,34 @@ describe("static files", () => {
     expect(stale.status).toBe(200);
   });
 
+  it("serves resized image variants with an immutable 1-year Cache-Control on 200 and 304", async () => {
+    requireProject();
+    const image = await uploadImage("variant-cache.jpeg");
+    const staticPath = servedAt(image.assetPath);
+    const auth = { Cookie: owner.cookie };
+
+    const original = await app.request(staticPath, { headers: auth });
+    expect(original.status).toBe(200);
+    expect(original.headers.get("cache-control")).toBe("private, max-age=3600");
+
+    const variant = await app.request(`${staticPath}?w=64`, { headers: auth });
+    expect(variant.status).toBe(200);
+    expect(variant.headers.get("cache-control")).toBe(
+      "private, max-age=31536000, immutable"
+    );
+    const etag = variant.headers.get("etag");
+    expect(etag).toMatch(/^"image-\d+-\d+-w64-webp"$/);
+
+    const cached = await app.request(`${staticPath}?w=64`, {
+      headers: { ...auth, "If-None-Match": etag! },
+    });
+    expect(cached.status).toBe(304);
+    expect(cached.headers.get("etag")).toBe(etag);
+    expect(cached.headers.get("cache-control")).toBe(
+      "private, max-age=31536000, immutable"
+    );
+  });
+
   it("refuses an outsider holding a valid If-None-Match", async () => {
     requireProject();
     const asset = await uploadAsset("not-yours.jpeg");

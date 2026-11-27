@@ -5,6 +5,7 @@
   "Web": {
     "${TS_CERT_DOMAIN}:443": {
       "Handlers": {
+        "/.well-known": { "Proxy": "http://api:8080/.well-known" },
         "/api": { "Proxy": "http://api:8080/api" },
         "/media": { "Proxy": "http://api:8080/static" },
         "/": { "Proxy": "http://web:3000" }

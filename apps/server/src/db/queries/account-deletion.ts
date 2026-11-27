@@ -8,6 +8,7 @@ import { members, projects } from "../schema/projects.js";
 import { notes } from "../schema/notes.js";
 import { ENTITIES } from "../../entities/index.js";
 import { recordAdminAction } from "./admin-audit.js";
+import { invalidateMembershipCache } from "./authorization.js";
 import { removeUserImages } from "./images.js";
 import { lockAdminsAndTarget } from "./instance-users.js";
 
@@ -175,4 +176,6 @@ export async function deleteAccount(
       .delete(notes)
       .where(and(eq(notes.authorId, userId), isNull(notes.trackId)));
   });
+
+  invalidateMembershipCache(userId);
 }

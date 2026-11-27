@@ -47,6 +47,13 @@ http://{$PUBLIC_HOST} {
 
 https://{$PUBLIC_HOST} {
 	tls internal
+	encode zstd gzip
+
+	# RFC 9728 / 8414 OAuth and MCP discovery endpoints live on the API, so
+	# route them straight there instead of bouncing through Next.
+	handle /.well-known/* {
+		reverse_proxy api:8080
+	}
 
 	# Same destination Next's own /api rewrite forwards to, so a browser
 	# request through the web service and a bearer-token request straight
