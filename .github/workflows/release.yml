@@ -6,8 +6,8 @@ name: Release
 # against them, and the GitHub release stays a draft until then.
 #
 #   verify ─┬─ ci ─────┐
-#           └─ e2e ────┴─ images ─ smoke ─┐
-#                       └─ app ─ draft ───┴─ publish
+#           └─ e2e ────┴─ images-arch ─ images ─ smoke ─┐
+#                       └─ app ─ draft ─────────────────┴─ publish
 on:
   push:
     tags: ["v*"]
@@ -53,29 +53,40 @@ jobs:
     uses: ./.github/workflows/e2e.yml
     secrets: inherit
 
-  # `x.y.z` only: `x.y` and `latest` move in `publish`, after the smoke, so a
-  # failed release never leaves `latest` on an image that did not pass it.
-  images:
+  # Native per-architecture builds (amd64 on ubuntu-latest, arm64 on
+  # ubuntu-24.04-arm), pushed by digest and merged into `x.y.z` manifests by
+  # `images` below.
+  images-arch:
     needs: [verify, ci, e2e]
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
-      id-token: write
-      attestations: write
     strategy:
       fail-fast: true
       matrix:
-        image: [api, web]
+        include:
+          - image: api
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - image: api
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+          - image: web
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - image: web
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
     env:
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
       - uses: actions/checkout@v7
-      # The runner is amd64; the arm64 half of each image builds under emulation.
-      - uses: docker/setup-qemu-action@v4
-        with:
-          platforms: arm64
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -91,24 +102,94 @@ jobs:
         with:
           context: .
           target: ${{ matrix.image }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/backshelf/projammr-${{ matrix.image }}:${{ env.VERSION }}
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/backshelf/projammr-${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
           labels: org.opencontainers.image.version=${{ env.VERSION }}
           build-args: |
             SOURCE_REVISION=${{ github.sha }}
             BUILD_DATE=${{ steps.date.outputs.now }}
             ${{ matrix.image == 'api' && format('APP_VERSION={0}', env.VERSION) || '' }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
           provenance: mode=max
           sbom: true
+      - name: Export image digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          case "$DIGEST" in
+            sha256:[0-9a-f]*) ;;
+            *) echo "::error::unexpected image digest: '$DIGEST'"; exit 1 ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/digests"
+          printf '%s\n' "$DIGEST" > "$RUNNER_TEMP/digests/${ARCH}.digest"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/${{ matrix.arch }}.digest
+          if-no-files-found: error
+          retention-days: 1
+
+  # Merges per-arch digests into `x.y.z` multi-arch manifests: `x.y` and
+  # `latest` move in `publish`, after the smoke, so a failed release never
+  # leaves `latest` on an image that did not pass it.
+  images:
+    needs: [verify, images-arch]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: true
+      matrix:
+        image: [api, web]
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+      IMAGE: ghcr.io/backshelf/projammr-${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: digest-${{ matrix.image }}-amd64
+          path: ${{ runner.temp }}/digests
+      - uses: actions/download-artifact@v8
+        with:
+          name: digest-${{ matrix.image }}-arm64
+          path: ${{ runner.temp }}/digests
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: merge
+        name: Create multi-arch manifest
+        run: |
+          set -euo pipefail
+          AMD64_DIGEST=$(tr -d '[:space:]' < "$RUNNER_TEMP/digests/amd64.digest")
+          ARM64_DIGEST=$(tr -d '[:space:]' < "$RUNNER_TEMP/digests/arm64.digest")
+          test -n "$AMD64_DIGEST" && test -n "$ARM64_DIGEST" || { echo "::error::missing per-arch image digest"; exit 1; }
+          docker buildx imagetools create \
+            -t "${IMAGE}:${VERSION}" \
+            "${IMAGE}@${AMD64_DIGEST}" \
+            "${IMAGE}@${ARM64_DIGEST}"
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest.Digest}}' | jq -r .)
+          case "$DIGEST" in
+            sha256:[0-9a-f]*) ;;
+            *) echo "::error::unexpected merged manifest digest: '$DIGEST'"; exit 1 ;;
+          esac
+          echo "Merged ${IMAGE}:${VERSION} -> ${DIGEST}"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
       # Attestations need a public repository on this plan.
       - if: ${{ vars.PUBLIC_REPO == 'true' }}
         uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/backshelf/projammr-${{ matrix.image }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ steps.merge.outputs.digest }}
           push-to-registry: true
 
   # What a user runs: the pushed images through the shipped compose files, then

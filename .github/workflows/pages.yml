@@ -1,0 +1,56 @@
+name: Pages
+
+# Builds the static Astro + Starlight site (`apps/web`) and deploys `apps/web/dist`
+# to GitHub Pages (`https://backshelf.github.io/projammr`). Needs no server,
+# database, secrets or Rust toolchain: the OpenAPI specs and screenshots are
+# committed.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "apps/web/**"
+      - "packages/ui/src/lib/site.ts"
+      - ".env.example"
+      - "docker-compose.yml"
+      - "docker-compose.tailscale.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - uses: actions/configure-pages@v5
+      - run: bun run --cwd apps/web build
+      - run: bun run --cwd apps/web test
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

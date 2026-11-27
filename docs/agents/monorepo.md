@@ -378,8 +378,8 @@ harness).
 declares `workflow_call`; the caller passes `secrets: inherit` or the `CI_*` secrets arrive empty). A pull request
 gets one job, `test-build`: the build, then every suite. The static jobs (`lint`, `format`, `typecheck`, `audit`)
 carry `if: github.event_name != 'pull_request'`, so they run for a release only; before that they are local gates
-(`.claude/scripts/run-gates.sh`). Actions minutes are the constraint: nothing runs on a push to `master`, and the
-browser suite, the app package and the upgrade check stay off pull requests. The images
+(`.claude/scripts/run-gates.sh`). Actions minutes are the constraint: `ci.yml` does not run on a push to `master` (only `pages.yml` runs on pushes
+that touch site/docs inputs), and the browser suite, the app package and the upgrade check stay off pull requests. The images
 are not built there; a Dockerfile or compose change is checked locally with
 `docker buildx bake -f docker-compose.yml -f docker-compose.build.yml api web` (the compose files need
 `BETTER_AUTH_SECRET` and `NOTES_MASTER_KEY` set to interpolate). All but `audit` share one composite action,
@@ -478,21 +478,34 @@ there is no Apple credential.
 `.github/workflows/release.yml` runs on a pushed `v*` tag, in one run, with `concurrency: release-<ref>` and no
 cancelling. `verify` runs `packages/release/src/verify-tag.ts` (the tag is `v<root version>`, the changelog has a
 non-empty `## [version] - date` section; the section is the release body and the update feed's notes; `-rc.N` is a
-pre-release); it then calls `ci.yml` and `e2e.yml`. After both, `images` builds `api` and `web` for `linux/amd64` and
-`linux/arm64` (QEMU for the arm64 half) with `docker/build-push-action`, pushes only `x.y.z` to
-`ghcr.io/backshelf/projammr-{api,web}` with buildx provenance (`mode=max`) and an SBOM, `APP_VERSION` on the api
-target (what `/api/health` reports) and the revision, date and version labels; `app` calls `dit-app-package.yml` with
-`release: true`. `smoke` pulls the pushed images through `apps/e2e/src/stack.ts up` (no `--build`) and runs
-`apps/e2e/src/smoke.ts` with `E2E_EXPECT_VERSION`, which asserts `/api/health` reports the tag's version. `draft`
-downloads the app assets, writes `latest.json` (version, notes, `pub_date`, and a `darwin-aarch64` entry with the
-`.sig` text and the asset's URL) and `SHA256SUMS`, and creates the GitHub release as a draft (a rerun uploads over an
-existing release). `publish` runs last, after the smoke: for a stable version it moves `x.y` and `latest` onto the
-`x.y.z` images (`docker buildx imagetools create`), then un-drafts the release (`--latest`, or `--prerelease` for an
-`-rc`, which keeps its images at `x.y.z-rc.N` alone). A failing job leaves a draft and no `latest`. With the repository
-variable `PUBLIC_REPO` set to `true`, `actions/attest-build-provenance` attests both images and the three app assets;
-it needs a public repository on this plan. The updater feed (`releases/latest/download/latest.json`), the dmg link and
-anonymous GHCR pulls (a one-off package visibility change in the GHCR settings after the first push) also need the
-repository public, so the first tag is cut after that.
+pre-release); it then calls `ci.yml` and `e2e.yml`. After both, `images-arch` builds `api` and `web` natively on
+`ubuntu-latest` (`linux/amd64`) and `ubuntu-24.04-arm` (`linux/arm64`) — no QEMU emulation — with
+`docker/build-push-action`, pushing each single-arch image by digest (`push-by-digest=true,name-canonical=true,push=true`)
+to `ghcr.io/backshelf/projammr-{api,web}` under per-arch GHA cache scopes (`{api,web}-{amd64,arm64}`), with buildx
+provenance (`mode=max`), an SBOM, `APP_VERSION` on the api target (what `/api/health` reports), and the revision, date
+and version labels, uploading each digest as `digest-{api,web}-{amd64,arm64}`. `images` downloads both arch digests for
+each image, merges them into the multi-arch `x.y.z` manifest list with `docker buildx imagetools create`, inspects the
+merged manifest digest, and attests it when `PUBLIC_REPO` is `true`; `app` runs in parallel with the image jobs and
+calls `dit-app-package.yml` with `release: true`. `smoke` pulls the pushed images through `apps/e2e/src/stack.ts up`
+(no `--build`) and runs `apps/e2e/src/smoke.ts` with `E2E_EXPECT_VERSION`, which asserts `/api/health` reports the
+tag's version. `draft` downloads the app assets, writes `latest.json` (version, notes, `pub_date`, and a
+`darwin-aarch64` entry with the `.sig` text and the asset's URL) and `SHA256SUMS`, and creates the GitHub release as a
+draft (a rerun uploads over an existing release). `publish` runs last, after the smoke: for a stable version it moves
+`x.y` and `latest` onto the `x.y.z` images (`docker buildx imagetools create`), then un-drafts the release (`--latest`,
+or `--prerelease` for an `-rc`, which keeps its images at `x.y.z-rc.N` alone). A failing job leaves a draft and no
+`latest`. With the repository variable `PUBLIC_REPO` set to `true`, `actions/attest-build-provenance` attests both
+merged images and the three app assets; it needs a public repository on this plan. The updater feed
+(`releases/latest/download/latest.json`), the dmg link and anonymous GHCR pulls (a one-off package visibility change in
+the GHCR settings after the first push) also need the repository public, so the first tag is cut after that.
+
+`.github/workflows/pages.yml` builds and deploys the static Astro + Starlight site (`apps/web`) to GitHub Pages
+(`https://backshelf.github.io/projammr`). It triggers on `push` to `master` when `apps/web/**`,
+`packages/ui/src/lib/site.ts`, `.env.example`, `docker-compose.yml`, or `docker-compose.tailscale.yml` change, plus
+`workflow_dispatch`, with `concurrency: pages` (`cancel-in-progress: false`) and `permissions: contents: read, pages: write,
+id-token: write`. `build` installs dependencies with Bun (reusing `~/.bun/install/cache`), configures Pages
+(`actions/configure-pages`), runs `bun run --cwd apps/web build` and `bun run --cwd apps/web test` (no server, DB,
+secrets or Rust toolchain needed), and uploads `apps/web/dist` with `actions/upload-pages-artifact`; `deploy` publishes
+the artifact to the `github-pages` environment with `actions/deploy-pages`.
 
 Status checks are advisory: branch protection is unavailable on the plan, so a red check does not block a
 merge.
