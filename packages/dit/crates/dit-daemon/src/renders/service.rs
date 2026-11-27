@@ -476,7 +476,7 @@ impl Service {
 
         let catalogue =
             HubCatalogue::new(registry.clone(), repos_file, remote.clone(), clock.clone());
-        let engine = Engine::new(
+        let mut engine = Engine::new(
             EngineConfig {
                 ledger_path: options.ledger_path.clone(),
                 home,
@@ -486,6 +486,9 @@ impl Service {
             Box::new(catalogue),
             exclusions,
         );
+        // Inspect the pre-startup ledger before returning so callers cannot race `accept_render`
+        // against `engine.start` and enqueue the same upload twice.
+        let initial = engine.start(clock.now_ms());
 
         let mut threads = Vec::new();
         {
@@ -508,7 +511,15 @@ impl Service {
             let events = events.clone();
             let clock = clock.clone();
             thread::spawn(move || {
-                engine_loop(engine, input_rx, clock, uploads, events, ledger_path);
+                engine_loop(
+                    engine,
+                    initial,
+                    input_rx,
+                    clock,
+                    uploads,
+                    events,
+                    ledger_path,
+                );
             })
         });
         let uploader = {
@@ -588,6 +599,7 @@ impl Drop for Service {
 /// Hands the engine what it hears and the time, and carries out what it asks.
 fn engine_loop(
     mut engine: Engine,
+    initial: Vec<Output>,
     inputs: Receiver<Input>,
     clock: Arc<dyn Clock>,
     uploads: Sender<u64>,
@@ -620,7 +632,7 @@ fn engine_loop(
             }
         }
     };
-    carry_out(engine.start(clock.now_ms()));
+    carry_out(initial);
     let mut last_tick = Instant::now();
     loop {
         match inputs.recv_timeout(Duration::from_millis(100)) {
