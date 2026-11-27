@@ -141,6 +141,11 @@ pub trait Readout: Send + Sync {
         None
     }
 
+    /// The display name a saved set writes for a live device with `class_name` and `name`.
+    fn device_display_name(&self, _class_name: &str, name: &str) -> String {
+        name.to_string()
+    }
+
     /// The repo as a row of the list shows it; nothing when it cannot be read.
     fn repo(&self, _repo: &Path) -> RepoFacts {
         RepoFacts::default()
@@ -254,7 +259,10 @@ fn structure_track(track: &ScriptTrack, readout: &dyn Readout) -> StructureTrack
         devices: track
             .devices
             .iter()
-            .map(|device| device.name.clone())
+            .map(|device| {
+                readout
+                    .device_display_name(device.class_name.as_deref().unwrap_or(""), &device.name)
+            })
             .collect(),
         id: Some(track.id),
         group_id: track.group_id,
@@ -1873,6 +1881,7 @@ mod tests {
             devices: vec![dit_daemon::script::ScriptDevice {
                 name: "EQ Eight".to_string(),
                 kind: "live".to_string(),
+                class_name: Some("Eq8".to_string()),
             }],
         }
     }

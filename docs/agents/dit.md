@@ -536,9 +536,10 @@ tracks. Each entry reads:
 Devices. A rack (`InstrumentGroupDevice`, `AudioEffectGroupDevice`, `MidiEffectGroupDevice`, `DrumGroupDevice`) is
 listed once and its branches are never descended. A built-in device is named from the element by a display-name map
 (`Eq8` is `EQ Eight`, `OriginalSimpler` is `Simpler`), else the element split on capitals. A plugin host
-(`PluginDevice`, `AuPluginDevice`, `VstPluginDevice`) is named from the `Name` (`PlugName` for VST2) in the info block
-after it: `Vst3PluginInfo` is `vst3`, `VstPluginInfo` is `vst`, `AuPluginInfo` is `au`. The first name in the block
-wins, so a preset's own `<Name>` is ignored, and the block's last `Manufacturer` after it is attached. `plugins` maps
+(`PluginDevice`, `AuPluginDevice`, `VstPluginDevice`) is named from the direct child `Name` (`PlugName` for VST2) of
+its info block: `Vst3PluginInfo` is `vst3`, `VstPluginInfo` is `vst`, `AuPluginInfo` is `au`. Only direct children of
+the info block are read, so a nested preset's `<Name>` (whether before or after the plugin's own `<Name>`) is ignored,
+and a direct-child `Manufacturer` (before or after `Name`) is attached. `plugins` maps
 each display name to `{host, manufacturer?}` and is omitted when the set names none. A plugin whose block never names
 it is dropped from the chain, though it used a slot of the cap.
 
@@ -613,10 +614,12 @@ by path; an entry whose mtime cannot be read is left out.
 Option<TitleHint { set_stem }>`, `script_kit(home) -> Option<ScriptKit>`, `script_enabled(home) -> Option<bool>` and
 `project_roots(home) -> Vec<PathBuf>` (the folders the DAW's settings say projects live in: Ableton's `Library.cfg`
 `UserFolderInfoList`, which the app searches for repos on first launch).
-Two more defaulted methods serve the app: `bundle_ids()` (Ableton: `["com.ableton.live"]`, to find the installed Live
-with `NSWorkspace` and open a set with it) and `track_colour(index) -> Option<&'static str>` (the palette entry as
+Three more defaulted methods serve the app: `bundle_ids()` (Ableton: `["com.ableton.live"]`, to find the installed Live
+with `NSWorkspace` and open a set with it), `track_colour(index) -> Option<&'static str>` (the palette entry as
 `#rrggbb`, the same table and the same form a saved set's track metas carry, so a live track from the script, which
-reports Live's colour index, is coloured as a saved one; out of the palette: none).
+reports Live's colour index, is coloured as a saved one; out of the palette: none), and `device_display_name(class_name,
+name) -> Option<String>` (maps a live device's internal class name through `parse::devices::display_name`, keeping the
+plugin's own name for third-party hosts, so live tracks from the script match saved `.als` device names).
 The types are ungated in `dit-core/src/openset.rs`: `Signal` (`Script`, `Log`, `Title`, `Saves`, best first; the
 time store's `Source` is the same type), `OpenSet { path, signal, at }`, `ScriptKit { folder, files, version }` with
 `install()` and `status() -> KitStatus { installed, version, current }`.

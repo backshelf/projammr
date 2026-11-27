@@ -10,7 +10,7 @@ try:
 except ImportError:  # run as a top-level module by the tests
     import tracks
 
-SCRIPT_VERSION = "1"
+SCRIPT_VERSION = "2"
 MAX_LINE = 1 << 20
 MAX_OUTBOX = 4 << 20
 

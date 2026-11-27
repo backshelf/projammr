@@ -14,7 +14,7 @@ const FILES: &[(&str, &str)] = &[
 ];
 
 /// Written to `VERSION`; the script's own `SCRIPT_VERSION` is the same number.
-const VERSION: &str = "1\n";
+const VERSION: &str = "2\n";
 
 /// `<User Library>/Remote Scripts/dit`: the User Library as `Library.cfg` places it, found under `home`.
 pub(crate) fn kit(home: &Path) -> ScriptKit {

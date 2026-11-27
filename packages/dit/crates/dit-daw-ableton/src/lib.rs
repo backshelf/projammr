@@ -92,6 +92,10 @@ impl Daw for Ableton {
         parse::palette::palette_color(index)
     }
 
+    fn device_display_name(&self, class_name: &str, name: &str) -> Option<String> {
+        Some(parse::device_display_name(class_name, name))
+    }
+
     fn log_open_set(&self, home: &Path) -> io::Result<LogState> {
         openset::log_open_set(home)
     }
@@ -139,5 +143,21 @@ mod tests {
     #[test]
     fn names_lives_bundle_identifier_for_the_app_to_open_sets_with() {
         assert_eq!(Ableton.bundle_ids(), &["com.ableton.live"]);
+    }
+
+    #[test]
+    fn maps_live_device_class_names_to_saved_structure_display_names() {
+        assert_eq!(
+            Ableton.device_display_name("InstrumentGroupDevice", "Basic Bell Keys"),
+            Some("Instrument Rack".to_string())
+        );
+        assert_eq!(
+            Ableton.device_display_name("OriginalSimpler", "kick.wav"),
+            Some("Simpler".to_string())
+        );
+        assert_eq!(
+            Ableton.device_display_name("PluginDevice", "Pro-Q 4"),
+            Some("Pro-Q 4".to_string())
+        );
     }
 }

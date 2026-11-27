@@ -7,6 +7,7 @@ Pure over duck-typed objects (anything with Live's attribute names), so the test
 _PLUGIN_KINDS = {
     "PluginDevice": "vst3",
     "AuPluginDevice": "au",
+    "VstPluginDevice": "vst",
     "MxDeviceAudioEffect": "m4l",
     "MxDeviceInstrument": "m4l",
     "MxDeviceMidiEffect": "m4l",
@@ -16,6 +17,11 @@ _PLUGIN_KINDS = {
 
 def device_kind(device):
     return _PLUGIN_KINDS.get(getattr(device, "class_name", ""), "live")
+
+
+def _device_name(device):
+    display = getattr(device, "class_display_name", None)
+    return str(display) if display else str(device.name)
 
 
 def _track_kind(track, role):
@@ -59,7 +65,11 @@ def describe_tracks(song):
                 "kind": _track_kind(track, role),
                 "groupId": group_id,
                 "devices": [
-                    {"name": str(device.name), "kind": device_kind(device)}
+                    {
+                        "name": _device_name(device),
+                        "kind": device_kind(device),
+                        "className": str(getattr(device, "class_name", "")),
+                    }
                     for device in track.devices
                 ],
             }

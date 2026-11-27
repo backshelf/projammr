@@ -78,6 +78,11 @@ pub trait Daw: Send + Sync {
     fn track_colour(&self, _index: i64) -> Option<&'static str> {
         None
     }
+    /// The name a saved set writes for a live device reported by the DAW's script with `class_name` and `name`, so
+    /// live tracks compare against saved structure without preset/custom device names looking like changes.
+    fn device_display_name(&self, _class_name: &str, _name: &str) -> Option<String> {
+        None
+    }
     /// What the DAW's own log under `home` (the user's home folder) says: whether it is running and the set it
     /// loaded last. A DAW that keeps no such log is not running and has no set.
     fn log_open_set(&self, _home: &Path) -> std::io::Result<LogState> {

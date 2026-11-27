@@ -247,10 +247,10 @@ impl Core {
 /// The longest machine name the settings take.
 const MACHINE_NAME_CHARS: usize = 64;
 
-/// What the first signed-in run does about Live's script: install it, once, with no prompt. `None` when there is
-/// nothing to do: it was installed before (a person who removed it keeps it removed), or Live is not installed, in
-/// which case nothing is remembered and a run once Live is there installs it. Otherwise the outcome, remembered
-/// whatever it was: a failure is the person's notice, and settings' "Reinstall" is the retry.
+/// What the app does about Live's script on signed-in launch: install it once on first run with no prompt, and
+/// silently refresh an already-installed script when the app ships a newer version. `None` when there is nothing to
+/// do: Live is not installed (nothing remembered), the person removed the script after it was installed (stays
+/// removed), or the installed script is already current.
 fn install_script_once(
     kit: Option<&ScriptKit>,
     live_found: bool,
@@ -258,7 +258,10 @@ fn install_script_once(
 ) -> Option<Result<usize, String>> {
     let kit = kit.filter(|_| live_found)?;
     if AppState::load(state_path).script_offered {
-        return None;
+        let status = kit.status();
+        if !status.installed || status.current {
+            return None;
+        }
     }
     let installed = kit.install().map_err(|error| {
         format!(
@@ -302,6 +305,30 @@ mod tests {
             !kit.folder.exists(),
             "a script the person removed stays removed"
         );
+    }
+
+    #[test]
+    fn an_installed_older_script_is_upgraded_on_next_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join("app-state.json");
+        let folder = dir.path().join("Remote Scripts").join("dit");
+        let v1 = kit(folder.clone());
+        assert!(matches!(
+            install_script_once(Some(&v1), true, &state),
+            Some(Ok(w)) if w > 0
+        ));
+
+        let v2 = ScriptKit {
+            folder,
+            files: &[("__init__.py", "print('dit v2')")],
+            version: "2",
+        };
+        assert!(matches!(
+            install_script_once(Some(&v2), true, &state),
+            Some(Ok(w)) if w > 0
+        ));
+        assert!(v2.status().current);
+        assert!(install_script_once(Some(&v2), true, &state).is_none());
     }
 
     #[test]

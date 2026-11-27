@@ -81,12 +81,14 @@ struct Current {
     rack_depth: Option<usize>,
     /// The index in `track.devices` of a plugin still waiting for its name.
     pending_plugin: Option<usize>,
-    /// The format of the plugin info block being read, once a plugin awaits
-    /// its name.
-    plugin_info: Option<&'static str>,
+    /// The format and XML depth of the plugin info block being read, once a
+    /// plugin awaits its name.
+    plugin_info: Option<(&'static str, usize)>,
     /// The plugin named in the current info block, which a `Manufacturer`
     /// after it belongs to.
     last_plugin: Option<String>,
+    /// A `Manufacturer` seen inside the current info block before its `Name`.
+    pending_manufacturer: Option<String>,
 }
 
 impl Visitor for Structure {
@@ -177,6 +179,7 @@ impl Current {
             pending_plugin: None,
             plugin_info: None,
             last_plugin: None,
+            pending_manufacturer: None,
         }
     }
 
@@ -237,7 +240,7 @@ impl Current {
             self.push_device(element, depth);
         }
 
-        self.read_plugin(element, tag);
+        self.read_plugin(element, depth, tag);
     }
 
     fn end(&mut self, path: &Path) {
@@ -253,9 +256,13 @@ impl Current {
         if self.rack_depth == Some(depth) {
             self.rack_depth = None;
         }
-        if self.plugin_info.is_some() && plugin_info_host(element).is_some() {
+        if self
+            .plugin_info
+            .is_some_and(|(_, info_depth)| info_depth == depth)
+        {
             self.plugin_info = None;
             self.last_plugin = None;
+            self.pending_manufacturer = None;
         }
     }
 
@@ -280,16 +287,26 @@ impl Current {
         self.track.devices.push(display_name(element));
     }
 
-    /// Names the plugin awaiting it from the info block that follows its host,
-    /// and attaches the manufacturer the block names after it. A preset's own
-    /// `Name` inside the block comes once the plugin is named, so it is ignored.
-    fn read_plugin(&mut self, element: &str, tag: &Tag) {
+    /// Names the plugin awaiting it from the direct children of its info block,
+    /// and attaches the manufacturer the block names (before or after `Name`).
+    /// A nested preset's own `Name` sits deeper inside `<Preset>`, so matching
+    /// only direct children of `*PluginInfo` ignores it regardless of order.
+    fn read_plugin(&mut self, element: &str, depth: usize, tag: &Tag) {
         if self.pending_plugin.is_some()
+            && self.plugin_info.is_none()
             && let Some(host) = plugin_info_host(element)
         {
-            self.plugin_info = Some(host);
+            self.plugin_info = Some((host, depth));
+            self.pending_manufacturer = None;
+            return;
         }
-        let (Some(host), Some(value)) = (self.plugin_info, tag.attr("Value")) else {
+        let Some((host, info_depth)) = self.plugin_info else {
+            return;
+        };
+        if depth != info_depth + 1 {
+            return;
+        }
+        let Some(value) = tag.attr("Value") else {
             return;
         };
         if let (Some(index), "Name" | "PlugName") = (self.pending_plugin, element) {
@@ -298,24 +315,39 @@ impl Current {
             if value.is_empty() {
                 self.last_plugin = None;
             } else {
+                let manufacturer = self.pending_manufacturer.take();
                 self.plugins.insert(
                     value.clone(),
                     PluginInfo {
                         host: host.to_string(),
-                        manufacturer: None,
+                        manufacturer,
                     },
                 );
                 self.last_plugin = Some(value);
             }
         } else if element == "Manufacturer" {
-            let plugin = self
+            if let Some(plugin) = self
                 .last_plugin
                 .as_ref()
-                .and_then(|name| self.plugins.get_mut(name));
-            if let Some(plugin) = plugin {
+                .and_then(|name| self.plugins.get_mut(name))
+            {
                 plugin.manufacturer = Some(value);
+            } else if !value.is_empty() {
+                self.pending_manufacturer = Some(value);
             }
         }
+    }
+}
+
+/// The name a saved set writes for a device with XML/Live `class_name` and
+/// script-reported `name`: third-party plugin hosts keep the plugin's own
+/// name, while built-in devices, racks and M4L devices use `display_name` so
+/// live tracks from the script match saved `.als` structure.
+pub(crate) fn device_display_name(class_name: &str, name: &str) -> String {
+    if class_name.is_empty() || PLUGIN_HOSTS.contains(&class_name) {
+        name.to_string()
+    } else {
+        display_name(class_name)
     }
 }
 
@@ -604,6 +636,72 @@ mod tests {
                         manufacturer: Some("Xfer Records".to_string()),
                     }
                 )]
+                .into()
+            )
+        );
+    }
+
+    #[test]
+    fn reads_plugin_name_when_preset_with_empty_or_custom_name_comes_first() {
+        let doc = live_set(&format!(
+            r#"<MidiTrack Id="1">{}{}</MidiTrack>"#,
+            named("20-Basic Bell Keys"),
+            chain(
+                r#"
+        <InstrumentGroupDevice Id="0" />
+        <PluginDevice Id="1">
+          <PluginDesc>
+            <Vst3PluginInfo Id="0">
+              <WinPosX Value="0" />
+              <Preset>
+                <Vst3Preset Id="0">
+                  <Name Value="" />
+                </Vst3Preset>
+              </Preset>
+              <Name Value="Pro-Q 4" />
+            </Vst3PluginInfo>
+          </PluginDesc>
+        </PluginDevice>
+        <PluginDevice Id="2">
+          <PluginDesc>
+            <AuPluginInfo Id="0">
+              <Manufacturer Value="Valhalla DSP" />
+              <Preset>
+                <AuPreset Id="0">
+                  <Name Value="Dark Room" />
+                </AuPreset>
+              </Preset>
+              <Name Value="ValhallaVintageVerb" />
+            </AuPluginInfo>
+          </PluginDesc>
+        </PluginDevice>"#
+            ),
+        ));
+        let structure = structure(&doc);
+
+        assert_eq!(
+            structure.tracks[0].devices,
+            ["Instrument Rack", "Pro-Q 4", "ValhallaVintageVerb"]
+        );
+        assert_eq!(
+            structure.plugins,
+            Some(
+                [
+                    (
+                        "Pro-Q 4".to_string(),
+                        PluginInfo {
+                            host: "vst3".to_string(),
+                            manufacturer: None,
+                        }
+                    ),
+                    (
+                        "ValhallaVintageVerb".to_string(),
+                        PluginInfo {
+                            host: "au".to_string(),
+                            manufacturer: Some("Valhalla DSP".to_string()),
+                        }
+                    ),
+                ]
                 .into()
             )
         );

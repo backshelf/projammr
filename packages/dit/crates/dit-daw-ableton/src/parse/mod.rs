@@ -17,6 +17,8 @@ pub(crate) mod palette;
 mod samples;
 mod structure;
 
+pub(crate) use structure::device_display_name;
+
 /// The open tags from the root down to, and including, the element an event
 /// is about.
 pub(crate) struct Path<'a>(&'a [String]);

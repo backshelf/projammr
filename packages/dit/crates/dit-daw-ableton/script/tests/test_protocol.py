@@ -121,10 +121,28 @@ class Tracks(unittest.TestCase):
         self.assertIsNone(described[0]["groupId"])
         self.assertEqual(
             described[1]["devices"],
-            [{"name": "EQ Eight", "kind": "live"}, {"name": "Serum", "kind": "vst3"}],
+            [
+                {"name": "EQ Eight", "kind": "live", "className": "Eq8"},
+                {"name": "Serum", "kind": "vst3", "className": "PluginDevice"},
+            ],
         )
         self.assertEqual(described[0]["color"], 3)
         json.dumps(described)
+
+    def test_prefers_class_display_name_and_includes_class_name_for_renamed_or_preset_devices(self):
+        rack = Obj(name="Basic Bell Keys", class_name="InstrumentGroupDevice", class_display_name="Instrument Rack")
+        plugin = Obj(name="Low Cut", class_name="PluginDevice", class_display_name="Pro-Q 4")
+        s = song(tracks=[track("20-Basic Bell Keys", [rack, plugin])])
+
+        described = tracks.describe_tracks(s)
+
+        self.assertEqual(
+            described[0]["devices"],
+            [
+                {"name": "Instrument Rack", "kind": "live", "className": "InstrumentGroupDevice"},
+                {"name": "Pro-Q 4", "kind": "vst3", "className": "PluginDevice"},
+            ],
+        )
 
     def test_device_kinds(self):
         for cls, kind in [("AuPluginDevice", "au"), ("MxDeviceInstrument", "m4l"), ("Compressor2", "live")]:

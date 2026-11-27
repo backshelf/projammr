@@ -1267,7 +1267,7 @@ fn script_install_puts_the_files_in_the_user_library_and_status_reads_them_back(
     );
     let text = stdout(&fixture.dit(&["script", "status"]));
     assert!(
-        text.starts_with("Ableton Live: installed, version 1"),
+        text.starts_with("Ableton Live: installed, version 2"),
         "{text}"
     );
     assert!(text.contains("connected: needs the dit app"), "{text}");

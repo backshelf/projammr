@@ -228,6 +228,14 @@ impl Readout for RepoReadout {
             .map(str::to_string)
     }
 
+    fn device_display_name(&self, class_name: &str, name: &str) -> String {
+        self.registry
+            .all()
+            .iter()
+            .find_map(|daw| daw.device_display_name(class_name, name))
+            .unwrap_or_else(|| name.to_string())
+    }
+
     fn read(&self, repo: &Path, set_id: &str, branch: &str) -> Option<SetReadout> {
         let repo = Repo::open(repo, &self.registry).ok()?;
         let mut read = self.set_readout(&repo, set_id, branch)?;

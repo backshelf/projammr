@@ -38,10 +38,14 @@ struct Limits {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScriptDevice {
     pub name: String,
     /// `live`, `vst3`, `au`, `vst` or `m4l`.
     pub kind: String,
+    /// Live's internal class name (e.g. `Eq8`, `InstrumentGroupDevice`, `PluginDevice`), when sent by the script.
+    #[serde(default)]
+    pub class_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
