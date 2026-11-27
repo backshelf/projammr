@@ -1,0 +1,115 @@
+---
+title: Installing and signing in
+description: Download dit for Apple silicon Macs, open it past Gatekeeper, trust your instance's certificate, sign in via Keychain and manage updates.
+sidebar:
+  order: 20
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+dit ships as a macOS disk image (`dit-macos-arm64.dmg`) for **Apple silicon Macs running macOS 14 or later**. The app
+bundle includes both the menu bar app and the `dit` command-line binary.
+
+## Download and install
+
+<Steps>
+
+1. Download `dit-macos-arm64.dmg` from the [dit page](/dit/) (or from the latest release on GitHub).
+
+2. Open the disk image and drag **dit** into your **Applications** folder.
+
+3. The first time you open **dit**, right-click the app in **Applications** and choose **Open** (then confirm **Open**
+   in the dialog).
+
+</Steps>
+
+<Aside type="note" title="Gatekeeper and code signing">
+  Release builds of dit are signed with Projammr's self-signed
+  `app.projammr.dit` code-signing identity and are **not notarised** by Apple.
+  macOS Gatekeeper therefore blocks a plain double-click on first launch;
+  right-clicking and choosing **Open** (or clicking **Open Anyway** under
+  **System Settings → Privacy & Security**) clears it once. Because every
+  release uses the same `app.projammr.dit` identity, later updates keep your
+  macOS Keychain access and Screen Recording permission.
+</Aside>
+
+## Trusting your instance's certificate
+
+Before signing in, make sure your Mac trusts your Projammr server's HTTPS certificate. dit verifies TLS certificates
+against **macOS's system trust store only** — it does not offer certificate pinning or an option to ignore untrusted
+certificates.
+
+- If your instance uses Caddy's local certificate authority, install and trust `projammr-ca.crt` in **Keychain Access**
+  first. See [HTTPS and your devices](/docs/self-hosting/https/).
+- If your instance is [served through Tailscale](/docs/self-hosting/tailscale/) or behind a public Let's Encrypt
+  certificate, macOS already trusts it.
+- Plain `http://` addresses are accepted for local development instances without TLS.
+
+If the certificate is not trusted, dit stops and reports: `<host> uses a certificate this computer doesn't trust. Install the instance's certificate and try again.`
+
+## Signing in
+
+dit signs in using an OAuth 2.0 device grant (RFC 8628). Your password is never entered into dit or stored on disk.
+
+<Steps>
+
+1. Click the **dit** icon in the menu bar and enter your instance's origin (for example `https://projammr.example`,
+   matching your instance's `PUBLIC_HOST`).
+
+2. Select **Sign in**. dit displays a short verification code and opens the approval page in your default browser.
+
+3. Sign in to Projammr in the browser if needed and approve the device code.
+
+4. dit exchanges the approved code for a session token, stores the token in your **macOS login Keychain** (service
+   `dit`, account set to the instance origin), and registers this Mac as a machine on your account.
+
+</Steps>
+
+Your non-secret preferences — instance address, machine name, generated machine ID, global shortcut and bounce-watching
+folders — are stored in `~/Library/Application Support/dit/config.toml`. The session token never appears in any config
+file, log or terminal output.
+
+You can also sign in from the terminal with `dit login https://<PUBLIC_HOST>`.
+
+### Signing out
+
+Choose **Sign out** in the menu bar app to detach this Mac from your instance. The app stops pushing, removes this
+machine from your account on the server (revoking its session so the CLI on the same Mac is signed out too), clears the
+stored machine ID and deletes the token from Keychain. Your instance address stays in `config.toml`, and local save
+recording in tracked folders continues uninterrupted.
+
+## First-run setup and permissions
+
+After your first sign-in, dit configures three helpers on your Mac — all adjustable later in **Settings** (`⌘,` or the
+`⋯` menu):
+
+- **Start at login**: switched on automatically once after first sign-in (via a macOS LaunchAgent) so saves are not
+  missed after a reboot. You can turn it off at any time in **Settings → This computer**.
+- **Live's dit script**: installed automatically into Ableton Live's `<User Library>/Remote Scripts/dit` when Live is
+  found. To activate it, open Ableton Live, go to **Settings → Link, Tempo & MIDI**, and select **dit** in a **Control
+  Surface** slot. Once enabled, Live tells dit directly which set is open, when transport is playing and when tracks
+  change. You can check its status or reinstall it under **Settings → Live** (or with `dit script status` / `dit script
+install`).
+- **Screen Recording and folder access**: if Live's `dit` script is off, dit falls back to reading Live's window title
+  to tell which set is open, which requires macOS **Screen Recording** permission (**Settings → Live → Open System
+  Settings**). macOS may also prompt before dit reads bounces saved into **Desktop**, **Documents** or **Downloads**;
+  allow access if you export bounces there.
+
+### Installing the `dit` command-line tool
+
+To run `dit` from a terminal, open **Settings → This computer → Install the dit command** and choose **Install**. macOS
+asks for an administrator password once and creates a symlink from the bundled binary inside `dit.app` to
+`/usr/local/bin/dit`.
+
+## Automatic updates
+
+Release builds of dit check for a new version on GitHub Releases (`latest.json`) **at launch** and **every six hours**
+(and immediately on wake if your Mac slept past a check).
+
+- Updates are **never installed silently**. When a newer version is available, an **Update to \<version\>** item appears
+  in the `⋯` menu (even while signed out).
+- Selecting it downloads the update bundle, verifies its **minisign** cryptographic signature against the public key
+  built into dit, and waits until dit is **idle** — meaning no push is in flight, no pending push is about to start and
+  no backfill run is active (a paused backfill counts as idle).
+- Once idle, dit replaces the app in place, shuts the daemon down cleanly and relaunches. If any step fails, the running
+  app stays untouched and you can try again later.

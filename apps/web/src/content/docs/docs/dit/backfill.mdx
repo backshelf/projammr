@@ -1,0 +1,126 @@
+---
+title: Bringing in existing projects
+description: Import your existing Ableton Live project folders and Backup history into dit and Projammr using Bring in projects or dit backfill.
+sidebar:
+  order: 50
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+You do not have to start from scratch when you install dit. **Bring in projects** (and its CLI equivalent,
+`dit backfill`) discovers your existing Ableton Live project folders, imports each set's `Backup/` history as earlier
+saves, proposes where each set belongs in Projammr and uploads everything in one resumable run.
+
+Nothing is committed or sent to your server until you review the proposals and press **Start**.
+
+## Opening Bring in projects
+
+- **In the dit app:** open the `⋯` menu in the panel and choose **Bring in projects…** (or select it from the empty
+  repositories screen on first run).
+- **In the terminal:** run `dit backfill` to list projects, then `dit backfill <folder>...` to import them.
+
+Both the window and the CLI share the same state file (`~/Library/Application Support/dit/backfill.json`) and run lock
+(`backfill.running`). Only one backfill runs at a time on a Mac, and a run started in one can be checked or resumed from
+the other.
+
+## The three steps
+
+<Steps>
+
+1. **Find**
+
+   dit searches Ableton Live's project roots (read from Live's `Library.cfg`) and `~/Music` for Live project folders.
+   Use **Choose folders…** (`⌘O`) to add other drives or directories, or remove any root you do not want searched.
+
+   Each discovered project folder shows its set count, total size and newest save date; folders already tracked by dit
+   are marked **Already in dit** and skipped. Folders sit ticked by default — untick any you want to leave out, then
+   select **Next** (`⌘↩`).
+
+2. **Check**
+
+   dit reads each selected project folder into a local `.dit/` repository — recording every current set and importing its
+   `Backup/` copies — without writing commits or uploading anything yet. It then asks your Projammr instance for existing
+   tracks, unbound sessions and available storage.
+
+   For each folder, review the right-hand pane:
+   - **Goes into:** pick the Projammr project the folder belongs to.
+   - **Track** and **Session** per set: dit matches a set to an existing unbound session in Projammr when its path or
+     file fingerprint matches, preserving all existing comments, audio versions and notes on that session. Unmatched sets
+     are proposed under an existing track whose title matches the folder name, or a new track named after the folder
+     (with ` Project` trimmed off). You can override any set's track or session before starting.
+   - **Warnings:** dit flags project folders sitting inside cloud-sync folders (iCloud Drive, Dropbox, Google Drive,
+     OneDrive or Box), sets with unreadable saves stored as raw files, and sets that could not be read.
+   - **Storage check:** the footer shows how much data the run will upload after deduplication against objects the hub
+     already holds, alongside your remaining storage allowance when your instance sets a storage cap. If the selected
+     folders exceed your remaining allowance, go **Back** (`⌘[`) and untick some folders.
+
+   If you close the window during **Find** or **Check**, dit cleans up any `.dit/` folders that **Check** created and
+   leaves your disk untouched.
+
+3. **Bring in**
+
+   Select **Start** (`⌘↩`). dit processes folders newest-saved first, one at a time:
+   - writes one `Brought into dit` commit per set (unless the set already has a commit);
+   - binds the repository and adopts each set into its chosen track and session quietly;
+   - uploads only objects the hub does not already hold, reporting sets committed, saves stored and bytes uploaded; and
+   - adds each finished folder to dit's live watcher (`repos.toml`) so future saves in Live are tracked automatically.
+
+   When every folder finishes, dit shows how far back your imported history reaches — based on the oldest save's file
+   modification time (including `Backup/` copies), not the import date.
+
+</Steps>
+
+## How Live's `Backup/` history is imported
+
+Ableton Live keeps dated snapshots in each project's `Backup/` folder whenever you overwrite a set. During **Check**
+and **Bring in**:
+
+- dit finds every backup matching each set file and inserts those saves chronologically **before** the current working
+  file in the branch's save log.
+- Identical XML hashes are skipped automatically, so repeated runs never create duplicate saves.
+- If a backup copy is unreadable, dit stores its raw bytes rather than failing the whole folder.
+- Sample references inside backup copies are resolved against the project's current `Samples/` folder.
+
+On your session's [save history](/docs/guide/session-history/) page in Projammr, saves imported from `Backup/` carry a
+**Backup** mark so you can see where your historical timeline meets live dit saves.
+
+## Pausing, resuming and handling interruptions
+
+Large backfills are designed to be stopped and continued safely:
+
+- **Pausing:** click **Pause** in the footer, close the **Bring in projects** window, put your Mac to sleep, quit dit, or
+  press `Ctrl-C` in `dit backfill`. dit finishes the current step or upload pack cleanly and records its progress in
+  `backfill.json`.
+- **Resuming:** reopen **Bring in projects…** (or run the same `dit backfill` command again). Finished folders stay
+  finished, already-committed sets are skipped, and already-uploaded packs are left out on resume.
+- **Network drops:** if your Projammr hub becomes unreachable mid-run, the current folder switches to **Waiting for hub**
+  and retries with exponential backoff until the server returns.
+- **Per-folder failures:** if one folder is refused (for example, a folder moved on disk or hit a storage cap), only that
+  folder is marked failed (its local `.dit/` saves are kept) while the remaining folders continue. Select **Try again**
+  on any failed folder after fixing the issue.
+
+## Using `dit backfill` from the terminal
+
+List discoverable Live project folders (defaults to Live's project roots and `~/Music`):
+
+```sh
+dit backfill
+```
+
+Search specific directories instead:
+
+```sh
+dit backfill --in ~/Studio --in /Volumes/Projects
+```
+
+Check and bring specific project folders into a Projammr project (pass `--project <id>` if your account belongs to more
+than one project):
+
+```sh
+dit backfill "~/Music/Ableton/Low Tide/Halogen Project" --project 1
+```
+
+<Aside>
+  Add `--json` to either form of `dit backfill` for machine-readable output. See
+  the [Command-line reference](/docs/dit/cli/) for all flags.
+</Aside>

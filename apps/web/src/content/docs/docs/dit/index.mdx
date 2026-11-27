@@ -1,0 +1,89 @@
+---
+title: dit
+description: The Mac menu bar app and command-line tool that tracks Ableton Live sets, records every save and offers your bounces to Projammr.
+sidebar:
+  order: 10
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+
+**dit** is the companion app that runs on the Mac you make music on. While **Projammr** is your self-hosted web hub —
+the catalogue, listening room, waveform comments, notes and lyrics — **dit** sits beside your DAW on disk, recording
+every save of a set into a content-addressed `.dit/` repository inside the project folder and syncing that history, your
+commits and your bounces to your Projammr instance.
+
+## How dit and Projammr work together
+
+- **dit lives on your studio Mac.** It watches tracked project folders for saves, detects new audio bounces, tracks time
+  spent in a set, writes commits and branches, and restores earlier commits back to disk as new set files.
+- **Projammr is the hub.** When dit pushes, your saves, diffs, commits, time spans, samples (when enabled) and accepted
+  bounces appear on your Projammr server, where you and your collaborators can inspect changes, listen to versions, leave
+  timestamped comments and open or restore sets from any tracked Mac.
+- **Everything works locally first.** Saves, commits, diffs and local branches are stored in `.dit/` inside each project
+  folder. If your Projammr server is offline or you are working away from home, dit keeps recording locally and pushes
+  when the server is reachable again.
+
+## Requirements
+
+- **Apple silicon Mac (`arm64`)** running **macOS 14 or later**.
+- A running **Projammr instance** to sign in to and push to (local saves and CLI commands work offline before you push).
+- **Ableton Live** for automatic set watching, Live's `dit` control-surface script and the optional Ableton Live
+  extension.
+
+## DAW module architecture
+
+Inside dit, the core repository format — content-addressed objects, save logs, commits, branches, diffs, time tracking
+and pushing — is DAW-agnostic. Each supported DAW is implemented as a separate module responsible for:
+
+- recognising a project folder and its managed subfolders;
+- decoding and re-encoding set files;
+- splitting a set into tracks and sections and masking volatile view state;
+- extracting metadata (tempo, key, time signature, tracks, devices, plugins, clips, scenes and sample references); and
+- locating the DAW's own backup copies.
+
+**Ableton Live** (`.als` sets inside Live project folders, including `Samples/` and `Backup/`) is the DAW module
+implemented today.
+
+## In this section
+
+<LinkCard
+  title="Installing and signing in"
+  href="/docs/dit/installing-and-signing-in/"
+  description="Download the Mac app, clear Gatekeeper on first launch, trust a local CA, sign in and manage updates."
+/>
+
+<LinkCard
+  title="Saves, commits and branches"
+  href="/docs/dit/saves-and-commits/"
+  description="How automatic saves, view-only masking, skyline diffs, commits, checkpoints, time tracking and branches work."
+/>
+
+<LinkCard
+  title="Bounces and renders"
+  href="/docs/dit/renders-and-bounces/"
+  description="Automatic bounce detection, inline previews, WAV/MP3 pairing, size limits and shared rejections."
+/>
+
+<LinkCard
+  title="Bringing in existing projects"
+  href="/docs/dit/backfill/"
+  description="Import existing Ableton Live project folders and their Backup history with Bring in projects or dit backfill."
+/>
+
+<LinkCard
+  title="Ableton Live extension"
+  href="/docs/dit/ableton-extension/"
+  description="Commit from inside Live, add notes or cue points, and sync timestamped Projammr comments to Live locators."
+/>
+
+<LinkCard
+  title="Command-line reference"
+  href="/docs/dit/cli/"
+  description="Every dit subcommand, global flags and how the CLI talks to the running menu bar app."
+/>
+
+<Aside>
+  Ready to install? Grab the latest Mac disk image on the [dit download
+  page](/dit/) and follow [Installing and signing
+  in](/docs/dit/installing-and-signing-in/).
+</Aside>

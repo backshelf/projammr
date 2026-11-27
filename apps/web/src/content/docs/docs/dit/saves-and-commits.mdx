@@ -1,0 +1,164 @@
+---
+title: Saves, commits and branches
+description: How dit watches open Ableton Live sets, filters view-only saves, diffs structure, creates commits and checkpoints, tracks time in a set and restores earlier commits as branches.
+sidebar:
+  order: 30
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+dit treats each Ableton Live project folder like a small repository. Inside the project folder it keeps a hidden `.dit/`
+directory containing every recorded save, commit, branch reference and time log — stored once per unique piece by
+SHA-256 hash.
+
+## Tracking a project folder
+
+There are three ways to start tracking a Live project folder:
+
+- **Open a set in Live:** when dit sees an open `.als` set inside an untracked project folder, the panel offers to track
+  it and asks which Projammr project it belongs to.
+- **Track a folder manually:** open the `⋯` menu in the dit panel and choose **Track a folder…**, or run `dit init`
+  inside the folder.
+- **Bring in existing projects in bulk:** use [Bring in projects](/docs/dit/backfill/) to import an entire folder tree
+  along with each project's `Backup/` history.
+
+When a folder is adopted, dit records an initial save of every `.als` file inside it (ignoring Live's `Backup/`,
+`Samples/`, `Freeze/`, `Recorded/` and `Ableton Project Info/` subfolders) and pushes to your chosen Projammr project.
+
+## Automatic saves
+
+While dit is running, it watches every tracked project folder using macOS file-system events:
+
+1. When you save in Live (`⌘S`), dit waits briefly for the write to settle (2 seconds after the last file event, capped
+   at 10 seconds during a burst). If Live is still mid-write, dit retries on a backoff ladder without storing a half-written
+   file.
+2. dit decodes the `.als` file, splits it into tracks and sections, parses its metadata (tempo, key, time signature,
+   tracks, devices, third-party plugins, clips, scenes and sample references), and writes only the parts that changed
+   into `.dit/objects/`.
+3. If you saved a set while dit was closed, dit catches up the next time it launches and records the file's latest state
+   at its modification time.
+4. For tracked repositories bound to a Projammr project, dit automatically pushes new saves and time spans to your hub in
+   the background.
+
+If a set file is intact on disk but uses a structure dit cannot parse yet, dit still preserves the raw file bytes as an
+unreadable save so nothing is lost and the file can still be restored byte for byte.
+
+### View-only masking
+
+Ableton Live rewrites volatile attributes — internal element IDs, scroll positions, zoom levels and timestamps — even
+when you only opened a set, scrolled around and pressed save.
+
+To keep your history meaningful, dit separates volatile values into a side list before hashing each track and section:
+
+- When only masked values changed (and no tracked sample changed), the save is marked **view-only**. It is still kept in
+  the save log and still restores the exact original XML byte for byte, but it does not light up the diff or count as
+  uncommitted musical work.
+- Replacing a referenced audio file inside the project's `Samples/` folder **does** count as a real change — dit hashes
+  project samples (caching size and modification time in `.dit/samples.json`) and records a new save even when the `.als`
+  file itself did not change.
+
+### Pushing samples
+
+Each save records the paths of the samples your set references. Whether the actual sample audio blobs from `Samples/`
+are uploaded to your Projammr server is controlled per repository with `dit config push-samples on|off`, or forced on for
+every repository by your instance administrator. Commits push immediately; sample blobs upload in a follow-up phase so
+large sample folders never delay a commit.
+
+## The skyline and structural diffs
+
+When a tracked set is open in Live, clicking the menu bar icon (or pressing your global shortcut from **Settings**) opens
+the set screen:
+
+- **Masthead:** shows the set name, current branch, how long you have spent in the set since the last commit, and an
+  **Open on the web** link once the set has been pushed.
+- **Skyline:** draws one bar per track in Live's own track colours, with bar height reflecting how many devices sit on
+  each track, plus groups underneath and returns and master on the right. Tracks added, removed or modified since the
+  last commit are highlighted. Move through the skyline with `←` / `→` / `Home` / `End` or hover a bar to read its
+  changes (for example `Bass · +EQ Eight`). When Live's `dit` script is connected, live edits appear in the skyline
+  before you even commit.
+- **Saves list:** lists each save since your last commit, with diff chips for tempo, time signature, key, tracks,
+  renames, devices, clips, scenes, samples and Live version, plus a dot showing whether the save has pushed to your hub.
+
+## Writing commits
+
+Saves happen automatically every time you press `⌘S`. **Commits** are the named milestones you choose to mark — like
+finishing a drum arrangement, locking a vocal pass or bouncing a mix for feedback.
+
+<Steps>
+
+1. Open the dit panel while your set is open (or use the [Ableton Live extension](/docs/dit/ableton-extension/) or
+   `dit commit`).
+
+2. dit pre-fills the commit box with a summary built from what changed since your last commit (for example
+   `+1 track, +ValhallaShimmer on B-Shimmery Verb, tempo 124 → 128`). Click any clause chip to toggle it in or out, or
+   type your own message. Leaving the box blank uses the default summary (or `Initial commit` on a branch's first
+   commit).
+
+3. Press `⌘↩` to commit. dit records the commit pointing at the latest save and pushes it to Projammr in the background.
+
+</Steps>
+
+If nothing has changed since your last commit (or only view-only saves landed), dit reports **Nothing to commit** and
+refuses an empty commit.
+
+### Automatic checkpoints
+
+Once a branch has at least one commit of your own, dit writes an automatic **checkpoint** commit (labelled
+`checkpoint · <duration>`, such as `checkpoint · 2h 14m`) whenever either threshold is reached:
+
+- **10 saves** since the last commit; or
+- **2 hours** of open time in the set since the last commit.
+
+Checkpoints never fire before your first commit on a branch, and they are skipped if the latest save is unreadable or has
+no non-view-only changes compared with the previous commit.
+
+## Time in a set
+
+dit tracks how long each set is open on your Mac and stores the spans in `.dit/time/<set-id>/<branch>`:
+
+- Signals are prioritised from best to fallback: Live's `dit` control-surface script, Live's log, Live's window title
+  (when Screen Recording is allowed), and save activity.
+- A span ends after **15 minutes** without activity (stamped at the time of the last activity, not 15 minutes later).
+  While Live's transport is playing (reported by the `dit` script), the set counts as continuously active.
+- Progress is flushed at least once a minute and pushed to your Projammr hub alongside saves. Run `dit time` in a
+  project folder to see total time, time since the last commit and time per commit.
+
+## Branches (`@branch` files)
+
+Every set starts on its `main` branch — the set's original `.als` file (for example `halogen long outro.als`).
+
+When you want to try a different arrangement or restore an older version without overwriting your current set, dit
+creates a **branch** as a sibling file in the same project folder using the `@branch` naming convention:
+
+```text
+Halogen Project/
+  halogen long outro.als
+  halogen long outro @alt-outro.als
+```
+
+- Both files share the same set ID and history lineage in `.dit/`, while keeping independent save logs and branch heads.
+- Open `halogen long outro @alt-outro.als` in Live and save as usual — dit automatically records saves to the
+  `alt-outro` branch.
+- From the terminal, create a branch from any commit with `dit checkout <commit-prefix> -b <branch-name>`. Branch names
+  can be 1–64 characters using letters, digits, spaces, `-`, `_` or `.` (cannot be `main` or start/end with a space or
+  `.`).
+
+## Restoring earlier commits
+
+Every committed save pushed to Projammr can be brought back onto any tracked Mac — including commits pushed from a
+different computer.
+
+- **From Projammr:** open a session's [save history](/docs/guide/session-history/) and restore a commit. Your browser
+  hands a `projammr://dit/checkout/<commit-id>` link to dit, which opens the **Restore** screen in the menu bar panel.
+- **From the terminal:** run `dit restore <commit-id>` (with an optional `--name <branch>`).
+
+dit checks whether this Mac already has the commit's objects locally; if not, it fetches only the missing ancestor
+commits, trees, leaves and chunks from your Projammr hub and verifies every SHA-256 hash before writing anything. It then
+materialises the set as a new `@branch` file (named `restore-<7 hex>` by default, or the name you enter) and opens it in
+Ableton Live.
+
+<Aside>
+  Restoring **never overwrites** an existing set file. If a file with that
+  branch name already exists — or Live currently has it open — dit leaves it
+  untouched and suggests the next free branch name.
+</Aside>

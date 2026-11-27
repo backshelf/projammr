@@ -8,9 +8,13 @@ sidebar:
 import { Aside } from "@astrojs/starlight/components";
 import Screenshot from "@/components/Screenshot.astro";
 
-A session is the DAW project behind a track. When [dit](/dit/) reads one of your Ableton sets, its
-session page shows what is inside it: the tempo and key, every track and the devices on it, the samples it uses,
-and a history of every save. You never type any of that in; it comes from the set itself.
+A session is the DAW project behind a track. On your Mac, [dit](/docs/dit/) watches your Ableton Live project folder,
+records every save and commit, and pushes them to your Projammr hub. Projammr then renders the session page: the tempo
+and key, every track and the devices on it, the samples it uses, and a history of every save. You never type any of
+that in; it comes from the set itself.
+
+See [Saves, commits and branches](/docs/dit/saves-and-commits/) for how dit records saves locally and
+[Ableton Live extension](/docs/dit/ableton-extension/) for committing and syncing notes directly inside Live.
 
 <Screenshot
   id="session"
@@ -102,10 +106,10 @@ The rail holds what dit reported about the set:
 **Open in DAW**, at the foot of the rail, opens the set in your DAW on your computer through a `projammr://` link. The
 same button starts every row of the sessions table.
 
-It works through [dit](/dit/), so dit needs to be installed and running on a computer that tracks the set's
+It works through [dit](/docs/dit/), so dit needs to be installed and running on a computer that tracks the set's
 repository. Hover the button to see which machine will open it: "Opens the file on", then the machine's name.
 
-If nothing answers, Projammr says "Projammr desktop app required", with a link to download dit.
+If nothing answers, Projammr says "Projammr desktop app required", with a link to [download dit](/dit/).
 
 <Aside>
   When no online machine tracks the session's repository (including a session

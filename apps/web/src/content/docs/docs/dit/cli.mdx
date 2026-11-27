@@ -1,0 +1,84 @@
+---
+title: Command-line reference
+description: Every dit CLI subcommand, global flags, environment variables and how the CLI works alongside the menu bar app.
+sidebar:
+  order: 70
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Every core workflow in the dit menu bar app is also available from the `dit` command-line tool. To link `dit` into
+`/usr/local/bin/dit`, open the menu bar app's **Settings → This computer → Install the dit command** and select
+**Install**.
+
+## How the CLI connects to the app
+
+When the `dit` menu bar app is running, the CLI forwards your command, working directory and environment over the local
+Unix socket (`~/Library/Application Support/dit/dit.sock`) so the app executes it using its Keychain session, active
+repositories, live render engine and backfill controller. No token ever crosses the socket.
+
+When the menu bar app is not running, `dit` runs locally in the terminal.
+
+## Global flags and environment variables
+
+- `--json`: prints the command's result as a single line of JSON on stdout (warnings and errors stay on stderr).
+- `DIT_AUTHOR`: author name written into new commits (falls back to `USER`, then `unknown`).
+- `DIT_MACHINE`: machine name recorded on saves and sent to the hub when `machine` is not explicitly set in
+  `~/Library/Application Support/dit/config.toml` (otherwise falls back to the computer's hostname).
+
+### Naming sets and IDs
+
+- **`<set>`**: most repository commands run from the project folder (or one directory inside it) and accept an optional
+  set file name with or without its `.als` extension (for example `"halogen long outro"` or
+  `"halogen long outro @alt-outro"`). When omitted, commands default to the only working file or the one most recently
+  saved.
+- **ID prefixes**: `dit diff` and `dit checkout` accept lowercase hex prefixes of at least 4 characters. `dit restore`
+  takes the numeric commit ID from your Projammr instance.
+
+## Account and remote
+
+| Command                             | What it does                                                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dit login [<url>]`                 | Signs this Mac in to a Projammr instance via the browser device grant and stores the session token in Keychain. Uses the last signed-in instance when `<url>` is omitted. |
+| `dit logout`                        | Signs out on the instance and deletes the stored token from Keychain, keeping the instance URL in `config.toml`.                                                          |
+| `dit whoami`                        | Prints the signed-in instance, user name, email and machine name.                                                                                                         |
+| `dit remote set <url>`              | Points an already-bound repository at a new instance address (for example after moving domains), verifying the hub holds the same sets before rewriting local refs.       |
+| `dit config push-samples [on\|off]` | Prints whether this repository pushes `Samples/` blobs to the hub, or toggles the setting on the instance (`on` or `off`).                                                |
+
+<Aside>
+  There is no `dit machines` CLI subcommand. Manage and revoke registered
+  machines from **Settings** in the Projammr web app, or sign out in the dit
+  menu bar app to remove the current Mac.
+</Aside>
+
+## Tracking, saves and commits
+
+| Command                                         | What it does                                                                                                                                                                              |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dit init`                                      | Turns the current Live project folder into a dit repository (`.dit/`), records a save of every `.als` set inside it and registers the folder with the menu bar app.                       |
+| `dit status [<set>]`                            | Records a save of any changed working file and reports saves since the last commit, whether uncommitted changes exist, pending saves/commits/samples to push and the sample-push setting. |
+| `dit save [<set>]`                              | Records a save of `<set>` (or the most recently modified working file) now, printing the short save ID or `No change`.                                                                    |
+| `dit commit [-m <message>] [--no-push] [<set>]` | Commits the latest save of `<set>`. Omits `-m` to use the generated diff summary (or `Initial commit`). Pushes the set automatically afterwards unless `--no-push` is passed.             |
+| `dit log [<set>]`                               | Lists commits on the set's branch, newest first, with each commit's folded saves indented underneath.                                                                                     |
+| `dit diff [<a> [<b>]] [--set <name>]`           | Compares two commits or saves. With no IDs, compares the branch head to the latest save; with `<a>`, compares `<a>` to the latest save; with `<a> <b>`, compares those two directly.      |
+| `dit time [<set>]`                              | Shows how long each set was open: total time, time since the last commit and time per commit.                                                                                             |
+
+## Branches, pushing and restoring
+
+| Command                                  | What it does                                                                                                                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dit push [<set>] [--project <name>]`    | Pushes saves, time spans, commits, lineage objects and (when enabled) sample objects to the instance. Use `--project` on a repository's first push if you belong to several projects. |
+| `dit checkout <commit> -b <name>`        | Materialises `<commit>` as a new branch file (`<stem> @<name>.als`) beside the main set file and points the new branch ref at it.                                                     |
+| `dit restore <commit> [--name <branch>]` | Fetches commit `<commit>` (numeric instance commit ID) and any missing objects from the hub into the matching local repository, creating a new branch (`restore-<7 hex>` by default). |
+
+## Bounces, backfill and Live integration
+
+| Command                                     | What it does                                                                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dit renders`                               | Lists pending and recent audio bounces detected by the dit app.                                                                                  |
+| `dit renders accept <id> [--set <session>]` | Uploads bounce `<id>` and attaches it as a version of its matched session's track (or `--set <session>` to target another session).              |
+| `dit renders reject <id> [--never-here]`    | Marks bounce `<id>` as **Not a bounce** (synced across your account), or with `--never-here` also ignores its folder on this Mac.                |
+| `dit backfill [--in <root>...]`             | Lists discoverable Ableton Live project folders under Live's roots and `~/Music` (or repeatable `--in <root>` paths), sorted newest-saved first. |
+| `dit backfill <folder>... [--project <id>]` | Checks the given project folders, imports their `Backup/` history, checks hub storage and brings them into Projammr. Resumable if interrupted.   |
+| `dit script install`                        | Installs or updates Ableton Live's `dit` control-surface script in `<User Library>/Remote Scripts/dit`.                                          |
+| `dit script status`                         | Reports whether Live's `dit` script is installed, up to date and enabled in Live's last run.                                                     |

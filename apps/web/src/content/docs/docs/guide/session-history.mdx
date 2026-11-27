@@ -8,15 +8,19 @@ sidebar:
 import { Steps } from "@astrojs/starlight/components";
 import Screenshot from "@/components/Screenshot.astro";
 
-Every time [dit](/dit/) sees a new save of a set, it records it. A session's history is that timeline of saves and
-commits, with what changed between each one and the next: what you did last night, what the set looked like a month
-ago, and which save had the version you liked.
+Every time [dit](/docs/dit/saves-and-commits/) sees a new save of a set on your Mac, it records it and pushes it to
+your Projammr hub. A session's history in Projammr is that timeline of saves and commits, with what changed between each
+one and the next: what you did last night, what the set looked like a month ago, and which commit you want to restore.
 
 ## Where the saves come from
 
-Most saves in the history are the set as dit read it from disk while you worked. Ableton Live also keeps copies of
-earlier saves in the set's [`Backup` folder](/dit/). Saves imported from there carry a **Backup** mark, filling in the
-history from before dit was watching.
+Most saves in the history are the set as dit read it from disk while you worked, grouped under your manual commits and
+automatic [checkpoints](/docs/dit/saves-and-commits/#automatic-checkpoints). Ableton Live also keeps copies of earlier
+saves in the set's `Backup/` folder; importing an existing project with [Bring in projects](/docs/dit/backfill/) brings
+those copies in with a **Backup** mark, filling in the history from before dit was watching.
+
+From any commit pushed by dit, you can also [restore that commit as a new branch](/docs/dit/saves-and-commits/#restoring-earlier-commits)
+on any tracked Mac without overwriting your current set file.
 
 ## The history page
 

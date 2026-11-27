@@ -89,8 +89,9 @@ would stay, and the API would fail to apply its migrations over them. When the A
 any migrations newer than the dump, taking a pre-migrate dump first.
 
 <Aside>
-  Restoring a pre-migrate dump to undo an upgrade also means going back to the version you ran before it; see
-  [rolling back](/docs/self-hosting/upgrades/#rolling-back).
+  Restoring a pre-migrate dump to undo an upgrade also means going back to the
+  version you ran before it; see [rolling
+  back](/docs/self-hosting/upgrades/#rolling-back).
 </Aside>
 
 ## Restore the media
@@ -104,3 +105,18 @@ docker compose run --rm --entrypoint sh api -c 'tar -xzf backups/static-20260923
 
 Restore the database and the media from the same backup, so the rows and the files agree. Files uploaded after that
 backup stay in the volume, but nothing in the restored database refers to them.
+
+## Backups with S3 or R2 storage
+
+When `STORAGE_BACKEND=s3` is enabled (see [Object storage (S3 and R2)](/docs/self-hosting/storage/)), the `backup`
+service still works the same way for PostgreSQL, while your media durability moves to the bucket:
+
+- **PostgreSQL dumps (`manual-<time>.dump` and pre-migrate dumps) stay the same.** Continue taking regular database
+  backups and copying them off the host — PostgreSQL holds every project, track, session, save metadata, commit,
+  comment, note, lyric and account.
+- **`static-<time>.tar.gz` covers only the local `static-data` volume.** Once you run with `STORAGE_BACKEND=s3`, new
+  audio files, artwork, spectrograms and `dit` objects are written to your S3 or R2 bucket rather than `static-data`,
+  so the tarball will be empty (or hold only pre-migration files).
+- **Protect the bucket directly.** Enable bucket versioning (and, if needed, lifecycle rules or cross-region
+  replication) in Cloudflare R2, AWS S3 or MinIO so accidental deletes or bad restores can be recovered alongside your
+  PostgreSQL dump.

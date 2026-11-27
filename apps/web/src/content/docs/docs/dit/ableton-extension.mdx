@@ -1,0 +1,117 @@
+---
+title: Ableton Live extension
+description: Commit from inside Ableton Live, add notes or cue points from an arrangement selection, and sync timestamped Projammr comments to Live locators.
+sidebar:
+  order: 60
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+Alongside Live's `dit` control-surface script (which reports the open set, transport state and live track edits to the
+menu bar app), Projammr includes an **Ableton Live extension** (`extensions/ableton/`, manifest name **Projammr (dit)**)
+built with Ableton's JavaScript/TypeScript Extensions SDK (`1.0.0-beta.1`).
+
+The extension requires **Ableton Live 12.4.5 or later** (or **Live 13 Beta**) with Ableton's Extensions API `1.0.0` and
+adds three right-click actions directly inside Live.
+
+## What the extension does
+
+### 1. Projammr: Commit / Open dit…
+
+Available when you right-click any **Audio Track**, **MIDI Track**, **Scene**, **Audio Clip**, **MIDI Clip** or **Clip
+Slot**.
+
+- Connects directly to the running `dit` menu bar app over its local socket (`dit.sock`).
+- Opens a modal dialog showing the current set, branch, how many saves have landed since your last commit, and dit's
+  suggested diff summary.
+- Lets you edit the commit message and press `⌘↩` to commit and push — or tick **Keep local only (`--no-push`)** to
+  commit locally without pushing — or select **Open dit panel** to jump straight to the menu bar panel.
+
+If you have not saved your latest edits in Live yet, press `⌘S` first so dit sees them on disk.
+
+### 2. Projammr: Add Note / Cue Point…
+
+Available when you right-click an **Arrangement time selection** on an **Audio Track** or **MIDI Track**.
+
+- Captures the selected track names, the 1-based bar range (`Bars X.Y–A.B`), and the selection's start time in
+  milliseconds (`positionMs`).
+- Lets you choose either or both destinations before pressing `⌘↩`:
+  - **Add Live cue point:** creates a named Ableton Live Cue Point (locator) at the start of the selection in a single
+    undo step.
+  - **Post to Projammr:** posts a timestamped comment (`POST /api/comments`) to your bound session's primary or latest
+    audio version (so it pins directly onto the waveform), or falls back to the session itself if the track has no audio
+    versions yet.
+
+### 3. Projammr: Sync Comments to Cue Points…
+
+Available when you right-click any **Audio Track**, **MIDI Track** or **Scene**.
+
+- Resolves the open set's bound Projammr session to its primary (or latest) audio version and fetches every open
+  (unresolved) timestamped comment.
+- Converts each comment's `positionMs` into beats at your set's current tempo and displays its timecode and target bar.
+- Automatically marks comments that already have a matching Cue Point in Live as **already in Live** so duplicates are
+  skipped.
+- Adds all ticked comments as Ableton Live Cue Points in one undo step (`withinTransaction`).
+
+## Authentication
+
+- **Committing** works through the running `dit` menu bar app over `dit.sock`; no separate credentials are needed.
+- **Posting and syncing comments** call your Projammr server's REST API directly. The extension looks up your bearer
+  token in this order:
+  1. The `PROJAMMR_TOKEN` environment variable.
+  2. `<extension storageDirectory>/auth.json`, formatted as `{ "<instanceUrl>": "<token>" }`.
+  3. `dit`'s existing macOS Keychain entry (`service = "dit"` or `"dit.dev"`, `account = <instanceUrl>`).
+
+If you are already signed in with `dit` on macOS, step 3 works automatically with no extra setup. You can also override
+the target server URL by setting `PROJAMMR_INSTANCE` in `extensions/ableton/.env`.
+
+## Building and installing from source
+
+<Aside type="note" title="Closed-beta SDK requirement">
+  Ableton's Extensions SDK is in closed beta, so its tarballs are not committed
+  to the Projammr repository (`extensions/ableton/vendor/` is gitignored) and
+  the extension lives outside the monorepo's Bun workspaces. Download
+  `extensions-sdk-1.0.0-beta.1.zip` from Ableton's beta portal before building.
+</Aside>
+
+<Steps>
+
+1. Extract the two SDK tarballs into `extensions/ableton/vendor/`:
+
+   ```sh
+   mkdir -p extensions/ableton/vendor
+   unzip -j ~/Downloads/extensions-sdk-1.0.0-beta.1.zip \
+     "extensions-sdk-1.0.0-beta.1/ableton-extensions-sdk-1.0.0-beta.1.tgz" \
+     "extensions-sdk-1.0.0-beta.1/ableton-extensions-cli-1.0.0-beta.1.tgz" \
+     -d extensions/ableton/vendor
+   ```
+
+2. Configure your Live app path, install dependencies, run the tests and build:
+
+   ```sh
+   cd extensions/ableton
+   cp .env.example .env   # set EXTENSION_HOST_PATH to your Live app bundle
+   npm install
+   npm test
+   npm run build
+   ```
+
+3. Load the extension in Ableton Live using either method below:
+
+   - **Install as an `.ablx` package:** build a distributable archive and install it from Live's **Settings →
+     Extensions**:
+
+     ```sh
+     cd extensions/ableton
+     npm run pack
+     ```
+
+   - **Run in Developer Mode (live reload):** enable **Developer Mode** in Live under **Settings → Extensions**, then
+     start the development host:
+
+     ```sh
+     cd extensions/ableton
+     npm start
+     ```
+
+</Steps>

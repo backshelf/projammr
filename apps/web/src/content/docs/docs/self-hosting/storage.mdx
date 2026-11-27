@@ -1,0 +1,155 @@
+---
+title: Object storage (S3 and R2)
+description: Store uploaded audio, artwork, analysis files and dit objects in Cloudflare R2, AWS S3 or MinIO, and migrate an existing instance from local disk.
+sidebar:
+  order: 35
+---
+
+import { Aside, Steps, TabItem, Tabs } from "@astrojs/starlight/components";
+
+By default, Projammr stores uploaded files on the host's disk inside the `static-data` Docker volume
+(`STORAGE_BACKEND=local`). For larger catalogues or hosts with small local disks, you can store every blob in any
+S3-compatible object bucket — such as **Cloudflare R2**, **AWS S3** or **MinIO** — using `STORAGE_BACKEND=s3`.
+
+## What moves to the bucket
+
+Switching to `STORAGE_BACKEND=s3` moves **all** stored files to your bucket under the same key structure:
+
+- `assets/`: uploaded audio bounces, converted downloads and track/session attachments;
+- `images/` and `images/variants/`: uploaded cover artwork and generated resized variants;
+- `analysis/`: generated spectrograms and analysis assets; and
+- `objects/`: content-addressed `dit` save, commit and sample objects.
+
+Your bucket stays **private**. Projammr never exposes public bucket URLs or hands out direct bucket credentials to
+clients — audio streaming (including HTTP `Range` requests for waveform scrubbing), artwork, analysis assets and `dit`
+fetches all continue to flow through the Projammr API behind your instance's authentication and share-link permissions.
+
+Uploads stream chunk by chunk through a temporary file straight to your bucket without buffering the whole file in server
+RAM.
+
+## Configuration variables
+
+Add these variables to `.env` at the root of the repository (all are passed to the `api` service by `docker-compose.yml`
+and listed in [Configuration](/docs/self-hosting/configuration/)):
+
+| Variable               | Required when `STORAGE_BACKEND=s3` | Purpose                                                                                                                             |
+| ---------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `STORAGE_BACKEND`      | Yes (`s3`)                         | `local` (default) or `s3`.                                                                                                          |
+| `S3_BUCKET`            | Yes                                | Name of the bucket holding your instance's objects.                                                                                 |
+| `S3_ACCESS_KEY_ID`     | Yes                                | Access key ID with read, write, list and delete permissions on the bucket (or prefix).                                              |
+| `S3_SECRET_ACCESS_KEY` | Yes                                | Secret access key paired with `S3_ACCESS_KEY_ID`.                                                                                   |
+| `S3_ENDPOINT`          | For R2 and MinIO (optional on AWS) | Custom S3 endpoint URL (for example `https://<account-id>.r2.cloudflarestorage.com`). Leave unset to use AWS S3's default endpoint. |
+| `S3_REGION`            | Optional (defaults to `auto`)      | Bucket region. Keep `auto` for Cloudflare R2; set your bucket's region for AWS S3 (for example `us-east-1`).                        |
+| `S3_PREFIX`            | Optional                           | Key prefix prepended to every object key (for example `projammr/`), useful when sharing a bucket across applications.               |
+
+The API validates these variables on startup and refuses to start with a clear error if `STORAGE_BACKEND=s3` is set while
+a required `S3_*` variable is missing.
+
+### Provider examples
+
+<Tabs syncKey="s3-provider">
+  <TabItem label="Cloudflare R2">
+    Create a private R2 bucket and an R2 API token with **Object Read & Write** permission scoped to that bucket, then
+    set:
+
+    ```dotenv
+    STORAGE_BACKEND=s3
+    S3_BUCKET=projammr-media
+    S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+    S3_REGION=auto
+    S3_ACCESS_KEY_ID=<r2-access-key-id>
+    S3_SECRET_ACCESS_KEY=<r2-secret-access-key>
+    # S3_PREFIX=projammr/
+    ```
+
+  </TabItem>
+  <TabItem label="AWS S3">
+    Create a private S3 bucket (keep **Block all public access** on) and an IAM user or role policy allowing
+    `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` and `s3:ListBucket` on that bucket, then set:
+
+    ```dotenv
+    STORAGE_BACKEND=s3
+    S3_BUCKET=projammr-media
+    S3_REGION=us-east-1
+    S3_ACCESS_KEY_ID=<aws-access-key-id>
+    S3_SECRET_ACCESS_KEY=<aws-secret-access-key>
+    # S3_PREFIX=projammr/
+    ```
+
+    Leave `S3_ENDPOINT` unset for standard AWS S3.
+
+  </TabItem>
+  <TabItem label="MinIO">
+    Create a private bucket and access key in MinIO, then point `S3_ENDPOINT` at your MinIO server:
+
+    ```dotenv
+    STORAGE_BACKEND=s3
+    S3_BUCKET=projammr-media
+    S3_ENDPOINT=https://minio.example.com
+    S3_REGION=us-east-1
+    S3_ACCESS_KEY_ID=<minio-access-key>
+    S3_SECRET_ACCESS_KEY=<minio-secret-key>
+    # S3_PREFIX=projammr/
+    ```
+
+  </TabItem>
+</Tabs>
+
+For a brand-new instance, edit `.env` and start (or recreate) the stack:
+
+```sh
+docker compose up -d
+```
+
+## Migrating an existing instance from local disk
+
+If your instance already has audio, artwork, analysis files or `dit` objects in the `static-data` volume, Projammr ships
+an idempotent migration script (`dist/scripts/migrate-storage.js`) inside the `api` container. It copies every file from
+`static-data` into your configured S3/R2 bucket, skips keys that are already present with the matching byte size, and
+**never deletes** local files.
+
+<Steps>
+
+1. Take a fresh [backup](/docs/self-hosting/backups/) first so you have a snapshot of both the database and
+   `static-data`.
+
+2. Add `STORAGE_BACKEND=s3` and your `S3_*` variables to `.env` (keep `static-data` mounted — `docker-compose.yml` mounts
+   it by default) and recreate the `api` service:
+
+   ```sh
+   docker compose up -d api
+   ```
+
+3. Run a dry run to check connectivity and see how many local files will be copied:
+
+   ```sh
+   docker compose exec api bun dist/scripts/migrate-storage.js --dry-run
+   ```
+
+4. Run the migration. It uploads with a default concurrency of 8 (override with `--concurrency <n>`) and is safe to
+   re-run if interrupted:
+
+   ```sh
+   docker compose exec api bun dist/scripts/migrate-storage.js
+   ```
+
+5. Verify that every file referenced by PostgreSQL (`assets`, `images`, spectrograms and `dit` objects) exists in the
+   bucket:
+
+   ```sh
+   docker compose exec api bun dist/scripts/migrate-storage.js --verify
+   ```
+
+</Steps>
+
+<Aside type="caution">
+  Do not delete the `static-data` volume until `--verify` exits cleanly and you
+  have confirmed audio playback, cover art and a `dit` restore work against the
+  bucket.
+</Aside>
+
+## Backups with S3 or R2
+
+PostgreSQL still holds every row of your catalogue, so continue taking regular database backups with the `backup`
+service. See [Backups and restore](/docs/self-hosting/backups/#backups-with-s3-or-r2-storage) for how `backup` behaves
+when `STORAGE_BACKEND=s3` is enabled.

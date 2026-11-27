@@ -1,0 +1,110 @@
+---
+title: Bounces and renders
+description: How dit detects new audio bounces, pairs WAV and MP3 exports, plays inline previews and remembers rejected files and folders across Macs.
+sidebar:
+  order: 40
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+When you export a mix from Ableton Live, dit watches for the new audio file, matches it to the set you were working on
+and offers to upload it to Projammr as a new [track version](/docs/guide/audio-versions/). Nothing is uploaded until you
+accept it.
+
+## How bounce detection works
+
+While dit is signed in to a Projammr instance, its render watcher listens for new audio files (`.wav`, `.mp3`, `.aiff`,
+`.aif`, `.flac`, `.m4a`, `.aac`, `.ogg`) across your home folder — or only inside the folders you choose under
+**Settings → Bounces → Watch for bounces in**.
+
+1. **Wait for the export to finish:** dit checks that the file's size and modification time stay identical across two
+   reads 5 seconds apart, then holds the file for **60 seconds** so a companion format (such as an MP3 exported alongside
+   a WAV) or a multi-file export has time to land.
+2. **Filter out non-bounces:** dit automatically ignores hidden dot-files and dot-folders, sync and temporary files
+   (`~*`, `*.icloud`, `*.dropbox`, `*.tmp`), `Library`, `Application Support`, `Trash`, `node_modules`, `Ableton`, Live's
+   managed subfolders (`Backup`, `Samples`, `Freeze`, `Recorded`, `Ableton Project Info`), any path containing the word
+   `stem`, `stems` or `stemz`, and any extra folders you add under **Settings → Bounces → Never look in**.
+3. **Match to a set:** dit scores each settled file against sets already pushed to your Projammr hub using the file name
+   versus the track, set and project folder names, where the file sits, how close in time it was written to a recent save
+   and whether it meets the 30-second length floor.
+
+Files that do not relate to a tracked set are dropped quietly. Matching files appear under **New bounce** in the dit
+panel (and show a `♪` glyph in the menu bar, along with a macOS notification offering **Add as version**).
+
+<Aside>
+  dit does not scan your home folder on launch. Only bounces written (or
+  modified) while dit is running are proposed.
+</Aside>
+
+## Reviewing a "New bounce" card
+
+Each **New bounce** card shows:
+
+- the file name (or both file names for a paired export) and its folder;
+- its duration, how long after your last save it was bounced (for example `bounced 4 min after your last save`), and its
+  file size;
+- the matched set and why it matched (`named like the set`, `in its folder`, `4 min after your last save`).
+
+### Inline audio preview and keyboard shortcuts
+
+Click the play button on any card — or press `Space` while the card is selected — to audition the bounce right inside the
+panel without opening Finder. Playback starts one-third of the way into the file so you hear the mix straight away
+instead of a silent intro, and stops automatically if the panel loses focus.
+
+Inside the **New bounce** list, you can work without a mouse:
+
+| Key       | Action                                              |
+| --------- | --------------------------------------------------- |
+| `↑` / `↓` | Move between bounce cards (`Home` / `End` for ends) |
+| `Space`   | Play or pause the selected bounce                   |
+| `←` / `→` | Seek back or forward 10 seconds while playing       |
+| `Y`       | **Add as version**                                  |
+| `N`       | **Not a bounce**                                    |
+
+## WAV / MP3 pairing and batches
+
+Ableton Live commonly exports a WAV and an MP3 at the same time (for example `halogen - mix 9.wav` and
+`halogen - mix 9.mp3`).
+
+- **Pairs:** files in the same folder with the same stem (case-insensitive) are grouped into a single card naming both
+  files. dit chooses the largest file that fits within your size limit, breaking ties in favour of a lossless format, and
+  tells you which file will upload (for example `Only the largest file under your size limit is uploaded.`).
+- **Batches:** if three or more bounces land within 60 seconds of each other, dit waits until the whole export settles
+  before proposing them.
+
+## Size limits
+
+Two limits govern bounce uploads:
+
+- **dit's local limit:** set under **Settings → Bounces → Max upload size (MB)** (`0` means no local limit).
+- **Your Projammr instance's limit:** configured by `MAX_UPLOAD_MB` (default `128 MB`, or the instance's **Largest
+  upload** setting).
+
+If every file in a proposed bounce is larger than the active limit, the card shows **Over your size limit** and will not
+upload until the limit is raised (in dit's settings or on your Projammr instance).
+
+## Accepting or turning down a bounce
+
+Every card offers four decisions:
+
+- **Add as version** (`Y`): checks whether the file's fingerprint is already on the server for this project, streams the
+  file from disk if not, and attaches it to the session's track as the next version — linked to the newest save at or
+  before the bounce's timestamp. If the server is temporarily unreachable, the card moves to **Queued** and retries
+  automatically when the hub is back. If the session is not yet linked to a track in Projammr, the upload stays saved and
+  dit asks you to link the session to a track first.
+- **Not this set**: opens a picker listing the repository's other sets on the hub and uploads the bounce as a version of
+  the set you pick.
+- **Not a bounce** (`N`): records the file's fingerprint (`dit:<size>:<sha256 of first and last 64 KiB>`) and syncs it to
+  your Projammr account. Because the rejection is by content fingerprint and synced across your account, that file is
+  never proposed again on **any** Mac you sign in to — even if you rename or move it.
+- **Never here**: records the file's folder for **this Mac** (and syncs the per-machine list to your hub) so nothing
+  written in that folder is proposed again on that computer.
+
+### Undoing a rejection
+
+You can reverse either rejection at any time in **Settings → Bounces**:
+
+- **Files marked Not a bounce** lists rejected files with a **Forget** button on each.
+- **Folders marked Never here** lists ignored folders with a **Forget** button on each.
+
+You can also list, accept and reject bounces from the terminal with [`dit renders`](/docs/dit/cli/#bounces-backfill-and-live-integration).
