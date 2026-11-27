@@ -58,6 +58,7 @@ import {
   saveSampleObjects,
 } from "../schema/objects.js";
 import { priorityLevels } from "../schema/priority-levels.js";
+import { branches, commits } from "../schema/repos.js";
 import { saves } from "../schema/saves.js";
 import { sessions } from "../schema/sessions.js";
 import {
@@ -243,6 +244,38 @@ const seedFillerSaves = (set: DitSet) =>
       source: "scan" as const,
     }))
   );
+
+/**
+ * {@link FILLER_ROWS} commits on a filler branch of `set`, so `commits` spans
+ * dozens of pages and the planner probes `commit_repo_hash` rather than
+ * scanning a one-page table.
+ */
+async function seedFillerCommits(
+  set: DitSet,
+  saveId: number,
+  label: string
+): Promise<number> {
+  const [branch] = await db
+    .insert(branches)
+    .values({
+      sessionId: set.sessionId,
+      name: `${label}-filler-${randomUUID()}`,
+    })
+    .returning({ id: branches.id });
+  await db.insert(commits).values(
+    Array.from({ length: FILLER_ROWS }, (_, n) => ({
+      repoId: set.repoId,
+      sessionId: set.sessionId,
+      branchId: branch!.id,
+      hash: hashOf(`${label}-filler-commit-${n}`),
+      saveId,
+      message: `${label} filler ${n}`,
+      kind: "checkpoint" as const,
+      committedAt: new Date(recent(2) + n),
+    }))
+  );
+  return branch!.id;
+}
 
 /** Room to seed, sweep and remove a {@link LARGE_SET} under load. */
 const LARGE_TIMEOUT = 60_000;
@@ -977,6 +1010,7 @@ describe("sweepSaveContent", () => {
       const hashes = await seedLargeSet(set, "stale-plans");
       const save = savePayload("stale-plans", recent(1));
       const saveHashes = objectsOf(save);
+      let fillerBranchId: number | undefined;
       try {
         await seedFillerSaves(set);
         // One save rebuilding from every object gives `save_objects` the
@@ -989,6 +1023,7 @@ describe("sweepSaveContent", () => {
           .where(
             and(eq(saves.sessionId, set.sessionId), eq(saves.hash, save.hash))
           );
+        fillerBranchId = await seedFillerCommits(set, row!.id, "stale-plans");
         await db
           .insert(saveObjects)
           .values(
@@ -1112,6 +1147,10 @@ describe("sweepSaveContent", () => {
           }
         }
       } finally {
+        if (fillerBranchId !== undefined) {
+          await db.delete(commits).where(eq(commits.branchId, fillerBranchId));
+          await db.delete(branches).where(eq(branches.id, fillerBranchId));
+        }
         await db
           .delete(saveObjects)
           .where(inArray(saveObjects.objectHash, [...hashes, ...saveHashes]));

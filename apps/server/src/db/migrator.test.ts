@@ -186,11 +186,14 @@ describe("applyMigrations", () => {
         expect(disableIndex).toBeGreaterThanOrEqual(0);
         expect(resetIndex).toBeGreaterThan(disableIndex);
 
+        // Restore connect before Pool.prototype.query, which passes a callback to connect().
+        timedPool.connect = originalConnect;
         const { rows } = await timedPool.query<{ statement_timeout: string }>(
           "show statement_timeout"
         );
         expect(rows[0]?.statement_timeout).toBe("5s");
       } finally {
+        timedPool.connect = originalConnect;
         await timedPool.end();
       }
     }, "migrator_test");
