@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import sharp from "sharp";
+import { stubGlobal, unstubAllGlobals } from "@workspace/test/globals";
 import { afterEach, describe, expect, it } from "bun:test";
 import { app } from "../app.js";
 import { MAX_PAGE_SIZE } from "../db/queries/pagination.js";
@@ -181,6 +182,81 @@ describe("images", () => {
       body: JSON.stringify({ imageId: 1, kind: "track", parentId: 1 }),
     });
     expect(res.status).toBe(404);
+  });
+
+  it("imports an image from a public URL into storage with palette and variants, gated by role", async () => {
+    requireProject();
+    const imgBytes = new Uint8Array(
+      await sharp({
+        create: {
+          width: 48,
+          height: 48,
+          channels: 3,
+          background: { r: 40, g: 120, b: 230 },
+        },
+      })
+        .jpeg()
+        .toBuffer()
+    );
+
+    const realFetch = globalThis.fetch;
+    stubGlobal("fetch", (async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === "https://1.1.1.1/imported-cover.jpg") {
+        return new Response(imgBytes, {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      return realFetch(input, init);
+    }) as typeof fetch);
+
+    try {
+      const asViewer = await request("viewer", "/images/import", {
+        method: "POST",
+        body: JSON.stringify({
+          url: "https://1.1.1.1/imported-cover.jpg",
+          projectId: suite.projectId,
+        }),
+      });
+      expect(asViewer.status).toBe(403);
+
+      const privateUrl = await asEditor("/images/import", {
+        method: "POST",
+        body: JSON.stringify({
+          url: "http://127.0.0.1/nope.jpg",
+          projectId: suite.projectId,
+        }),
+      });
+      expect(privateUrl.status).toBe(400);
+
+      const imported = await asEditor("/images/import", {
+        method: "POST",
+        body: JSON.stringify({
+          url: "https://1.1.1.1/imported-cover.jpg",
+          projectId: suite.projectId,
+        }),
+      });
+      expect(imported.status).toBe(201);
+      const image = (await imported.json()) as {
+        id: number;
+        name: string;
+        assetPath: string;
+        accentHue: number | null;
+        accentChroma: number | null;
+        variantsJobId: number | null;
+      };
+      expect(image.name).toBe("imported-cover.jpg");
+      expect(existsSync(onDiskPath(image.assetPath))).toBe(true);
+      expect(image.accentHue).not.toBeNull();
+      expect(image.accentChroma).not.toBeNull();
+      expect(Number.isInteger(image.variantsJobId)).toBe(true);
+    } finally {
+      unstubAllGlobals();
+    }
   });
 });
 

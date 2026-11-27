@@ -21,7 +21,7 @@ import { clearEntityLabels, type LabelTarget } from "./labels.js";
  * whitelist of sort keys; everything else here is identical across the three.
  */
 
-const DEFAULT_PAGE_SIZE = 50;
+export const DEFAULT_PAGE_SIZE = 50;
 export const MAX_PAGE_SIZE = 200;
 
 /** Query params common to every paginated list route. `sort` is `<key>.<dir>`. */

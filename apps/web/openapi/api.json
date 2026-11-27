@@ -11087,12 +11087,6 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "image": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
                   "description": {
                     "anyOf": [
                       {
@@ -11711,12 +11705,6 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "image": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
                   "description": {
                     "anyOf": [
                       {
@@ -12157,12 +12145,6 @@
                         "type": "integer",
                         "minimum": -2147483648,
                         "maximum": 2147483647
-                      },
-                      "image": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
                       },
                       "statusId": {
                         "anyOf": [
@@ -15475,12 +15457,6 @@
                     "minimum": -2147483648,
                     "maximum": 2147483647
                   },
-                  "image": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
                   "statusId": {
                     "anyOf": [
                       {
@@ -16523,12 +16499,6 @@
                     "minimum": -2147483648,
                     "maximum": 2147483647
                   },
-                  "image": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
                   "statusId": {
                     "anyOf": [
                       {
@@ -17372,12 +17342,6 @@
                         "type": "integer",
                         "minimum": -9007199254740991,
                         "maximum": 9007199254740991
-                      },
-                      "image": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
                       },
                       "isrc": {
                         "anyOf": [
@@ -21745,12 +21709,6 @@
                     "minimum": -2147483648,
                     "maximum": 2147483647
                   },
-                  "image": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
                   "isrc": {
                     "anyOf": [
                       {
@@ -24050,12 +24008,6 @@
                     "type": "integer",
                     "minimum": -9007199254740991,
                     "maximum": 9007199254740991
-                  },
-                  "image": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   },
                   "isrc": {
                     "anyOf": [
@@ -132978,6 +132930,266 @@
                   ],
                   "additionalProperties": false
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/images/import": {
+      "post": {
+        "operationId": "postApiImagesImport",
+        "tags": [
+          "Images"
+        ],
+        "summary": "Import an image from a public http(s) URL into storage, extracting its accent palette and queueing resize variants",
+        "description": "Import an image from a public http(s) URL into storage, extracting its accent palette and queueing resize variants. Omit `projectId` for an avatar.",
+        "responses": {
+          "201": {
+            "description": "Image imported successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "assetPath": {
+                      "type": "string"
+                    },
+                    "createdByUser": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "projectId": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "project",
+                        "user",
+                        "instance"
+                      ]
+                    },
+                    "variantsReady": {
+                      "type": "boolean"
+                    },
+                    "variantBytes": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "accentHue": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": -8388608,
+                          "maximum": 8388607
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "accentChroma": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": -8388608,
+                          "maximum": 8388607
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "accentHex": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "variantsJobId": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "createdAt",
+                    "updatedAt",
+                    "name",
+                    "type",
+                    "size",
+                    "assetPath",
+                    "createdByUser",
+                    "projectId",
+                    "scope",
+                    "variantsReady",
+                    "variantBytes",
+                    "accentHue",
+                    "accentChroma",
+                    "accentHex",
+                    "variantsJobId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "projectId": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "url"
+                ]
               }
             }
           }

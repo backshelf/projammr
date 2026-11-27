@@ -4,7 +4,7 @@ import {
   newCollectionSchema,
 } from "./schema/collections.js";
 import * as enums from "./schema/enums.js";
-import { newProjectSchema } from "./schema/projects.js";
+import { editProjectSchema, newProjectSchema } from "./schema/projects.js";
 import {
   dawCapabilitiesSchema,
   editSessionSchema,
@@ -101,6 +101,44 @@ describe("insert and update schemas", () => {
       newTrackSchema.parse({ title: "Low Tide", projectId: 1, archivedAt })
     ).not.toHaveProperty("archivedAt");
     expect(editTrackSchema.parse({ archivedAt })).toEqual({});
+  });
+
+  // Cover images are written only through `/images/parent/*` and MCP's cover
+  // tools so every cover backs onto a stored `images` row with a palette.
+  it("leaves image out of project, collection and track create and edit schemas", () => {
+    const externalUrl = "https://example.com/cover.jpg";
+
+    for (const schema of [
+      newProjectSchema,
+      editProjectSchema,
+      newCollectionSchema,
+      editCollectionSchema,
+      newTrackSchema,
+      editTrackSchema,
+    ]) {
+      expect(schema.shape).not.toHaveProperty("image");
+    }
+
+    expect(
+      newProjectSchema.parse({ name: "Tidal", links: [], image: externalUrl })
+    ).not.toHaveProperty("image");
+    expect(
+      newCollectionSchema.parse({
+        title: "Stuck",
+        projectId: 1,
+        image: externalUrl,
+      })
+    ).not.toHaveProperty("image");
+    expect(
+      newTrackSchema.parse({
+        title: "Worth",
+        projectId: 1,
+        image: externalUrl,
+      })
+    ).not.toHaveProperty("image");
+    expect(editProjectSchema.parse({ image: externalUrl })).toEqual({});
+    expect(editCollectionSchema.parse({ image: externalUrl })).toEqual({});
+    expect(editTrackSchema.parse({ image: externalUrl })).toEqual({});
   });
 
   it("reads a track row archived or live", () => {

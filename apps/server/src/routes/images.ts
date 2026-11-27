@@ -1,26 +1,20 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { basename } from "node:path";
 import { z } from "zod";
 import type { AuthedEnv } from "../auth.js";
 import {
-  createImage,
-  enqueueImageVariants,
   getImage,
   getImagesInProject,
+  imageParentKinds,
+  imageUploadResultSchema,
+  ingestImage,
   projectImagesPageSchema,
   removeImage,
   removeImageFromParent,
   setImageOnParent,
 } from "../db/queries/images.js";
 import { paginationQuerySchema } from "../db/queries/pagination.js";
-import {
-  addUsage,
-  assertStorageAllows,
-  scopesOf,
-} from "../db/queries/storage-usage.js";
-import { db } from "../db/index.js";
-import { imageSchema, type ImageScope } from "../db/schema/images.js";
+import { imageSchema } from "../db/schema/images.js";
 import {
   describer,
   errors,
@@ -33,30 +27,22 @@ import {
   respond,
   validator,
 } from "../lib/http.js";
-import { errorFields, log } from "../lib/log.js";
 import { multipartRequestBody } from "../lib/multipart.js";
 import {
   requireUploadedFile,
-  type StreamedFile,
   streamMultipartUpload,
 } from "../lib/multipart-stream.js";
-import { extractPalette } from "../lib/palette.js";
-import { removeStoredFile, storeUpload } from "../lib/storage.js";
+import { fetchRemoteImage } from "../lib/remote-image.js";
 import { gatedProject } from "../middleware/authorize-project.js";
 
 const { describe, describeRaw, route } = describer("Images");
 
 const app = new Hono<AuthedEnv>({ strict: false });
 
-const logger = log("images");
-
 /** The paging vocabulary the project image listing takes: page and size only. */
 const imagesPageQuerySchema = paginationQuerySchema.pick({
   page: true,
   pageSize: true,
-});
-const imageUploadResultSchema = imageSchema.extend({
-  variantsJobId: z.number().nullable(),
 });
 
 const imageUploadFormSchema = z.object({
@@ -65,72 +51,10 @@ const imageUploadFormSchema = z.object({
 });
 const imageUploadFieldsSchema = imageUploadFormSchema.omit({ file: true });
 const instanceImageUploadFormSchema = z.object({ file: z.file() });
-
-/**
- * Stores an uploaded image and its row, with the scope and project the route
- * derived rather than any the client named: the scope is what the static
- * handler reads to decide who may have the bytes. The bytes count towards the
- * project, when there is one, and the uploader.
- */
-async function acceptImage(
-  c: Context<AuthedEnv>,
-  file: StreamedFile,
-  owner: { scope: ImageScope; projectId: number | null }
-) {
-  const user = c.get("user");
-  const scopes = scopesOf({ projectId: owner.projectId, userId: user.id });
-
-  // Refused before the bytes are written rather than after the row: an
-  // upload that will not be allowed to stay should never reach storage.
-  await assertStorageAllows(scopes, file.size);
-
-  // Read the staged file before `storeUpload` moves it into place on local storage.
-  const palette = await extractPalette(file.tempPath).catch((e) => {
-    logger.error("palette extraction failed", errorFields(e));
-    return null;
-  });
-
-  // The write is awaited and its failure is allowed to reach `app.onError`:
-  // a row pointing at a file that was never written would report an upload
-  // that did not happen, and the static handler would serve a 404 for it.
-  const imagePath = await storeUpload("images", file);
-
-  const image = await createImage({
-    assetPath: imagePath,
-    name: basename(file.name),
-    size: file.size,
-    type: file.type,
-    createdByUser: user.id,
-    projectId: owner.projectId,
-    scope: owner.scope,
-    accentHue: palette?.accentHue ?? null,
-    accentChroma: palette?.accentChroma ?? null,
-    accentHex: palette?.accentHex ?? null,
-  }).catch(async (error) => {
-    await removeStoredFile(imagePath);
-    throw error;
-  });
-
-  // The counter follows the row rather than sharing its statement, so a
-  // crash between the two leaves it low until the storage audit re-derives
-  // it — the same repair that covers every other way it can drift.
-  await addUsage(db, scopes, image.size);
-
-  // The resizes are pre-generated so the first render is a cache hit, but the
-  // image is already stored and readable: a queue that will not take the work
-  // is not a failed upload, and the static handler resizes on demand anyway.
-  const variantsJob = await enqueueImageVariants(image, user.id).catch(
-    (error) => {
-      logger.error("failed to queue image variants", {
-        imageId: image.id,
-        ...errorFields(error),
-      });
-      return undefined;
-    }
-  );
-
-  return { ...image, variantsJobId: variantsJob?.id ?? null };
-}
+const imageImportBodySchema = z.object({
+  url: z.url(),
+  projectId: z.number().int().optional(),
+});
 
 app.post(
   "/upload",
@@ -161,12 +85,45 @@ app.post(
       return respond(
         c,
         imageUploadResultSchema,
-        await acceptImage(c, file, owner),
+        await ingestImage(
+          { kind: "staged", ...file },
+          { ...owner, userId: c.get("user").id }
+        ),
         201
       );
     } finally {
       await upload.cleanup();
     }
+  }
+);
+
+app.post(
+  "/import",
+  describe(
+    "Import an image from a public http(s) URL into storage, extracting its accent palette and queueing resize variants. Omit `projectId` for an avatar.",
+    {
+      status: 201,
+      schema: imageUploadResultSchema,
+      description: "Image imported successfully",
+    },
+    400,
+    413,
+    500
+  ),
+  validator("json", imageImportBodySchema),
+  async (c) => {
+    const { url, projectId } = c.req.valid("json");
+    const remote = await fetchRemoteImage(url);
+    const owner =
+      projectId == null
+        ? ({ scope: "user", projectId: null } as const)
+        : ({ scope: "project", projectId } as const);
+    return respond(
+      c,
+      imageUploadResultSchema,
+      await ingestImage(remote, { ...owner, userId: c.get("user").id }),
+      201
+    );
   }
 );
 
@@ -190,7 +147,10 @@ app.post(
       return respond(
         c,
         imageUploadResultSchema,
-        await acceptImage(c, file, { scope: "instance", projectId: null }),
+        await ingestImage(
+          { kind: "staged", ...file },
+          { scope: "instance", projectId: null, userId: c.get("user").id }
+        ),
         201
       );
     } finally {
@@ -199,7 +159,7 @@ app.post(
   }
 );
 
-const imageParentKindSchema = z.enum(["project", "collection", "track"]);
+const imageParentKindSchema = z.enum(imageParentKinds());
 
 app.put(
   "/parent/:kind/:parentId",

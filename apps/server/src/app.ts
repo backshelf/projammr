@@ -334,7 +334,7 @@ app.use("/images/*", authorizeProject(resolveImageRoute));
 // runaway client rather than to pace a legitimate sync.
 app.on(
   "POST",
-  ["/images/upload", "/images/instance"],
+  ["/images/upload", "/images/instance", "/images/import"],
   rateLimit("image-upload")
 );
 app.route("/images", images);

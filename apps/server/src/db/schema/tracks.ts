@@ -27,6 +27,7 @@ import {
   baseSchema,
   baseSchemaIgnores,
   blockDocumentSchema,
+  imageIgnores,
   scopeIgnores,
 } from "./base.js";
 import { commitKindEnum } from "./enums.js";
@@ -116,7 +117,12 @@ export const trackSchema = createSelectSchema(tracks)
     notes: blockDocumentSchema.nullable(),
   });
 export const newTrackSchema = createInsertSchema(tracks)
-  .omit({ ...trackDocuments, ...baseSchemaIgnores, ...trackArchiveIgnores })
+  .omit({
+    ...trackDocuments,
+    ...baseSchemaIgnores,
+    ...imageIgnores,
+    ...trackArchiveIgnores,
+  })
   .extend({
     title: z.string().trim().min(1),
     // Omitted, the project's default artists, status and explicit flag apply
@@ -133,6 +139,7 @@ export const editTrackSchema = createUpdateSchema(tracks)
     ...trackDocuments,
     ...baseSchemaIgnores,
     ...scopeIgnores,
+    ...imageIgnores,
     ...trackArchiveIgnores,
   })
   .extend({

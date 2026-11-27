@@ -1,5 +1,6 @@
 import type { AnyToolSpec } from "../spec.js";
 import { AUDIO_TOOLS } from "./audio.js";
+import { IMAGE_TOOLS } from "./images.js";
 import { MACHINE_TOOLS } from "./machines.js";
 import { NOTES_TOOLS } from "./notes.js";
 import { ORGANISE_TOOLS } from "./organise.js";
@@ -16,6 +17,7 @@ export const TOOLS: AnyToolSpec[] = [
   ...REPO_TOOLS,
   ...MACHINE_TOOLS,
   ...ORGANISE_TOOLS,
+  ...IMAGE_TOOLS,
   ...NOTES_TOOLS,
   ...AUDIO_TOOLS,
 ];

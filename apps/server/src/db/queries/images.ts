@@ -1,18 +1,29 @@
 import { and, asc, count, eq, inArray, isNotNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
+import { basename } from "node:path";
 import { z } from "zod";
 import {
   ensureVariantKey,
   removeVariants,
   VARIANT_WIDTHS,
 } from "../../lib/images.js";
-import { removeStoredFile, storedFileExists } from "../../lib/storage.js";
+import { errorFields, log } from "../../lib/log.js";
+import { extractPalette } from "../../lib/palette.js";
+import {
+  newStorageKey,
+  removeStoredFile,
+  storageExtension,
+  storeBytes,
+  storedFileExists,
+  storeUpload,
+} from "../../lib/storage.js";
 import { ENTITIES, entityModules } from "../../entities/index.js";
 import type { EntityKind } from "../../entities/types.js";
 import { db } from "../index.js";
 import {
   imageSchema,
   type Image,
+  type ImageScope,
   images,
   type NewImage,
 } from "../schema/images.js";
@@ -24,9 +35,120 @@ import {
   registerJobHandler,
 } from "./jobs.js";
 import { offsetOf, pageResponseSchema } from "./pagination.js";
-import { scopesOf, subtractUsage } from "./storage-usage.js";
+import {
+  addUsage,
+  assertStorageAllows,
+  scopesOf,
+  subtractUsage,
+} from "./storage-usage.js";
 
-export async function createImage(image: NewImage) {
+const logger = log("images");
+
+export const imageUploadResultSchema = imageSchema.extend({
+  variantsJobId: z.number().nullable(),
+});
+
+type IngestImageSource =
+  | {
+      kind: "staged";
+      tempPath: string;
+      name: string;
+      type: string;
+      size: number;
+    }
+  | {
+      kind: "bytes";
+      bytes: Uint8Array;
+      name: string;
+      type: string;
+    };
+
+type IngestImageOwner = {
+  scope: ImageScope;
+  projectId: number | null;
+  userId: string | null;
+};
+
+/**
+ * Stores an image (from a staged upload or in-memory bytes) into the active
+ * storage backend, extracts its accent palette, inserts its `images` row,
+ * updates storage counters, and queues pre-generated resize variants.
+ *
+ * Every path that puts an image into the instance — multipart uploads, URL
+ * imports, MCP cover tools and backfills — goes through here so none can skip
+ * palette extraction, storage limits or variants.
+ */
+export async function ingestImage(
+  source: IngestImageSource,
+  owner: IngestImageOwner
+): Promise<Image & { variantsJobId: number | null }> {
+  const size = source.kind === "staged" ? source.size : source.bytes.byteLength;
+  const scopes = scopesOf({ projectId: owner.projectId, userId: owner.userId });
+
+  // Refused before the bytes are written rather than after the row: an upload
+  // that will not be allowed to stay should never reach storage.
+  await assertStorageAllows(scopes, size);
+
+  const palette = await extractPalette(
+    source.kind === "staged" ? source.tempPath : Buffer.from(source.bytes)
+  ).catch((error) => {
+    logger.error("palette extraction failed", errorFields(error));
+    return null;
+  });
+
+  // The write is awaited and its failure propagates: a row pointing at a file
+  // that was never written would serve a 404.
+  let imagePath: string;
+  if (source.kind === "staged") {
+    imagePath = await storeUpload("images", {
+      tempPath: source.tempPath,
+      name: source.name,
+      type: source.type,
+    });
+  } else {
+    imagePath = newStorageKey(
+      "images",
+      storageExtension(source.name, source.type)
+    );
+    await storeBytes(imagePath, source.bytes, source.type || undefined);
+  }
+
+  const image = await createImage({
+    assetPath: imagePath,
+    name: basename(source.name),
+    size,
+    type: source.type,
+    createdByUser: owner.userId,
+    projectId: owner.projectId,
+    scope: owner.scope,
+    accentHue: palette?.accentHue ?? null,
+    accentChroma: palette?.accentChroma ?? null,
+    accentHex: palette?.accentHex ?? null,
+  }).catch(async (error) => {
+    await removeStoredFile(imagePath);
+    throw error;
+  });
+
+  await addUsage(db, scopes, image.size);
+
+  // The resizes are pre-generated so the first render is a cache hit, but the
+  // image is already stored and readable: a queue that will not take the work
+  // is not a failed upload, and the static handler resizes on demand anyway.
+  const variantsJob = await enqueueImageVariants(
+    image,
+    owner.userId ?? undefined
+  ).catch((error) => {
+    logger.error("failed to queue image variants", {
+      imageId: image.id,
+      ...errorFields(error),
+    });
+    return undefined;
+  });
+
+  return { ...image, variantsJobId: variantsJob?.id ?? null };
+}
+
+async function createImage(image: NewImage) {
   const [result] = await db.insert(images).values(image).returning();
   if (!result) throw new Error(`Failed to create image: ${image}`);
 
@@ -252,7 +374,7 @@ export async function removeImageFromParent(
  * the static handler's on-demand path — there is one per user and it is
  * requested moments after upload anyway.
  */
-export async function enqueueImageVariants(
+async function enqueueImageVariants(
   image: Image,
   createdBy?: string
 ): Promise<Job | undefined> {

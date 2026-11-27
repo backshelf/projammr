@@ -34,6 +34,13 @@ export const baseSchemaIgnores = {
 export const scopeIgnores = { projectId: true } as const;
 
 /**
+ * The cover path only `/images/parent/*` and MCP's cover tools may write:
+ * an entity's `image` must always name a stored `images` row so artwork
+ * resolution, palette extraction, variants and storage accounting stay intact.
+ */
+export const imageIgnores = { image: true } as const;
+
+/**
  * A BlockNote document: an array of blocks whose inner shape the editor owns.
  * Stored as jsonb and handed back to the editor untouched.
  */

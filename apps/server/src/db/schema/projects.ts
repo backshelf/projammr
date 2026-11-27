@@ -21,6 +21,7 @@ import {
   baseSchemaIgnores,
   blockDocumentSchema,
   type BlockDocument,
+  imageIgnores,
 } from "./base.js";
 import { memberRoleEnum } from "./enums.js";
 
@@ -46,14 +47,24 @@ export const projectSchema = createSelectSchema(projects).extend({
   description: blockDocumentSchema.nullable(),
 });
 export const newProjectSchema = createInsertSchema(projects)
-  .omit({ ...baseSchemaIgnores, description: true, links: true })
+  .omit({
+    ...baseSchemaIgnores,
+    ...imageIgnores,
+    description: true,
+    links: true,
+  })
   .extend({
     name: z.string().trim().min(1),
     description: blockDocumentSchema.nullable().optional(),
     links: z.array(projectLinkSchema),
   });
 export const editProjectSchema = createUpdateSchema(projects)
-  .omit({ ...baseSchemaIgnores, description: true, links: true })
+  .omit({
+    ...baseSchemaIgnores,
+    ...imageIgnores,
+    description: true,
+    links: true,
+  })
   .extend({
     name: z.string().trim().min(1).optional(),
     description: blockDocumentSchema.nullable().optional(),

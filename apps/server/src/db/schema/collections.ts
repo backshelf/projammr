@@ -21,6 +21,7 @@ import {
   baseSchema,
   baseSchemaIgnores,
   blockDocumentSchema,
+  imageIgnores,
   scopeIgnores,
 } from "./base.js";
 import { priorityLevels } from "./priority-levels.js";
@@ -97,7 +98,7 @@ export const collectionSchema = createSelectSchema(collections)
   .omit({ notes: true })
   .extend({ notes: blockDocumentSchema.nullable() });
 export const newCollectionSchema = createInsertSchema(collections)
-  .omit({ ...baseSchemaIgnores, notes: true })
+  .omit({ ...baseSchemaIgnores, ...imageIgnores, notes: true })
   .extend({
     title: z.string().trim().min(1),
     notes: blockDocumentSchema.nullish(),
@@ -106,7 +107,7 @@ export const newCollectionSchema = createInsertSchema(collections)
     priorityId: z.number().int().optional(),
   });
 export const editCollectionSchema = createUpdateSchema(collections)
-  .omit({ ...baseSchemaIgnores, ...scopeIgnores, notes: true })
+  .omit({ ...baseSchemaIgnores, ...scopeIgnores, ...imageIgnores, notes: true })
   .extend({
     title: z.string().trim().min(1).optional(),
     notes: blockDocumentSchema.nullish(),
