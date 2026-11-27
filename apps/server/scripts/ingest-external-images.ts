@@ -19,6 +19,7 @@ import { ingestImage, setImageOnParent } from "../src/db/queries/images.js";
 import { collections } from "../src/db/schema/collections.js";
 import { members, projects } from "../src/db/schema/projects.js";
 import { tracks } from "../src/db/schema/tracks.js";
+import { mediaQueue } from "../src/lib/jobs.js";
 import { log } from "../src/lib/log.js";
 import { fetchRemoteImage } from "../src/lib/remote-image.js";
 
@@ -186,6 +187,7 @@ async function main(): Promise<void> {
       process.exitCode = 1;
     }
   } finally {
+    await mediaQueue.idle();
     await db.$client.end();
   }
 }
