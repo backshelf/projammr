@@ -5,6 +5,7 @@
 import { LABEL } from "@workspace/ui/lib/shell";
 
 import Brand from "@/components/chrome/Brand.astro";
+import { siteHref } from "@/lib/urls";
 import { FOOTER_NAV } from "@/nav";
 import { SITE } from "@/site";
 ---
@@ -24,7 +25,7 @@ import { SITE } from "@/site";
           {group.links.map((link) => (
             <li>
               <a
-                href={link.href}
+                href={siteHref(link.href)}
                 {...(link.external ? { rel: "noopener" } : {})}
                 class="rounded-sm text-small text-ink-soft motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
               >
@@ -40,7 +41,7 @@ import { SITE } from "@/site";
     Most of Projammr is written by AI coding agents under human direction and
     review.{" "}
     <a
-      href="/ai/"
+      href={siteHref("/ai/")}
       class="text-ink underline decoration-rule-strong underline-offset-4 motion-ink hover:decoration-current"
     >
       Read how, before you rely on it.

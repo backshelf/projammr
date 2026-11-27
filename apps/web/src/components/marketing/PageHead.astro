@@ -7,6 +7,8 @@
    over the art takes `.on-art-soft`, which holds its contrast there. */
 import { LABEL } from "@workspace/ui/lib/shell";
 
+import { siteHref } from "@/lib/urls";
+
 type Props = {
   title: string;
   lede: string;
@@ -21,7 +23,7 @@ const { title, lede, crumb } = Astro.props;
     {crumb && (
       <nav aria-label="Breadcrumb">
         <a
-          href={crumb.href}
+          href={siteHref(crumb.href)}
           class:list={[
             LABEL,
             "on-art-soft rounded-sm underline decoration-transparent underline-offset-4 motion-ink hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none",

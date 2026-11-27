@@ -3,6 +3,9 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
+import { normalizeBasePath, stripBasePath } from "../src/lib/urls";
+import { SITE } from "../src/site";
+
 /* Starlight's link validator judges the docs only. This holds the marketing
    pages to the same standard over the built site: every internal `href` on
    them reaches a file the build wrote, and every `#hash` an element on the
@@ -27,8 +30,13 @@ async function builtFiles(dir: string): Promise<string[]> {
 
 /** Every internal link on a marketing page (anything outside `/docs/`) that
  * reaches no built file, or no element with its `#hash`, as
- * `<page> → <href>`. */
-async function brokenMarketingLinks(dir: string): Promise<string[]> {
+ * `<page> → <href>`. When `basePath` is set, every internal link must carry
+ * that prefix and resolve to a built file once the prefix is stripped. */
+async function brokenMarketingLinks(
+  dir: string,
+  basePath = ""
+): Promise<string[]> {
+  const basePrefix = normalizeBasePath(basePath);
   const files = new Set(await builtFiles(dir));
   const pages = [...files].filter(
     (file) => file.endsWith(".html") && !file.startsWith("docs/")
@@ -44,7 +52,15 @@ async function brokenMarketingLinks(dir: string): Promise<string[]> {
     return found;
   };
   const fileFor = (path: string): string | undefined => {
-    const bare = decodeURIComponent(path).replace(/^\//, "");
+    const decoded = decodeURIComponent(path);
+    if (
+      basePrefix !== "" &&
+      decoded !== basePrefix &&
+      !decoded.startsWith(`${basePrefix}/`)
+    ) {
+      return undefined;
+    }
+    const bare = stripBasePath(decoded, basePrefix).replace(/^\//, "");
     return [
       bare.endsWith("/") || bare === "" ? `${bare}index.html` : bare,
       `${bare}.html`,
@@ -55,7 +71,8 @@ async function brokenMarketingLinks(dir: string): Promise<string[]> {
   const broken: string[] = [];
   for (const page of pages) {
     const html = await Bun.file(join(dir, page)).text();
-    const base = new URL(urlOf(page), "https://site.invalid");
+    const pageUrl = `${basePrefix}${urlOf(page)}`;
+    const base = new URL(pageUrl, "https://site.invalid");
     for (const [, raw] of html.matchAll(HREF)) {
       const href = raw!.replaceAll("&amp;", "&");
       if (href === "" || /^[a-z][a-z0-9+.-]*:/i.test(href)) continue;
@@ -118,11 +135,30 @@ describe("brokenMarketingLinks", () => {
     ]);
     await rm(join(dir, "ai"), { recursive: true });
   });
+  it("validates base-prefixed links and rejects unprefixed root-relative links", async () => {
+    const baseDir = await mkdtemp(join(tmpdir(), "marketing-links-base-"));
+    try {
+      await mkdir(join(baseDir, "pricing"), { recursive: true });
+      await writeFile(
+        join(baseDir, "index.html"),
+        `<a href="/projammr/pricing/">p</a><a href="/projammr/#plans">h</a><section id="plans"></section>`
+      );
+      await writeFile(
+        join(baseDir, "pricing/index.html"),
+        `<a href="/pricing/">missing base</a>`
+      );
+      expect(await brokenMarketingLinks(baseDir, "/projammr")).toEqual([
+        "/pricing/ → /pricing/",
+      ]);
+    } finally {
+      await rm(baseDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("the built marketing pages", () => {
   it("link only to pages, files and anchors the build wrote", async () => {
     const dist = join(import.meta.dir, "..", "dist");
-    expect(await brokenMarketingLinks(dist)).toEqual([]);
+    expect(await brokenMarketingLinks(dist, SITE.basePath)).toEqual([]);
   });
 });

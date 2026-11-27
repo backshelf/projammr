@@ -587,7 +587,7 @@ fn an_untrusted_certificate_names_the_host_and_the_docs() {
     assert_eq!(
         error.to_string(),
         format!(
-            "Can't verify {host}'s certificate. Install its CA: https://projammr.example/docs/self-hosting/https/"
+            "Can't verify {host}'s certificate. Install its CA: https://backshelf.github.io/projammr/docs/self-hosting/https/"
         )
     );
 }

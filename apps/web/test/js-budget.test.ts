@@ -142,4 +142,36 @@ describe("jsBudget integration", () => {
       })
     ).resolves.toBeUndefined();
   });
+
+  it("strips the configured base path when resolving assets from dist/", async () => {
+    const baseDir = await mkdtemp(join(tmpdir(), "js-budget-base-"));
+    try {
+      await mkdir(join(baseDir, "_astro"), { recursive: true });
+      await writeFile(
+        join(baseDir, "index.html"),
+        `<script type="module" src="/projammr/_astro/app.js"></script>`
+      );
+      await writeFile(join(baseDir, "_astro/app.js"), "export const x = 1;");
+
+      const integration = jsBudget();
+      const configDone = integration.hooks["astro:config:done"]!;
+      await configDone({
+        config: { base: "/projammr" },
+      } as unknown as Parameters<typeof configDone>[0]);
+
+      const done = integration.hooks["astro:build:done"]!;
+      await expect(
+        done({
+          dir: pathToFileURL(baseDir),
+          pages: [],
+          assets: new Map(),
+          logger: { info: () => {} } as unknown as Parameters<
+            typeof done
+          >[0]["logger"],
+        })
+      ).resolves.toBeUndefined();
+    } finally {
+      await rm(baseDir, { recursive: true, force: true });
+    }
+  });
 });

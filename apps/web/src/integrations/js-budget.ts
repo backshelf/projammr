@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import type { AstroIntegration } from "astro";
 
+import { normalizeBasePath, stripBasePath } from "../lib/urls";
+
 /** What a marketing page may spend on script: the inline theme script and
  * Astro's link prefetch, with room to spare, and nothing like a framework
  * runtime. The docs are exempt: search and the contents panel are theirs. */
@@ -69,23 +71,28 @@ async function htmlFiles(dir: string): Promise<string[]> {
 /** Fails the build when a marketing page ships more script than the budget,
  * naming each page and what it spent. */
 export function jsBudget(): AstroIntegration {
+  let base = "";
   return {
     name: "projammr:js-budget",
     hooks: {
+      "astro:config:done": ({ config }) => {
+        base = normalizeBasePath(config.base);
+      },
       "astro:build:done": async ({ dir, logger }) => {
         const root = fileURLToPath(dir);
-        const readAsset = (path: string) => readFile(join(root, path), "utf8");
+        const readAsset = (path: string) =>
+          readFile(join(root, stripBasePath(path, base)), "utf8");
         const over: string[] = [];
         for (const file of await htmlFiles(root)) {
-          const page = "/" + relative(root, file).replaceAll("\\", "/");
-          if (page.startsWith("/docs/")) continue;
+          const rel = "/" + relative(root, file).replaceAll("\\", "/");
+          if (rel.startsWith("/docs/")) continue;
           const bytes = await pageScriptBytes(
             await readFile(file, "utf8"),
-            page,
+            `${base}${rel}`,
             readAsset
           );
           if (bytes > MARKETING_JS_BUDGET_BYTES)
-            over.push(`${page}: ${bytes} bytes`);
+            over.push(`${rel}: ${bytes} bytes`);
         }
         if (over.length > 0) {
           throw new Error(

@@ -19,7 +19,7 @@ use super::{
 
 /// The site's page on serving an instance over HTTPS, which says how to install a self-hosted instance's CA. Its
 /// origin follows `SITE.url` in `packages/ui/src/lib/site.ts`.
-pub const HTTPS_DOCS_URL: &str = "https://projammr.example/docs/self-hosting/https/";
+pub const HTTPS_DOCS_URL: &str = "https://backshelf.github.io/projammr/docs/self-hosting/https/";
 
 /// Names the machine on every request; the instance labels the session a device code is redeemed for with it.
 const DEVICE_NAME_HEADER: &str = "X-Device-Name";

@@ -1,3 +1,4 @@
+import { satteri } from "@astrojs/markdown-satteri";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
@@ -8,11 +9,31 @@ import starlightOpenAPI, { openAPISidebarGroups } from "starlight-openapi";
 
 import { SPEC_FILES } from "./scripts/openapi";
 import { jsBudget } from "./src/integrations/js-budget";
+import { remarkBaseUrl } from "./src/lib/remark-base-url";
+import { siteHref } from "./src/lib/urls";
 import { SITE } from "./src/site";
 
+const VALIDATOR_EXCLUDE = [
+  "/",
+  "/dit/",
+  "/pricing/",
+  "/ai/",
+  "/features/**",
+  "/docs/api/reference/",
+  "/docs/api/reference/**",
+  "/docs/api/auth-reference/",
+  "/docs/api/auth-reference/**",
+].map((path) => siteHref(path, SITE.basePath));
+
 export default defineConfig({
-  site: SITE.url,
+  site: SITE.origin,
+  base: SITE.basePath,
   server: { port: Number(process.env.WEB_PORT ?? 4321) },
+  markdown: {
+    processor: satteri({
+      mdastPlugins: [remarkBaseUrl(SITE.basePath)],
+    }),
+  },
   integrations: [
     starlight({
       title: SITE.name,
@@ -54,17 +75,7 @@ export default defineConfig({
            reference's pages as routes, so links to either are not its to
            judge. */
         starlightLinksValidator({
-          exclude: [
-            "/",
-            "/dit/",
-            "/pricing/",
-            "/ai/",
-            "/features/**",
-            "/docs/api/reference/",
-            "/docs/api/reference/**",
-            "/docs/api/auth-reference/",
-            "/docs/api/auth-reference/**",
-          ],
+          exclude: VALIDATOR_EXCLUDE,
         }),
       ],
       sidebar: [

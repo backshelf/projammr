@@ -14,6 +14,7 @@ import type { ArtVars } from "@workspace/ui/lib/art";
 import SiteFooter from "@/components/chrome/SiteFooter.astro";
 import SiteHeader from "@/components/chrome/SiteHeader.astro";
 import ThemeScript from "@/components/theme/ThemeScript.astro";
+import { siteHref } from "@/lib/urls";
 import { SITE } from "@/site";
 
 import "@/styles/site.css";
@@ -37,8 +38,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="icon" href={siteHref("/favicon.svg")} type="image/svg+xml" />
+    <link rel="sitemap" href={siteHref("/sitemap-index.xml")} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={SITE.name} />
     <meta property="og:title" content={fullTitle} />

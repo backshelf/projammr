@@ -109,6 +109,29 @@ import SiteLayout from "@/layouts/SiteLayout.astro";
   </Hunk>
 
   <Hunk
+    id="extension"
+    title="Commit and pull comments in from inside Ableton Live."
+    lines={[
+      {
+        sign: "+",
+        text: "An Ableton Live extension talks to dit over its local socket, so you can commit and push without leaving the set.",
+      },
+      {
+        sign: "+",
+        text: "Right-click an Arrangement time selection to add a Cue Point and post a timestamped comment to Projammr.",
+      },
+      {
+        sign: "+",
+        text: "Sync open timestamped comments from Projammr into Live as Cue Points at the current tempo.",
+      },
+      {
+        sign: "~",
+        text: "Built for Ableton Live 12.4.5 and later with Ableton's beta Extensions SDK.",
+      },
+    ]}
+  />
+
+  <Hunk
     id="connect"
     title="It connects to the server you run, and updates when you say."
     lines={[

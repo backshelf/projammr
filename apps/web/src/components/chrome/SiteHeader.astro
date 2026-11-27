@@ -8,6 +8,7 @@ import { LABEL } from "@workspace/ui/lib/shell";
 
 import Brand from "@/components/chrome/Brand.astro";
 import ThemeToggle from "@/components/theme/ThemeToggle.astro";
+import { siteHref } from "@/lib/urls";
 import { PRIMARY_NAV } from "@/nav";
 import { SITE } from "@/site";
 
@@ -21,18 +22,21 @@ const current = Astro.url.pathname;
       aria-label="Primary"
       class="flex items-center gap-6 phone:order-last phone:w-full phone:justify-between"
     >
-      {PRIMARY_NAV.map((link) => (
-        <a
-          href={link.href}
-          aria-current={current.startsWith(link.href) ? "page" : undefined}
-          class:list={[
-            LABEL,
-            "rounded-sm py-2 text-ink-soft motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none aria-[current=page]:text-ink",
-          ]}
-        >
-          {link.label}
-        </a>
-      ))}
+      {PRIMARY_NAV.map((link) => {
+        const href = siteHref(link.href);
+        return (
+          <a
+            href={href}
+            aria-current={current.startsWith(href) ? "page" : undefined}
+            class:list={[
+              LABEL,
+              "rounded-sm py-2 text-ink-soft motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none aria-[current=page]:text-ink",
+            ]}
+          >
+            {link.label}
+          </a>
+        );
+      })}
     </nav>
     <div class="flex items-center gap-2">
       <a

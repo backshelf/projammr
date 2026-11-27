@@ -5,23 +5,27 @@
 import Default from "@astrojs/starlight/components/SocialIcons.astro";
 import { LABEL } from "@workspace/ui/lib/shell";
 
+import { siteHref } from "@/lib/urls";
 import { PRIMARY_NAV } from "@/nav";
 
 const current = Astro.url.pathname;
 ---
 
 <nav aria-label="Primary" class="flex items-center gap-5">
-  {PRIMARY_NAV.map((link) => (
-    <a
-      href={link.href}
-      aria-current={current.startsWith(link.href) ? "page" : undefined}
-      class:list={[
-        LABEL,
-        "rounded-sm py-2 text-ink-soft no-underline motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none aria-[current=page]:text-ink",
-      ]}
-    >
-      {link.label}
-    </a>
-  ))}
+  {PRIMARY_NAV.map((link) => {
+    const href = siteHref(link.href);
+    return (
+      <a
+        href={href}
+        aria-current={current.startsWith(href) ? "page" : undefined}
+        class:list={[
+          LABEL,
+          "rounded-sm py-2 text-ink-soft no-underline motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none aria-[current=page]:text-ink",
+        ]}
+      >
+        {link.label}
+      </a>
+    );
+  })}
 </nav>
 <Default />

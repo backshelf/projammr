@@ -23,7 +23,13 @@ the rules for writing docs and the package's commands are in `apps/web/CLAUDE.md
   - `src/styles/docs.css` (Starlight's `customCss`): Tailwind's theme and utilities only, layered under
     Starlight's order, plus the fonts, `foundation.css` and `atmosphere.css`, and the palette mapping below.
   - What each of the four parts holds: the header comment of `packages/ui/src/styles/globals.css`.
-- `@astrojs/sitemap` writes `sitemap-index.xml` from `site` (`SITE.url`).
+- `@astrojs/sitemap` writes `sitemap-index.xml` from `site` (`SITE.origin`) and `base` (`SITE.basePath`).
+- **Base path & link rewriting:** `astro.config.ts` sets `site: SITE.origin` (`https://backshelf.github.io`) and
+  `base: SITE.basePath` (`"/projammr"`). Marketing layouts and components pass root-relative paths through
+  `siteHref()` (`src/lib/urls.ts`, reading `import.meta.env.BASE_URL`), and `remarkBaseUrl(SITE.basePath)`
+  (`src/lib/remark-base-url.ts`, registered as a Sätteri `mdastPlugins` entry on `markdown.processor`) prefixes
+  root-relative Markdown links, images, definitions, and MDX link components (`LinkCard`, `LinkButton`, `a`, `img`)
+  before HAST conversion so docs remain authored with clean root-relative paths (`/docs/...`, `/dit/`).
 - ESLint through `@workspace/eslint-config`'s `react-internal` config, with `design-tokens` on
   `src/**/*.{ts,tsx}`. TypeScript: **Typecheck** below.
 
@@ -82,12 +88,11 @@ Docs (`src/content/docs/docs/`), one flat directory per sidebar group in `astro.
 
 ## Where the site's facts live
 
-- `src/site.ts`: `SITE` (`name`, `url`, `repository`, `license`) and `DIT_DOWNLOAD` (`label`, `requirements`, the
+- `src/site.ts`: `SITE` (`name`, `origin`, `basePath`, `url`, `repository`, `license`) and `DIT_DOWNLOAD` (`label`, `requirements`, the
   Gatekeeper line, and `href`: `SITE.repository` + `/releases/latest/download/dit-macos-arm64.dmg`, the dmg the
   release workflow attaches to every release, behind GitHub's `latest` redirect so the link needs no version).
-  Nothing is published until the first tag, so the link 404s until then. `SITE.url` is
-  the placeholder `https://projammr.example` (the `.example` TLD never resolves) and is `astro.config.ts`'s `site`,
-  so every canonical URL, `og:url` and the sitemap carry it.
+  `SITE.url` (`https://backshelf.github.io/projammr`) splits into `SITE.origin` (`site`) and `SITE.basePath` (`base`)
+  in `astro.config.ts`, so every canonical URL, `og:url`, internal route and the sitemap carry the subpath.
 - `src/nav.ts`: `PRIMARY_NAV` (the header's links, on marketing pages and, through the `SocialIcons` override, in
   the docs) and `FOOTER_NAV`.
 - `src/data/pricing.ts`: `PLANS` (Self-hosted, Hosted Solo, Hosted Studio), `PRICE_CURRENCY` and `formatPrice`,
@@ -177,19 +182,22 @@ in the same change.
 
 `bun run build` fails on:
 
-- a broken docs link. `starlight-links-validator` checks every link on Starlight's content pages; its `exclude`
-  list (`astro.config.ts`) names the marketing routes and the generated reference's routes, which are not
-  Starlight content and so not its to judge.
-- a marketing page over the script budget. `jsBudget()` (`src/integrations/js-budget.ts`), on
-  `astro:build:done`, adds up each built page's inline script bodies and loaded script files, plus every chunk
-  they import statically, each file once per page (`pageScriptBytes`; a dynamic `import()` loads on demand and is
-  left out), and fails naming every page outside `/docs/` over `MARKETING_JS_BUDGET_BYTES` (6 KiB). The docs are
-  exempt: search and the contents panel are Starlight's. `test/js-budget.test.ts` covers the counter.
+- a broken docs link. `starlight-links-validator` checks every link on Starlight's content pages (after
+  `remarkBaseUrl` prefixes them with `SITE.basePath`); its `exclude` list (`astro.config.ts`) names the marketing
+  routes and the generated reference's routes (prefixed via `siteHref`), which are not Starlight content and so not
+  its to judge.
+- a marketing page over the script budget. `jsBudget()` (`src/integrations/js-budget.ts`), reading `config.base` in
+  `astro:config:done` and stripping it when reading built scripts from `dist/` in `astro:build:done`, adds up each
+  built page's inline script bodies and loaded script files, plus every chunk they import statically, each file once
+  per page (`pageScriptBytes`; a dynamic `import()` loads on demand and is left out), and fails naming every page
+  outside `/docs/` over `MARKETING_JS_BUDGET_BYTES` (6 KiB). The docs are exempt: search and the contents panel are
+  Starlight's. `test/js-budget.test.ts` covers the counter.
 
 `bun run test` adds:
 
-- `test/marketing-links.test.ts`: over the built `dist/`, every internal `href` on a marketing page reaches a file
-  the build wrote, and every `#hash` an `id` on the page it points at. Docs pages are the validator's and skipped.
+- `test/marketing-links.test.ts`: over the built `dist/`, every internal `href` on a marketing page carries
+  `SITE.basePath`, reaches a file the build wrote once that prefix is stripped, and every `#hash` reaches an `id` on
+  the page it points at. Docs pages are the validator's and skipped.
 - `test/screenshots.test.ts`: every `<Screenshot id>` in `src/**/*.{astro,mdx}` has both themes captured for its
   viewport.
 - `test/openapi.test.ts`, `test/env-reference.test.ts`, `test/stack.test.ts`: above.

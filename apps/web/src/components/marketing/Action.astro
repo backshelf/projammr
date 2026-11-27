@@ -8,6 +8,7 @@
 import { IconArrowRight } from "@tabler/icons-react";
 
 import ComingSoon from "@/components/marketing/ComingSoon.astro";
+import { siteHref } from "@/lib/urls";
 
 type Props = {
   href: string | null;
@@ -60,7 +61,7 @@ const shape = {
     <ComingSoon text={unavailable} />
   </span>
 ) : (
-  <a href={href} class:list={[shape, className]}>
+  <a href={siteHref(href)} class:list={[shape, className]}>
     <slot />
     {variant === "quiet" && (
       <IconArrowRight
