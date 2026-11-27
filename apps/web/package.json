@@ -16,15 +16,15 @@
     "screenshots": "bun scripts/screenshots/capture.ts"
   },
   "dependencies": {
-    "@astrojs/markdown-satteri": "^0.4.7",
-    "@astrojs/react": "^7.1.5",
-    "@astrojs/sitemap": "^3.7.4",
-    "@astrojs/starlight": "^0.42.10",
-    "@tabler/icons-react": "^3.51.0",
+    "@astrojs/markdown-satteri": "^0.4.10",
+    "@astrojs/react": "^7.1.9",
+    "@astrojs/sitemap": "^3.7.6",
+    "@astrojs/starlight": "^0.43.1",
+    "@tabler/icons-react": "^3.52.0",
     "@tailwindcss/vite": "^4.3.5",
     "@workspace/session-diff": "workspace:*",
     "@workspace/ui": "workspace:*",
-    "astro": "^7.4.8",
+    "astro": "^7.4.13",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "satteri": "^0.11.7",
@@ -35,12 +35,12 @@
   },
   "devDependencies": {
     "@astrojs/ts-content-mapper": "^0.2.0",
-    "@types/bun": "^1.4.4",
+    "@types/bun": "^1.4.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@workspace/demo": "workspace:*",
     "@workspace/eslint-config": "workspace:*",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "server": "workspace:*",
     "typescript": "7.1.0-dev.20261010.1"
   }
