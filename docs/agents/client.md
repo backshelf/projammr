@@ -1481,7 +1481,15 @@ virtualised"` describe block in `GridSections.test.tsx`. A `serverPage.load`'s a
 `PeekPanel` (`Peek`), `MoveToProjectDialog` (`Move`) and `FilterSheet` (`Toolbar`) are lazy: `next/dynamic` fetches
 each on first render, so `Peek` withholds the render until a row opens and `Move` until a row asks to move.
 
-The hooks the root and the parts call, each in `tables/`: `use-cell-grid.tsx` `useCellGrid` (cell state machine,
+The hooks the root and the parts call, each in `tables/`: `use-table-view.ts` (`useTableView` for leading
+disclosure/selection columns, URL vs local state ownership, `columnVisibility` default merging, grouping metadata,
+`peek`/`openRow` wiring, phone card tier and row expansion; `useExpandedAnnounce` for lazy `subRows.onExpand`
+announcements; `useTableSections` for `topLevelRows`, `sectionize` and `drillInFor`), `use-table-selection.ts`
+`useTableSelection` (ticked rows, render-phase pruning when rows leave the window, `allLoadedSelected`,
+`canSelectAllMatching`, `bulkSelection`, `clearSelection`, phone `selectMode` and viewer-gated bulk-bar handlers),
+`use-table-editing.ts` `useTableEditing` (`patchBySavedField`, optimistic cell patching with rollback, `handleCellSave`
+and `canSave`), `use-table-delete.ts` `useTableDelete` (single-row vs bulk delete dispatch behind `useDeleteGate`,
+`pendingDelete`, `requestDelete` and `requestRowDelete`), `use-cell-grid.tsx` `useCellGrid` (cell state machine,
 editing, selection, clipboard through `use-cell-clipboard.ts`), `use-row-cursor.ts` `useRowCursor` (the `j`/`k`
 cursor and the grid's handlers), `use-peek-row.ts` `usePeekRow`, `use-table-url-state.ts` `useTableUrlState` and
 `use-table-local-state.ts` `useTableLocalState` (the two view-state sources), `use-row-actions.tsx` `useRowActions`
