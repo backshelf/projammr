@@ -10,6 +10,13 @@ describe("consentChoices", () => {
     });
   });
 
+  it("treats offline_access as an optional scope", () => {
+    expect(consentChoices("read write offline_access")).toEqual({
+      fixed: ["read"],
+      optional: ["write", "offline_access"],
+    });
+  });
+
   it("treats an unknown scope as optional", () => {
     expect(consentChoices("read admin")).toEqual({
       fixed: ["read"],
@@ -25,5 +32,17 @@ describe("grantedScope", () => {
 
   it("keeps an optional scope that stayed ticked", () => {
     expect(grantedScope("read write", new Set(["write"]))).toBe("read write");
+  });
+
+  it("preserves offline_access when ticked and drops it when unticked", () => {
+    expect(
+      grantedScope(
+        "read write offline_access",
+        new Set(["write", "offline_access"])
+      )
+    ).toBe("read write offline_access");
+    expect(grantedScope("read write offline_access", new Set(["write"]))).toBe(
+      "read write"
+    );
   });
 });

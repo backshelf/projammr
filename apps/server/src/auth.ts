@@ -40,7 +40,7 @@ import {
   PASSWORD_LENGTH_CEILING,
   PASSWORD_LENGTH_FLOOR,
 } from "@workspace/settings/bounds";
-import { MCP_SCOPES } from "@workspace/settings/groups/instance-integrations";
+import { MCP_AUTH_SCOPES } from "@workspace/settings/groups/instance-integrations";
 import {
   instancePolicy,
   runningInstancePolicy,
@@ -59,9 +59,14 @@ import { sameOrigin } from "./lib/origin.js";
 export const mcpServed: boolean =
   mcpEnabled && runningInstancePolicy().integrations.mcpEnabled;
 
+const SECONDS_PER_HOUR = 60 * 60;
+const SECONDS_PER_DAY = 24 * SECONDS_PER_HOUR;
+
 /** Built only when `mcpServed`: `mcp()` throws for an insecure resource. */
-const mcpPlugins = () =>
-  [
+const mcpPlugins = () => {
+  const { mcpAccessTokenHours, mcpRefreshTokenDays } =
+    runningInstancePolicy().integrations;
+  return [
     // The OAuth provider signs access tokens with this plugin's keys and
     // publishes them at `/jwks`. Provider mode wants the session-to-JWT header
     // off.
@@ -73,11 +78,14 @@ const mcpPlugins = () =>
       loginPage: "/sign-in",
       consentPage: "/consent",
       resource: mcpResource,
-      scopes: [...MCP_SCOPES],
+      scopes: [...MCP_AUTH_SCOPES],
+      accessTokenExpiresIn: mcpAccessTokenHours * SECONDS_PER_HOUR,
+      refreshTokenExpiresIn: mcpRefreshTokenDays * SECONDS_PER_DAY,
       allowDynamicClientRegistration: true,
       allowUnauthenticatedClientRegistration: true,
     }),
   ] as const;
+};
 
 if (!mcpEnabled && process.env.MCP_DISABLED !== "1") {
   log("auth").warn(
@@ -150,8 +158,6 @@ const deviceNameFrom = (request: Request | undefined): string | null => {
 /** How long a mailed reset or verification link lasts, in the seconds Better Auth counts in. */
 const linkLifetimeSeconds = (): number =>
   instancePolicy().access.linkLifetimeMinutes * 60;
-
-const SECONDS_PER_DAY = 24 * 60 * 60;
 
 /**
  * How old a session gets before use extends it, in seconds: a quarter of the

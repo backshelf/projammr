@@ -19,11 +19,14 @@ import { useEffect, useState } from "react";
 const SCOPE_LABEL: Record<string, string> = {
   read: "Read",
   write: "Write",
+  offline_access: "Stay connected",
 };
 
 const SCOPE_DESCRIPTION: Record<string, string> = {
   read: "View your projects, collections, tracks and sessions.",
   write: "Create and edit your projects, collections, tracks and sessions.",
+  offline_access:
+    "Refresh its connection automatically in the background without asking you to sign in every day.",
 };
 
 /**

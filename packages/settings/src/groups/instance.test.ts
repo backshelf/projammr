@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "bun:test";
 import { MAX_UPLOAD_CEILING_MB } from "../bounds.js";
 import { GROUPS, SETTINGS, type SettingsValues } from "../registry.js";
 import type { SettingDefinition } from "../types.js";
+import { MCP_AUTH_SCOPES, MCP_SCOPES } from "./instance-integrations.js";
 import { AUDIO_EXTENSIONS, IMAGE_TYPES } from "./instance-limits.js";
 import { RATE_BUCKET_NAMES, RATE_BUCKETS } from "./instance-rate-limits.js";
 
@@ -59,13 +60,46 @@ describe("the Instance groups", () => {
     expect(keysWhere(({ audience }) => audience === "all")).toEqual([]);
   });
 
-  it("wait on a restart for the session lifetime and the MCP switch only", () => {
+  it("wait on a restart for the session lifetime and the MCP settings read at boot", () => {
     expect(
       keysWhere(({ restartRequired }) => restartRequired === true)
     ).toEqual([
       "instance-access.sessionLifetimeDays",
+      "instance-integrations.mcpAccessTokenHours",
       "instance-integrations.mcpEnabled",
+      "instance-integrations.mcpRefreshTokenDays",
     ]);
+  });
+
+  it("separate MCP resource scopes from authorization-server scopes and bound token lifetimes", () => {
+    expect(MCP_SCOPES).toEqual(["read", "write"]);
+    expect(MCP_AUTH_SCOPES).toEqual(["read", "write", "offline_access"]);
+
+    const access = SETTINGS["instance-integrations.mcpAccessTokenHours"];
+    expect(access.default).toBe(24);
+    expect(access.control).toEqual({
+      kind: "duration",
+      unit: "h",
+      min: 1,
+      max: 720,
+    });
+    expect(access.schema.safeParse(0).success).toBe(false);
+    expect(access.schema.safeParse(1).success).toBe(true);
+    expect(access.schema.safeParse(720).success).toBe(true);
+    expect(access.schema.safeParse(721).success).toBe(false);
+
+    const refresh = SETTINGS["instance-integrations.mcpRefreshTokenDays"];
+    expect(refresh.default).toBe(90);
+    expect(refresh.control).toEqual({
+      kind: "duration",
+      unit: "d",
+      min: 1,
+      max: 365,
+    });
+    expect(refresh.schema.safeParse(0).success).toBe(false);
+    expect(refresh.schema.safeParse(1).success).toBe(true);
+    expect(refresh.schema.safeParse(365).success).toBe(true);
+    expect(refresh.schema.safeParse(366).success).toBe(false);
   });
 
   it("take the upload ceiling as the largest upload's maximum", () => {

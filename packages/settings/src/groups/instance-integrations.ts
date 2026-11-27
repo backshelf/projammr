@@ -1,14 +1,26 @@
 import { z } from "zod";
-import { defineGroup, defineSetting, INSTANCE_ONLY } from "../define.js";
+import {
+  defineGroup,
+  defineSetting,
+  INSTANCE_ONLY,
+  wholeNumber,
+} from "../define.js";
 
 /**
- * The scopes the MCP OAuth provider grants: read access, and write access
- * gated behind it. Every MCP tool declares one, and an instance may offer only
- * some of them (`instance-integrations.mcpToolGroups`).
+ * The resource scopes the MCP server enforces: read access, and write access
+ * gated behind it. Every MCP tool declares one, an instance may offer only
+ * some of them (`instance-integrations.mcpToolGroups`), and Protected Resource
+ * Metadata and `WWW-Authenticate` challenges advertise only these.
  */
 export const MCP_SCOPES = ["read", "write"] as const;
 
 export type McpScope = (typeof MCP_SCOPES)[number];
+
+/**
+ * The scopes the MCP OAuth Authorization Server accepts: the resource scopes
+ * plus `offline_access` so clients can obtain and rotate refresh tokens.
+ */
+export const MCP_AUTH_SCOPES = [...MCP_SCOPES, "offline_access"] as const;
 
 const MCP_SCOPE_LABELS: Record<McpScope, string> = {
   read: "Read",
@@ -68,6 +80,53 @@ export const settings = [
       })),
     },
     audience: "admin",
+  }),
+  defineSetting({
+    ...INSTANCE_ONLY,
+    key: "instance-integrations.mcpAccessTokenHours",
+    group: "instance-integrations",
+    label: "Agent access tokens last",
+    description:
+      "How long an AI agent's access token lasts before it refreshes or signs in again. The server reads it as it starts, so a change applies to tokens issued after the next restart.",
+    keywords: [
+      "mcp",
+      "ai",
+      "agent",
+      "token",
+      "access",
+      "expiry",
+      "lifetime",
+      "oauth",
+    ],
+    schema: wholeNumber(1, 720),
+    default: 24,
+    control: { kind: "duration", unit: "h", min: 1, max: 720 },
+    audience: "admin",
+    restartRequired: true,
+  }),
+  defineSetting({
+    ...INSTANCE_ONLY,
+    key: "instance-integrations.mcpRefreshTokenDays",
+    group: "instance-integrations",
+    label: "Agent refresh tokens last",
+    description:
+      "How long an AI agent stays connected without asking you to sign in again, when granted stay-connected access. The server reads it as it starts, so a change applies to tokens issued after the next restart.",
+    keywords: [
+      "mcp",
+      "ai",
+      "agent",
+      "token",
+      "refresh",
+      "offline",
+      "expiry",
+      "lifetime",
+      "oauth",
+    ],
+    schema: wholeNumber(1, 365),
+    default: 90,
+    control: { kind: "duration", unit: "d", min: 1, max: 365 },
+    audience: "admin",
+    restartRequired: true,
   }),
   defineSetting({
     ...INSTANCE_ONLY,

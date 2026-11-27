@@ -24,7 +24,8 @@ import { z } from "zod";
  * moment it acts, so `refreshInstancePolicy` replacing the snapshot reaches the
  * next upload, sign-in or request without a restart. The few values Better
  * Auth and the MCP mount can only take at construction (`sessionLifetimeDays`,
- * `mcpEnabled`) are read once, through `runningInstancePolicy()`.
+ * `mcpEnabled`, `mcpAccessTokenHours`, `mcpRefreshTokenDays`) are read once,
+ * through `runningInstancePolicy()`.
  *
  * `DEFAULT_INSTANCE_POLICY` is the seed: the environment's values where an
  * operator sets one, the settings' defaults otherwise. A malformed variable
@@ -150,6 +151,8 @@ const POLICY_SETTINGS = {
   integrations: {
     mcpEnabled: { key: "instance-integrations.mcpEnabled" },
     mcpToolGroups: { key: "instance-integrations.mcpToolGroups" },
+    mcpAccessTokenHours: { key: "instance-integrations.mcpAccessTokenHours" },
+    mcpRefreshTokenDays: { key: "instance-integrations.mcpRefreshTokenDays" },
     logLevel: {
       key: "instance-integrations.logLevel",
       env: { variable: "LOG_LEVEL", read: asWord },

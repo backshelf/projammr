@@ -98,6 +98,8 @@ describe("DEFAULT_INSTANCE_POLICY", () => {
       integrations: {
         mcpEnabled: true,
         mcpToolGroups: ["read", "write"],
+        mcpAccessTokenHours: 24,
+        mcpRefreshTokenDays: 90,
         logLevel: "info",
         updateCheck: false,
       },
@@ -302,6 +304,22 @@ describe("refreshInstancePolicy", () => {
       { access: { lockoutBaseMinutes: 90 } },
     ],
     ["zero analysis workers", { jobs: { analysisWorkers: 0 } }],
+    [
+      "an MCP access token lifetime under an hour",
+      { integrations: { mcpAccessTokenHours: 0 } },
+    ],
+    [
+      "an MCP access token lifetime over 30 days",
+      { integrations: { mcpAccessTokenHours: 721 } },
+    ],
+    [
+      "an MCP refresh token lifetime under a day",
+      { integrations: { mcpRefreshTokenDays: 0 } },
+    ],
+    [
+      "an MCP refresh token lifetime over a year",
+      { integrations: { mcpRefreshTokenDays: 366 } },
+    ],
   ] as const)("refuses %s and keeps the snapshot it had", (_, patch) => {
     const before = instancePolicy();
 
@@ -420,7 +438,7 @@ describe(".env.example", () => {
         ([, name]) => name!
       );
       if (names.length === 0) continue;
-      const prose = paragraph.replace(/\n# ?/g, " ");
+      const prose = paragraph.replace(/\r?\n# ?/g, " ");
       expect({
         names,
         seeds: /\bseeds? Settings → Instance\b/.test(prose),
