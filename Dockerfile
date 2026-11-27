@@ -138,6 +138,10 @@ FROM deps AS build-web
 # INTERNAL_API_URL, read at start-up, and the public origin and scheme come
 # from each request, so one image serves any hostname.
 ENV NEXT_TELEMETRY_DISABLED=1
+# Keep Go's GC on tsgo inside physical RAM during `next build` so 4 GB hosts do
+# not spill Go's mark phase into swap.
+ENV GOMEMLIMIT=1400MiB \
+    GOGC=50
 
 COPY packages/api packages/api
 COPY --from=typegen /app/packages/api/src/v1.d.ts packages/api/src/v1.d.ts
