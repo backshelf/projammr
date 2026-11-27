@@ -1,8 +1,13 @@
-import { mkdir, stat } from "node:fs/promises";
-import { basename, dirname, extname } from "node:path";
+import { basename, extname } from "node:path";
 import sharp from "sharp";
 import { addVariantUsage } from "../db/queries/storage-usage.js";
-import { storedFilePath, unlinkQuietly } from "./storage.js";
+import {
+  readStoredBytes,
+  removeStoredFile,
+  storeBytes,
+  storedFileExists,
+  storedFilePath,
+} from "./storage.js";
 
 /**
  * The widths a stored image is offered at, chosen from what the client actually
@@ -85,42 +90,34 @@ export function readVariantKey(
 export const imageKeyStem = (key: string): string =>
   basename(key, extname(key));
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 const inFlight = new Map<string, Promise<string>>();
 
 /**
- * Path of the cached variant, generating it if it is missing.
+ * Stored key of the cached variant, generating it through the active storage
+ * backend if it is missing.
  *
  * Concurrent callers for the same variant share one generation: a page that
  * renders twenty thumbs off a cold cache would otherwise start twenty sharp
- * pipelines over the same file and have them race to write the same path.
+ * pipelines over the same file and have them race to write the same key.
  *
  * `withoutEnlargement` keeps an image smaller than the requested width at its
  * own size — the point is to send fewer bytes, never more.
  */
-export function ensureVariant(
+export function ensureVariantKey(
   key: string,
   width: VariantWidth,
   format: VariantFormat = "webp"
 ): Promise<string> {
-  const target = variantPath(key, width, format);
+  const targetKey = variantKey(key, width, format);
 
-  const pending = inFlight.get(target);
+  const pending = inFlight.get(targetKey);
   if (pending) return pending;
 
   const work = (async () => {
-    if (await exists(target)) return target;
+    if (await storedFileExists(targetKey)) return targetKey;
 
-    await mkdir(dirname(target), { recursive: true });
-    const resized = sharp(storedFilePath(key)).resize({
+    const original = await readStoredBytes(key);
+    const resized = sharp(original).resize({
       width,
       withoutEnlargement: true,
     });
@@ -130,30 +127,41 @@ export function ensureVariant(
         : format === "png"
           ? resized.png()
           : resized.webp({ quality: 82 });
-    const { size } = await encoded.toFile(target);
+    const buffer = await encoded.toBuffer();
+
+    await storeBytes(targetKey, buffer, VARIANT_CONTENT_TYPES[format]);
 
     // Counted here rather than by each caller: a resize is generated from a
     // request, from the variants job and from a share page, and every one of
     // those adds bytes to the image's project and uploader.
-    await addVariantUsage(key, size);
+    await addVariantUsage(key, buffer.byteLength);
 
-    return target;
-  })().finally(() => inFlight.delete(target));
+    return targetKey;
+  })().finally(() => inFlight.delete(targetKey));
 
-  inFlight.set(target, work);
+  inFlight.set(targetKey, work);
   return work;
+}
+
+/** Local path of the cached variant, generating it if it is missing. */
+export async function ensureVariant(
+  key: string,
+  width: VariantWidth,
+  format: VariantFormat = "webp"
+): Promise<string> {
+  return storedFilePath(await ensureVariantKey(key, width, format));
 }
 
 /**
  * Drops every variant of a stored image, called wherever the original is
- * unlinked. The widths are a fixed set, so the paths are derived rather than
+ * removed. The widths are a fixed set, so the keys are derived rather than
  * discovered — a directory holding one entry per image per width is not worth
  * scanning to delete three files.
  */
 export async function removeVariants(key: string): Promise<void> {
   for (const width of VARIANT_WIDTHS) {
     for (const format of VARIANT_FORMATS) {
-      await unlinkQuietly(variantPath(key, width, format));
+      await removeStoredFile(variantKey(key, width, format));
     }
   }
 }

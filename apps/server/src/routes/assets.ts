@@ -30,25 +30,43 @@ import {
 import { queuedJobSchema } from "../db/schema/jobs.js";
 import {
   describer,
+  errors,
   idParam,
   idParams,
+  json,
+  parseRequest,
   respond,
   validator,
 } from "../lib/http.js";
 import { instancePolicy } from "../lib/instance-policy.js";
 import {
-  AUDIO_SIGNATURE_BYTES,
   audioExtensionOf,
   hasAudioSignature,
   isAudioName,
 } from "../lib/media.js";
-import { declaredFileType, uploadedFile } from "../lib/multipart.js";
+import { multipartRequestBody } from "../lib/multipart.js";
+import {
+  requireUploadedFile,
+  streamMultipartUpload,
+} from "../lib/multipart-stream.js";
 import { removeStoredFile, storeUpload } from "../lib/storage.js";
 import { gatedProject } from "../middleware/authorize-project.js";
 
-const { describe, describeRaw } = describer("Assets");
+const { describe, describeRaw, route } = describer("Assets");
 
 const app = new Hono<AuthedEnv>({ strict: false });
+
+const assetUploadFormSchema = z.object({
+  file: z.file(),
+  projectId: z.coerce.number(),
+  localFilepath: z.string().optional(),
+  localFileCreatedAt: z.coerce.number().optional(),
+  localFileUpdatedAt: z.coerce.number().optional(),
+  localFileMachineName: z.string().optional(),
+  fingerprint: z.string().optional(),
+});
+
+const assetUploadFieldsSchema = assetUploadFormSchema.omit({ file: true });
 
 const fingerprintMatchesSchema = z.array(assetFingerprintMatchSchema);
 
@@ -65,91 +83,84 @@ const assetIdsSchema = z.array(z.number().int().positive()).min(1).max(500);
 
 app.post(
   "/upload",
-  describe(
-    "Upload a new asset",
-    {
-      status: 201,
-      schema: assetSchema,
-      description: "Asset uploaded successfully",
+  route({
+    description: "Upload a new asset",
+    requestBody: multipartRequestBody(assetUploadFormSchema),
+    responses: {
+      201: json(assetSchema, "Asset uploaded successfully"),
+      ...errors(400, 413, 500),
     },
-    400,
-    413,
-    500
-  ),
-  validator(
-    "form",
-    z.object({
-      file: uploadedFile(),
-      projectId: z.coerce.number(),
-      localFilepath: z.string().optional(),
-      localFileCreatedAt: z.coerce.number().optional(),
-      localFileUpdatedAt: z.coerce.number().optional(),
-      localFileMachineName: z.string().optional(),
-      fingerprint: z.string().optional(),
-    })
-  ),
+  }),
   async (c) => {
-    const body = c.req.valid("form");
-    const { file, projectId } = body;
+    const upload = await streamMultipartUpload(c);
+    try {
+      const file = requireUploadedFile(upload);
+      const body = parseRequest(assetUploadFieldsSchema, upload.fields);
+      const { projectId } = body;
 
-    // Any other file is an attachment, which the instance's audio types do
-    // not govern.
-    const audioType = audioExtensionOf(file.name);
-    if (audioType && !instancePolicy().limits.audioTypes.includes(audioType)) {
-      throw new HTTPException(400, {
-        message: `This instance does not take ${audioType} uploads`,
+      // Any other file is an attachment, which the instance's audio types do
+      // not govern.
+      const audioType = audioExtensionOf(file.name);
+      if (
+        audioType &&
+        !instancePolicy().limits.audioTypes.includes(audioType)
+      ) {
+        throw new HTTPException(400, {
+          message: `This instance does not take ${audioType} uploads`,
+        });
+      }
+
+      // Refused here rather than stored: a mislabelled file would otherwise be
+      // listed as audio and fail every analysis without a word.
+      if (audioType && !hasAudioSignature(file.head)) {
+        throw new HTTPException(400, {
+          message: "File has an audio extension but is not audio",
+        });
+      }
+
+      // Refused before the bytes are written rather than after the row: an
+      // upload that will not be allowed to stay should never reach storage.
+      await assertStorageAllows(
+        scopesOf({ projectId, userId: c.get("user").id }),
+        file.size
+      );
+
+      // The write is awaited and its failure is allowed to reach `app.onError`:
+      // a row pointing at a file that was never written would report an upload
+      // that did not happen, and the static handler would serve a 404 for it.
+      const assetPath = await storeUpload("assets", file);
+
+      const asset = await createAsset({
+        assetPath,
+        // The upload's name is a display label; a path fragment in it must not
+        // survive into a row that a download names the file from.
+        name: basename(file.name),
+        size: file.size,
+        type: file.type,
+        createdByUser: c.get("user").id,
+        projectId,
+        // ms epoch → timestamptz. Omitting undefined fields would make drizzle
+        // apply the column defaults, so nulls are passed explicitly.
+        localFileCreatedAt:
+          body.localFileCreatedAt == null
+            ? null
+            : new Date(body.localFileCreatedAt),
+        localFileUpdatedAt:
+          body.localFileUpdatedAt == null
+            ? null
+            : new Date(body.localFileUpdatedAt),
+        localFileMachineName: body.localFileMachineName ?? null,
+        localFilepath: body.localFilepath ?? null,
+        fingerprint: body.fingerprint ?? null,
+      }).catch(async (error) => {
+        await removeStoredFile(assetPath);
+        throw error;
       });
+
+      return respond(c, assetSchema, asset, 201);
+    } finally {
+      await upload.cleanup();
     }
-
-    // Refused here rather than stored: a mislabelled file would otherwise be
-    // listed as audio and fail every analysis without a word.
-    const head = await file.slice(0, AUDIO_SIGNATURE_BYTES).bytes();
-    if (audioType && !hasAudioSignature(head)) {
-      throw new HTTPException(400, {
-        message: "File has an audio extension but is not audio",
-      });
-    }
-
-    // Refused before the bytes are written rather than after the row: an
-    // upload that will not be allowed to stay should never reach the disk.
-    await assertStorageAllows(
-      scopesOf({ projectId, userId: c.get("user").id }),
-      file.size
-    );
-
-    // The write is awaited and its failure is allowed to reach `app.onError`:
-    // a row pointing at a file that was never written would report an upload
-    // that did not happen, and the static handler would serve a 404 for it.
-    const assetPath = await storeUpload("assets", file);
-
-    const asset = await createAsset({
-      assetPath: assetPath,
-      // The upload's name is a display label; a path fragment in it must not
-      // survive into a row that a download names the file from.
-      name: basename(file.name),
-      size: file.size,
-      type: (await declaredFileType(c, "file")) ?? file.type,
-      createdByUser: c.get("user").id,
-      projectId,
-      // ms epoch → timestamptz. Omitting undefined fields would make drizzle
-      // apply the column defaults, so nulls are passed explicitly.
-      localFileCreatedAt:
-        body.localFileCreatedAt == null
-          ? null
-          : new Date(body.localFileCreatedAt),
-      localFileUpdatedAt:
-        body.localFileUpdatedAt == null
-          ? null
-          : new Date(body.localFileUpdatedAt),
-      localFileMachineName: body.localFileMachineName ?? null,
-      localFilepath: body.localFilepath ?? null,
-      fingerprint: body.fingerprint ?? null,
-    }).catch(async (error) => {
-      await removeStoredFile(assetPath);
-      throw error;
-    });
-
-    return respond(c, assetSchema, asset, 201);
   }
 );
 

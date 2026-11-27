@@ -72,9 +72,16 @@ describe("uploadBodyLimit", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("counts a body that declares no length and refuses it once it passes the limit", async () => {
+  it("counts a body that declares no length as it streams and refuses it once it passes the limit", async () => {
     stubInstancePolicy({ limits: { maxUploadMb: 1 / 1024 } });
-    const { limitedApp, handler } = limited(uploadBodyLimit);
+    let completed = false;
+    const limitedApp = new Hono();
+    limitedApp.post("/", uploadBodyLimit, async (c) => {
+      const body = await c.req.text();
+      completed = true;
+      return c.text(body);
+    });
+    limitedApp.onError(jsonErrorHandler);
 
     const res = await limitedApp.request("/", {
       method: "POST",
@@ -84,7 +91,7 @@ describe("uploadBodyLimit", () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject(tooBig(KIB));
-    expect(handler).not.toHaveBeenCalled();
+    expect(completed).toBe(false);
   });
 
   it("passes a body within the limit through whole", async () => {

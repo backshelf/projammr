@@ -20,13 +20,13 @@ import {
 } from "../db/queries/sharelinks.js";
 import { describer, idValue, params, respond, validator } from "../lib/http.js";
 import {
-  ensureVariant,
+  ensureVariantKey,
   isVariantWidth,
   VARIANT_CONTENT_TYPES,
   VARIANT_WIDTHS,
 } from "../lib/images.js";
 import { fileResponse } from "../lib/serve-file.js";
-import { storedFilePath } from "../lib/storage.js";
+import { readStoredStream } from "../lib/storage.js";
 import { guestAccess, guestOrMember } from "../middleware/authenticated.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 
@@ -125,7 +125,7 @@ app.get(
     const { assetPath, type, name } = track.trackAudio;
     if (!assetPath || !type) throw new HTTPException(404);
 
-    return fileResponse(c, storedFilePath(assetPath), {
+    return fileResponse(c, assetPath, {
       type,
       filename: downloadFilename(sharelink.shareType, track.title, name),
       attachment: wantsDownload,
@@ -179,9 +179,9 @@ app.get(
       });
     }
 
-    const path = await ensureVariant(track.artwork.assetPath, width, format);
+    const key = await ensureVariantKey(track.artwork.assetPath, width, format);
 
-    return c.body(Bun.file(path).stream(), {
+    return c.body(readStoredStream(key), {
       headers: {
         "Content-Type": VARIANT_CONTENT_TYPES[format],
         "X-Content-Type-Options": "nosniff",

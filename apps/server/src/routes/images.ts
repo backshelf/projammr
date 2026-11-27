@@ -23,20 +23,28 @@ import { db } from "../db/index.js";
 import { imageSchema, type ImageScope } from "../db/schema/images.js";
 import {
   describer,
+  errors,
   idParam,
   idParams,
   idValue,
+  json,
   params,
+  parseRequest,
   respond,
   validator,
 } from "../lib/http.js";
 import { errorFields, log } from "../lib/log.js";
+import { multipartRequestBody } from "../lib/multipart.js";
+import {
+  requireUploadedFile,
+  type StreamedFile,
+  streamMultipartUpload,
+} from "../lib/multipart-stream.js";
 import { extractPalette } from "../lib/palette.js";
-import { declaredFileType, uploadedFile } from "../lib/multipart.js";
 import { removeStoredFile, storeUpload } from "../lib/storage.js";
 import { gatedProject } from "../middleware/authorize-project.js";
 
-const { describe, describeRaw } = describer("Images");
+const { describe, describeRaw, route } = describer("Images");
 
 const app = new Hono<AuthedEnv>({ strict: false });
 
@@ -51,8 +59,12 @@ const imageUploadResultSchema = imageSchema.extend({
   variantsJobId: z.number().nullable(),
 });
 
-/** An image file of a type the instance takes, within its upload limit. */
-const imageFile = uploadedFile((policy) => policy.limits.imageTypes);
+const imageUploadFormSchema = z.object({
+  file: z.file(),
+  projectId: z.optional(z.coerce.number()),
+});
+const imageUploadFieldsSchema = imageUploadFormSchema.omit({ file: true });
+const instanceImageUploadFormSchema = z.object({ file: z.file() });
 
 /**
  * Stores an uploaded image and its row, with the scope and project the route
@@ -62,33 +74,32 @@ const imageFile = uploadedFile((policy) => policy.limits.imageTypes);
  */
 async function acceptImage(
   c: Context<AuthedEnv>,
-  file: File,
+  file: StreamedFile,
   owner: { scope: ImageScope; projectId: number | null }
 ) {
   const user = c.get("user");
   const scopes = scopesOf({ projectId: owner.projectId, userId: user.id });
 
   // Refused before the bytes are written rather than after the row: an
-  // upload that will not be allowed to stay should never reach the disk.
+  // upload that will not be allowed to stay should never reach storage.
   await assertStorageAllows(scopes, file.size);
 
-  const buffer = Buffer.from(await file.arrayBuffer());
+  // Read the staged file before `storeUpload` moves it into place on local storage.
+  const palette = await extractPalette(file.tempPath).catch((e) => {
+    logger.error("palette extraction failed", errorFields(e));
+    return null;
+  });
 
   // The write is awaited and its failure is allowed to reach `app.onError`:
   // a row pointing at a file that was never written would report an upload
   // that did not happen, and the static handler would serve a 404 for it.
   const imagePath = await storeUpload("images", file);
 
-  const palette = await extractPalette(buffer).catch((e) => {
-    logger.error("palette extraction failed", errorFields(e));
-    return null;
-  });
-
   const image = await createImage({
     assetPath: imagePath,
     name: basename(file.name),
     size: file.size,
-    type: (await declaredFileType(c, "file")) ?? file.type,
+    type: file.type,
     createdByUser: user.id,
     projectId: owner.projectId,
     scope: owner.scope,
@@ -123,63 +134,68 @@ async function acceptImage(
 
 app.post(
   "/upload",
-  describe(
-    "Upload a new image. `variantsJobId` is the id of the queued resize job, or null for an avatar, which has no project to run one in.",
-    {
-      status: 201,
-      schema: imageUploadResultSchema,
-      description: "Image uploaded successfully",
+  route({
+    description:
+      "Upload a new image. `variantsJobId` is the id of the queued resize job, or null for an avatar, which has no project to run one in.",
+    requestBody: multipartRequestBody(imageUploadFormSchema),
+    responses: {
+      201: json(imageUploadResultSchema, "Image uploaded successfully"),
+      ...errors(400, 413, 500),
     },
-    400,
-    413,
-    500
-  ),
-  validator(
-    "form",
-    z.object({
-      file: imageFile,
-      projectId: z.optional(z.coerce.number()),
-    })
-  ),
+  }),
   async (c) => {
-    const { file, projectId } = c.req.valid("form");
-    // An upload with no project is an avatar, readable by any signed-in user.
-    const owner =
-      projectId == null
-        ? ({ scope: "user", projectId: null } as const)
-        : ({ scope: "project", projectId } as const);
-    return respond(
-      c,
-      imageUploadResultSchema,
-      await acceptImage(c, file, owner),
-      201
-    );
+    const upload = await streamMultipartUpload(c, {
+      acceptedTypes: (policy) => policy.limits.imageTypes,
+    });
+    try {
+      const file = requireUploadedFile(upload);
+      const { projectId } = parseRequest(
+        imageUploadFieldsSchema,
+        upload.fields
+      );
+      // An upload with no project is an avatar, readable by any signed-in user.
+      const owner =
+        projectId == null
+          ? ({ scope: "user", projectId: null } as const)
+          : ({ scope: "project", projectId } as const);
+      return respond(
+        c,
+        imageUploadResultSchema,
+        await acceptImage(c, file, owner),
+        201
+      );
+    } finally {
+      await upload.cleanup();
+    }
   }
 );
 
 app.post(
   "/instance",
-  describe(
-    "Upload a brand image, the instance's logo or app icon. An instance admin's alone, it is readable by anyone at its static URL, signed in or not. It counts towards the uploader's storage, as an avatar does, and has no resize job (`variantsJobId` is null); its resizes are made on demand.",
-    {
-      status: 201,
-      schema: imageUploadResultSchema,
-      description: "Image uploaded successfully",
+  route({
+    description:
+      "Upload a brand image, the instance's logo or app icon. An instance admin's alone, it is readable by anyone at its static URL, signed in or not. It counts towards the uploader's storage, as an avatar does, and has no resize job (`variantsJobId` is null); its resizes are made on demand.",
+    requestBody: multipartRequestBody(instanceImageUploadFormSchema),
+    responses: {
+      201: json(imageUploadResultSchema, "Image uploaded successfully"),
+      ...errors(400, 404, 413, 500),
     },
-    400,
-    404,
-    413,
-    500
-  ),
-  validator("form", z.object({ file: imageFile })),
+  }),
   async (c) => {
-    const { file } = c.req.valid("form");
-    return respond(
-      c,
-      imageUploadResultSchema,
-      await acceptImage(c, file, { scope: "instance", projectId: null }),
-      201
-    );
+    const upload = await streamMultipartUpload(c, {
+      acceptedTypes: (policy) => policy.limits.imageTypes,
+    });
+    try {
+      const file = requireUploadedFile(upload);
+      return respond(
+        c,
+        imageUploadResultSchema,
+        await acceptImage(c, file, { scope: "instance", projectId: null }),
+        201
+      );
+    } finally {
+      await upload.cleanup();
+    }
   }
 );
 

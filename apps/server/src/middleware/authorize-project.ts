@@ -8,6 +8,7 @@ import {
   type MemberRole,
   type Scope,
 } from "../db/queries/authorization.js";
+import { cleanupStreamedUpload } from "../lib/multipart-stream.js";
 
 /**
  * The project a request was authorized against. `authorizeProject` stores it
@@ -115,43 +116,50 @@ export function authorizeProject(
     const user = c.get("user");
     if (!user) throw new HTTPException(401);
 
-    const scope = await resolveProjectId(c, user.id);
-    if (scope == null) throw new HTTPException(404);
+    try {
+      const scope = await resolveProjectId(c, user.id);
+      if (scope == null) throw new HTTPException(404);
 
-    switch (scope.kind) {
-      case "none":
-        return next();
+      switch (scope.kind) {
+        case "none":
+          return await next();
 
-      case "user":
-        // Only the row's own owner passes; anyone else gets the same 404 a
-        // missing row gets, rather than confirming that someone else's
-        // avatar exists.
-        if (scope.id !== user.id) throw new HTTPException(404);
-        return next();
+        case "user":
+          // Only the row's own owner passes; anyone else gets the same 404 a
+          // missing row gets, rather than confirming that someone else's
+          // avatar exists.
+          if (scope.id !== user.id) throw new HTTPException(404);
+          return await next();
 
-      case "instance":
-        if (!isReadMethod(c.req.method) && !(await isInstanceAdmin(user.id))) {
-          throw new HTTPException(403, {
-            message: "Only an instance admin can change this",
-          });
+        case "instance":
+          if (
+            !isReadMethod(c.req.method) &&
+            !(await isInstanceAdmin(user.id))
+          ) {
+            throw new HTTPException(403, {
+              message: "Only an instance admin can change this",
+            });
+          }
+          return await next();
+
+        case "project": {
+          const minRole =
+            (typeof policy === "function" ? policy(c) : undefined) ??
+            roles[c.req.method] ??
+            roles.default;
+
+          const role = await requireMembership(user.id, scope.id, minRole);
+
+          // The gated project and the caller's role in it, so handlers read
+          // them instead of resolving and querying a second time.
+          c.set("projectId", scope.id);
+          c.set("role", role);
+
+          return await next();
         }
-        return next();
-
-      case "project": {
-        const minRole =
-          (typeof policy === "function" ? policy(c) : undefined) ??
-          roles[c.req.method] ??
-          roles.default;
-
-        const role = await requireMembership(user.id, scope.id, minRole);
-
-        // The gated project and the caller's role in it, so handlers read
-        // them instead of resolving and querying a second time.
-        c.set("projectId", scope.id);
-        c.set("role", role);
-
-        return next();
       }
+    } finally {
+      await cleanupStreamedUpload(c);
     }
   });
 }

@@ -1,8 +1,6 @@
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
 import sharp from "sharp";
 import { SPECTROGRAM_BANDS } from "@workspace/dsp/offline";
-import { newStorageKey, storedFilePath } from "./storage.js";
+import { newStorageKey, storeBytes } from "./storage.js";
 
 /**
  * `bytes` is column-major (one column's `SPECTROGRAM_BANDS` values together,
@@ -32,14 +30,11 @@ export async function writeSpectrogramPng(
   columns: number
 ): Promise<{ key: string; bytes: number }> {
   const key = newStorageKey("analysis", "png");
-  const path = storedFilePath(key);
-  // A static volume created before spectrograms existed has no directory for
-  // them, and `sharp` does not create one.
-  await mkdir(dirname(path), { recursive: true });
-  const { size } = await sharp(toRowMajor(bytes, columns), {
+  const buffer = await sharp(toRowMajor(bytes, columns), {
     raw: { width: columns, height: SPECTROGRAM_BANDS, channels: 1 },
   })
     .png()
-    .toFile(path);
-  return { key, bytes: size };
+    .toBuffer();
+  await storeBytes(key, buffer, "image/png");
+  return { key, bytes: buffer.byteLength };
 }

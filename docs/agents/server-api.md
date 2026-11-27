@@ -315,7 +315,14 @@ numeric seeds, lowercased for `LOG_LEVEL`), and a value the schema refuses throw
 | `MIGRATE_BACKUP`              | no       | default on; `"0"` skips `applyMigrations`'s pre-migrate `pg_dump` (`src/db/migrator.ts`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `TRUSTED_ORIGINS`             | no       | comma list, lowercased; falls back to `CLIENT_URL`, then `http://localhost:3000`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `BASE_URL`                    | no       | default `http://localhost:8080`, used in the OpenAPI `servers` entry                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `MAX_UPLOAD_MB`               | no       | **seed** of `instance-limits.maxUploadMb` (`limits.maxUploadMb`), default 128 (MiB); a positive number no higher than `MAX_UPLOAD_CEILING_MB` (2048, `@workspace/settings/bounds`). Compose always passes it (`${MAX_UPLOAD_MB:-128}`), so under Docker the setting reads source `env` until an admin sets it. Both upload validators and `GET /uploads/limits` read the policy per request (`uploadLimitBytes()`). `Bun.serve`'s `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` — the ceiling plus 1 MiB for the multipart envelope, fixed — so the setting, not the transport, refuses a file; Bun still answers a body over the ceiling with a bare 413 before the app runs, and `middleware/body-limit.ts` holds each route to its own limit before the body is read (see **Instance policy**). The upload routes buffer the whole form, so the limit is also RAM per upload in flight                                                                                     |
+| `MAX_UPLOAD_MB`               | no       | **seed** of `instance-limits.maxUploadMb` (`limits.maxUploadMb`), default 128 (MiB); a positive number no higher than `MAX_UPLOAD_CEILING_MB` (2048, `@workspace/settings/bounds`). Compose always passes it (`${MAX_UPLOAD_MB:-128}`), so under Docker the setting reads source `env` until an admin sets it. Both streaming upload parsers and `GET /uploads/limits` read the policy per request (`uploadLimitBytes()`). `Bun.serve`'s `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` — the ceiling plus 1 MiB for the multipart envelope, fixed — so the setting, not the transport, refuses a file; Bun still answers a body over the ceiling with a bare 413 before the app runs, and `middleware/body-limit.ts` holds each route to its own limit before the body is read (see **Instance policy**). Uploads stream chunk-by-chunk to a temporary staging file instead of buffering the whole form in RAM |
+| `STORAGE_BACKEND`             | no       | `local` (default) or `s3`, validated at import (`lib/env.ts`, `lib/storage/types.ts`). Controls which `StorageBackend` stores every blob (`assets/`, `images/`, `images/variants/`, `analysis/`, and dit's `objects/`) |
+| `S3_BUCKET`                   | if `s3`  | Target S3 bucket name; required when `STORAGE_BACKEND=s3` |
+| `S3_ACCESS_KEY_ID`            | if `s3`  | S3 access key ID; required when `STORAGE_BACKEND=s3` |
+| `S3_SECRET_ACCESS_KEY`        | if `s3`  | S3 secret access key; required when `STORAGE_BACKEND=s3` |
+| `S3_ENDPOINT`                 | no       | Custom S3-compatible endpoint URL (required for Cloudflare R2 and MinIO; validated as a URL when set) |
+| `S3_REGION`                   | no       | S3 signing region, default `"auto"` |
+| `S3_PREFIX`                   | no       | Optional key prefix prepended to every S3 object key, normalized with no leading slash and a single trailing slash when non-empty |
 | `SAVE_CONTENT_RETENTION_DAYS` | no       | **seed** of `instance-jobs.saveContentRetentionDays` (`jobs.saveContentRetentionDays`), default 90, a whole number 1–36500: how long the content of a save no commit names is kept before the `save_content_sweep` job drops it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `MEDIA_CONCURRENCY`           | no       | **seed** of `instance-jobs.analysisWorkers` (`jobs.analysisWorkers`), default 2, a whole number 1–64 — the job `TaskQueue`'s concurrency, which follows a policy refresh (`setConcurrency`); each audio slot decodes the file once through one `ffmpeg` child, feeding an `@workspace/dsp` analysis session for peaks, loudness and spectrum together                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `JOB_RETRY_DELAY_MS`          | no       | default 5000 — multiplied by attempt number between job retries                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -1511,28 +1518,40 @@ details: {issues: [{path, message, code?, maximum?}]}}`, so validation failures 
 by a `too_big` issue (the upload cap the client reads). Path parameters go through `params()`, whose
 400 is a plain `Invalid path parameter: …` message.
 
-## Uploads
+## Uploads and storage
 
-`validator("form", z.object({ file: uploadedFile(...), projectId }))` → `storeUpload("assets"|"images", file)`
-(`uploadedFile`, `lib/multipart.ts`, checks the file against the policy's upload limit — and, for an image, its
-`imageTypes` — each time a request is parsed, answering with zod's own `too_big` (carrying `maximum`) or
-`invalid_value` issue in a 400; an asset whose name has an audio extension outside `limits.audioTypes` is refused
-with a 400 before the signature check, while any other file is an attachment the audio types do not govern)
-(`src/lib/storage.ts`, **awaited** — a failed write reaches `app.onError` as a 500, never a row pointing
-at nothing) → `createAsset`/`createImage`, and a failed insert unlinks the just-written file via
-`removeStoredFile`. The stored key is `crypto.randomUUID()` + an extension: the upload's own extension
-if it's a plain `[a-z0-9]{1,8}` token, else one derived from the MIME type, else `bin` — the client's
-filename never otherwise reaches disk. The row's `type` is the part's declared `Content-Type`, read back
-from the buffered body by `declaredFileType` (`lib/multipart.ts`): Bun's `FormData` parser ignores it and
-derives `File.type` from the filename extension. An image uploaded with no `projectId` is an avatar
-(`scope: "user"`); its palette is extracted (`lib/palette.ts`) and its resizes are queued
-(`enqueueImageVariants`, best-effort — a queue failure doesn't fail the upload, since the static handler
-resizes on demand anyway). Attachments are **not** uploads — `POST /:id/attachments` takes JSON
+Every stored blob (`assets/`, `images/`, `images/variants/`, `analysis/`, and dit's `objects/`) goes through the
+pluggable `StorageBackend` (`src/lib/storage/types.ts`, facade in `src/lib/storage.ts`): `LocalStorageBackend`
+(`src/lib/storage/local.ts`, default `./static/<key>` layout) or `S3StorageBackend` (`src/lib/storage/s3.ts`, built
+on Bun's native `Bun.S3Client` with zero AWS SDK dependency). Production code accesses blobs exclusively through the
+facade (`storedFileExists`, `storedFileStat`, `readStoredBytes`, `readStoredStream`, `storeBytes`, `storeFileFromPath`,
+`storeUpload`, `storeObjects`, `removeStoredFile`, `listStoredEntries`, `withLocalStoredFile`). `scripts/migrate-storage.ts`
+(built to `dist/scripts/migrate-storage.js`) idempotently copies local `./static` keys to S3 with `--dry-run`, `--verify`,
+and `--concurrency <n>`, never deleting local files.
+
+Multipart uploads (`POST /assets/upload`, `POST /images/upload`, `POST /images/instance`) stream `c.req.raw.body`
+chunk-by-chunk through `streamMultipartUpload` (`lib/multipart-stream.ts`, built on `@mjackson/multipart-parser`'s
+boundary parser) straight to a staging file (`./static/.tmp/` on local for same-FS atomic `rename`, or `os.tmpdir()`
+on S3) while capturing text fields, the part's declared `Content-Type` header, and the first `AUDIO_SIGNATURE_BYTES`
+(6 KiB) in memory. `middleware/request-refs.ts` calls `streamMultipartUpload` once for `authorizeProject` and memoizes
+the staged result on `c.req.raw`; `middleware/authorize-project.ts` and the route handlers clean up the staging file
+in `finally` on any rejection or completion. Over-limit uploads abort mid-stream with a 400 `too_big` issue (carrying
+`origin: "file"` and `maximum`), and disallowed image MIME types abort with `invalid_value`. OpenAPI request bodies
+stay declared through `multipartRequestBody` (`lib/multipart.ts`). An asset whose name has an audio extension outside
+`limits.audioTypes` is refused with a 400 before the signature check, while any other file is an attachment the audio
+types do not govern. `storeUpload("assets"|"images", file)` is **awaited** (a failed write reaches `app.onError` as
+a 500, never a row pointing at nothing) → `createAsset`/`createImage`, and a failed insert removes the just-written
+blob via `removeStoredFile`. The stored key is `crypto.randomUUID()` + an extension: the upload's own extension if
+it's a plain `[a-z0-9]{1,8}` token, else one derived from the MIME type, else `bin` — the client's filename never
+otherwise reaches storage. An image uploaded with no `projectId` is an avatar (`scope: "user"`); its palette is
+extracted directly from the staged file path (`lib/palette.ts`) before `storeUpload` moves it, and its resizes are
+queued (`enqueueImageVariants`, best-effort — a queue failure doesn't fail the upload, since the static handler
+resizes on demand via `ensureVariantKey`). Attachments are **not** uploads — `POST /:id/attachments` takes JSON
 `{ assetId }` into a join table. `attachedAssetSchema` is an asset plus a nullable `uploadedBy`
 (`uploadedBySchema`: `{id, name, image}`), read through the `assets.uploadedBy` relation
 (`db/relations.ts`) with the `attachmentsWithUploadedBy` `with` clause (`db/schema/assets.ts`, not the queries file: the entity
 reads importing `db/queries/assets.ts` would close an import cycle through `entities/index`). Deleting an asset, an image, or a whole project unlinks the bytes via
-`removeStoredFile`/`unlinkQuietly` **after** the row is committed gone, so a failed unlink leaves an
+`removeStoredFile` **after** the row is committed gone, so a failed remove leaves an
 orphan rather than a broken row. The same delete paths — plus a single track delete and a bulk one —
 also remove any spectrogram PNGs the track-audio rows they cascade away named: `deleteAsset`'s route,
 `deleteTrack`, `bulkDeleteTracks` and `deleteProject` each read the keys through

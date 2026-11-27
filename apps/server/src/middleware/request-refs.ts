@@ -1,6 +1,10 @@
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Scope } from "../db/queries/authorization.js";
+import {
+  isMultipartFormRequest,
+  streamMultipartUpload,
+} from "../lib/multipart-stream.js";
 
 /**
  * Reading the ids a request names, before any handler has run. The project
@@ -34,10 +38,16 @@ export function pathId(c: Context): number | null {
 }
 
 /**
- * Reads the request body once for a resolver. Hono memoizes the parsed body,
- * so the handler's own `c.req.valid(...)` still sees it.
+ * Reads the request body once for a resolver. JSON bodies are memoized by Hono;
+ * multipart uploads stream straight to disk via {@link streamMultipartUpload}
+ * and memoize their staged file and text fields on `c.req.raw`, so the handler
+ * reuses the staged file without buffering the body in RAM.
  */
 export async function readBody(c: Context): Promise<unknown> {
+  if (isMultipartFormRequest(c)) {
+    const streamed = await streamMultipartUpload(c);
+    return streamed.fields;
+  }
   try {
     const isJson =
       c.req.header("content-type")?.includes("application/json") ?? true;

@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
 import { zstdDecompressSync } from "node:zlib";
-import { objectKey, storedFilePath } from "./storage.js";
+import { objectKey, readStoredBytes } from "./storage.js";
 
 /** The most bytes one object may decompress to, as on upload. */
 const MAX_OBJECT_BYTES = 64 * 1024 * 1024;
@@ -11,7 +10,7 @@ const MAX_OBJECT_BYTES = 64 * 1024 * 1024;
  * or a kind byte that disagrees with the object's row.
  */
 export async function storedBody(hash: string, kind: number): Promise<Buffer> {
-  const frame = await readFile(storedFilePath(objectKey(hash)));
+  const frame = await readStoredBytes(objectKey(hash));
   const content = zstdDecompressSync(frame, {
     maxOutputLength: MAX_OBJECT_BYTES,
   });

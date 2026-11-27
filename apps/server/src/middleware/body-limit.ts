@@ -29,31 +29,84 @@ export const requestBodyCap = bodyLimit({
   },
 });
 
+function uploadTooBigError(maximum: number): ApiError {
+  const issue: ValidationIssue = {
+    path: ["file"],
+    code: "too_big",
+    maximum,
+    message: `File is over the ${maximum}-byte upload limit`,
+  };
+  return new ApiError(400, {
+    code: "invalid_request",
+    message: "Invalid request",
+    details: { issues: [issue] },
+  });
+}
+
+/**
+ * Wraps `source` in a pass-through `ReadableStream` that counts bytes as chunks
+ * flow downstream without buffering them in RAM. Once the total exceeds
+ * `maxSize`, it cancels `source` and errors the stream with `tooBigError`.
+ */
+function countingBodyStream(
+  source: ReadableStream<Uint8Array>,
+  maxSize: number,
+  maximum: number
+): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  let seen = 0;
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) {
+        controller.close();
+        return;
+      }
+      seen += value.byteLength;
+      if (seen > maxSize) {
+        await reader.cancel().catch(() => undefined);
+        controller.error(uploadTooBigError(maximum));
+        return;
+      }
+      controller.enqueue(value);
+    },
+    async cancel(reason) {
+      await reader.cancel(reason).catch(() => undefined);
+    },
+  });
+}
+
 /**
  * An upload route reads at most the instance's upload limit and the envelope
- * around the file, read from the policy for each request. A body over it is
- * refused the way the route's own validator refuses a file over the limit —
- * a 400 whose `details.issues` holds a `too_big` issue for `file` carrying
- * the `maximum` — so a client reads one answer whichever check caught it.
+ * around the file, read from the policy for each request. Declared lengths over
+ * the cap are refused before any byte is read; unsized or chunked bodies are
+ * wrapped in a zero-buffer counting stream so they abort mid-stream without
+ * buffering the whole upload in RAM. Either path answers with the shared 400
+ * `too_big` issue carrying `maximum`.
  */
 export const uploadBodyLimit = createMiddleware(async (c, next) => {
+  if (!c.req.raw.body) return next();
+
   const maximum = uploadLimitBytes();
-  return bodyLimit({
-    maxSize: maximum + UPLOAD_ENVELOPE_BYTES,
-    onError: () => {
-      const issue: ValidationIssue = {
-        path: ["file"],
-        code: "too_big",
-        maximum,
-        message: `File is over the ${maximum}-byte upload limit`,
-      };
-      throw new ApiError(400, {
-        code: "invalid_request",
-        message: "Invalid request",
-        details: { issues: [issue] },
-      });
-    },
-  })(c, next);
+  const maxSize = maximum + UPLOAD_ENVELOPE_BYTES;
+  const headers = c.req.raw.headers;
+  const hasTransferEncoding = headers.has("transfer-encoding");
+
+  if (headers.has("content-length") && !hasTransferEncoding) {
+    const declared = Number.parseInt(headers.get("content-length") || "0", 10);
+    if (declared > maxSize) {
+      throw uploadTooBigError(maximum);
+    }
+    return next();
+  }
+
+  const counted = countingBodyStream(c.req.raw.body, maxSize, maximum);
+  c.req.raw = new Request(c.req.raw, {
+    body: counted,
+    duplex: "half",
+  } as RequestInit);
+  return next();
 });
 
 /**

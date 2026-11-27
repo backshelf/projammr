@@ -1017,18 +1017,18 @@ options)` — newest-first, each carrying its session and the previous save's `m
   handler's `result` is the sweep's counts with `bytesFreed`. `lastSaveContentSweep()` is the latest finished row
   (`done` or `failed`, with its `finishedAt` and `bytesFreed`, 0 when it failed), which `GET /admin/storage` reads
   as `lastSweep` and the retention setting's last-run line shows; null before the first run.
-- **storage-audit.ts** — the `storage_audit` job kind: `auditStorage` walks `static/**`, deletes any file older
-  than `ORPHAN_AGE_MS` (24 h) whose key no table names (or, while the instance policy's `orphanMode` is `report`,
-  counts it as `reported` and keeps it), recomputes every scope's counter, fills `images.variantsReady`
-  for images whose resizes are all present, prunes counters of scopes that are gone, and writes the counts and bytes
-  onto the job row. `enqueueStorageAudit` is a no-op while one is queued or running; `startStorageAudits` runs one at
-  boot and every `auditIntervalHours` after, re-armed when the policy changes it. `lastStorageAudit` is the newest
-  finished row, for `GET /admin/storage`.
-  A file outside `assets/`, `images/`, `analysis/` and `objects/` is counted as foreign and left alone; an
-  `objects/` file no `objects` row names is an orphan like any other, but is removed only through
-  `removeUnnamedObjectFiles` (the object's lock, then a re-check of its row), so one a push records while the audit
-  decides is kept. The walk lists keys (`listStoredKeys`) and stats only the files no row references
-  (`storedFileStat`).
+- **storage-audit.ts** — the `storage_audit` job kind: `auditStorage` walks the active `StorageBackend` via
+  `listStoredEntries()` (receiving `{ key, size, modifiedAt }` directly from disk or S3 `ListObjectsV2` with zero
+  per-key HEAD requests), deletes any blob older than `ORPHAN_AGE_MS` (24 h) whose key no table names (or, while the
+  instance policy's `orphanMode` is `report`, counts it as `reported` and keeps it), recomputes every scope's counter,
+  fills `images.variantsReady` for images whose resizes are all present, prunes counters of scopes that are gone, and
+  writes the counts and bytes onto the job row. `enqueueStorageAudit` is a no-op while one is queued or running;
+  `startStorageAudits` runs one at boot and every `auditIntervalHours` after, re-armed when the policy changes it.
+  `lastStorageAudit` is the newest finished row, for `GET /admin/storage`.
+  A file outside `assets/`, `images/`, `analysis/` and `objects/` is counted as foreign and left alone (local `.tmp/`
+  staging files are skipped by `LocalStorageBackend.listEntries()`); an `objects/` file no `objects` row names is an
+  orphan like any other, but is removed only through `removeUnnamedObjectFiles` (the object's lock, then a re-check
+  of its row), so one a push records while the audit decides is kept.
 - **storage-usage.ts** — the `storage_usage` counters. `projectScope`/`userScope`/`scopesOf` name the scopes a file
   belongs to; `addUsage`/`subtractUsage(tx, scopes, bytes)` move them in one upsert and must be called with the
   transaction that writes the owning row; `addVariantUsage(key, bytes)` does the same for a resize while also adding

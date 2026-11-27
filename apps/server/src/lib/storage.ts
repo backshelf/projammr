@@ -1,38 +1,51 @@
+import { LocalStorageBackend, STATIC_ROOT } from "./storage/local.js";
+import { S3StorageBackend } from "./storage/s3.js";
 import {
-  mkdir,
-  open,
-  readdir,
-  rename,
-  stat,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
-import { errorFields, log } from "./log.js";
+  type ByteRange,
+  parseStorageConfig,
+  STORAGE_DIR,
+  type StorageBackend,
+  type StorageConfig,
+  type StorageKind,
+  type StoredEntry,
+  type StoredStat,
+} from "./storage/types.js";
 
-const logger = log("storage");
+export {
+  LOCAL_TMP_DIR,
+  LocalStorageBackend,
+  STATIC_ROOT,
+  unlinkQuietly,
+} from "./storage/local.js";
+export { S3StorageBackend } from "./storage/s3.js";
+export {
+  STORAGE_DIRS,
+  type ByteRange,
+  type StorageBackend,
+  type StorageKind,
+  type StoredEntry,
+  type StoredStat,
+} from "./storage/types.js";
 
-/** Where stored files live, relative to the server's working directory. */
-const STATIC_ROOT = "./static";
+/** Creates the configured {@link StorageBackend} from a parsed {@link StorageConfig}. */
+function createStorageBackend(config: StorageConfig): StorageBackend {
+  return config.kind === "s3"
+    ? new S3StorageBackend(config.s3)
+    : new LocalStorageBackend();
+}
 
-/** The subdirectory of the static root that files of each kind are written to. */
-const STORAGE_DIR = {
-  assets: "assets",
-  images: "images",
-  /** Spectrogram PNGs, written by the analysis funnel rather than an upload. */
-  analysis: "analysis",
-  /** Content-addressed dit objects, keyed by {@link objectKey}. */
-  objects: "objects",
-} as const;
+let activeBackend: StorageBackend | null = null;
 
-export type StorageKind = keyof typeof STORAGE_DIR;
+/** The active storage backend, created lazily from `STORAGE_BACKEND` on first use. */
+export function storageBackend(): StorageBackend {
+  activeBackend ??= createStorageBackend(parseStorageConfig(process.env));
+  return activeBackend;
+}
 
-/**
- * The directories a stored key may live under. A file anywhere else below the
- * static root was not put there by the storage layer, which is why the audit
- * leaves it alone.
- */
-export const STORAGE_DIRS: readonly string[] = Object.values(STORAGE_DIR);
+/** Replaces the active storage backend (pass `null` to reset to the env-configured default). */
+export function setStorageBackend(backend: StorageBackend | null): void {
+  activeBackend = backend;
+}
 
 /** A fresh stored key under `kind`'s directory: `<kind>/<uuid>.<extension>`. */
 export function newStorageKey(kind: StorageKind, extension: string): string {
@@ -40,7 +53,7 @@ export function newStorageKey(kind: StorageKind, extension: string): string {
 }
 
 /**
- * Where a stored key lives on disk.
+ * Where a stored key lives on local disk.
  *
  * A row records the key alone — `images/<uuid>.png` — so one string identifies
  * the file everywhere: it is what an entity's `image` column holds, which lets
@@ -52,43 +65,59 @@ export const storedFilePath = (key: string): string => `${STATIC_ROOT}/${key}`;
 /** The URL a stored key is served from. */
 export const staticUrl = (key: string): string => `/static/${key}`;
 
-/** Whether a stored key's file is still on disk. */
+/** Whether a stored key exists in the active backend. */
 export const storedFileExists = (key: string): Promise<boolean> =>
-  Bun.file(storedFilePath(key)).exists();
+  storageBackend().exists(key);
+
+/** Size and modification time of a stored key, or null when missing. */
+export const storedFileStat = (key: string): Promise<StoredStat | null> =>
+  storageBackend().stat(key);
+
+/** Reads a stored key's full bytes from the active backend. */
+export const readStoredBytes = (key: string): Promise<Uint8Array> =>
+  storageBackend().readBytes(key);
+
+/** Opens a readable byte stream for a stored key, optionally for an inclusive `[start, end]` range. */
+export const readStoredStream = (
+  key: string,
+  range?: ByteRange
+): ReadableStream<Uint8Array> => storageBackend().readStream(key, range);
+
+/** Writes raw bytes under an explicit stored key. */
+export const storeBytes = (
+  key: string,
+  bytes: Uint8Array,
+  contentType?: string
+): Promise<void> => storageBackend().putBytes(key, bytes, contentType);
+
+/** Moves or streams a staged local temp file into storage under an explicit key. */
+export const storeFileFromPath = (
+  key: string,
+  tempPath: string,
+  contentType?: string
+): Promise<void> => storageBackend().putFromFile(key, tempPath, contentType);
 
 /**
- * Every file below the static root, keyed the way a row names it. The walk is
- * how the storage audit learns what is on disk — no row lists the cached
- * resizes, and only disk knows what a crashed upload left behind. A static root
- * that does not exist yet holds nothing.
+ * Every entry in the active backend with its size and modification time.
+ * The storage audit reads this directly so S3 avoids per-key HEAD requests.
  */
+export const listStoredEntries = (): Promise<StoredEntry[]> =>
+  storageBackend().listEntries();
+
+/** Every stored key in the active backend. */
 export async function listStoredKeys(): Promise<string[]> {
-  const entries = await readdir(STATIC_ROOT, {
-    recursive: true,
-    withFileTypes: true,
-  }).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  });
-
-  // A key is the path below the root, always with forward slashes, which is
-  // what the rows hold and what `storedFilePath` renders back.
-  return entries
-    .filter((entry) => entry.isFile())
-    .map((entry) =>
-      relative(STATIC_ROOT, `${entry.parentPath}/${entry.name}`)
-        .split(sep)
-        .join("/")
-    );
+  return (await listStoredEntries()).map((entry) => entry.key);
 }
 
-/** What disk says of a stored key's file, or null once it is gone. */
-export async function storedFileStat(
-  key: string
-): Promise<{ size: number; modifiedAt: Date } | null> {
-  const file = await stat(storedFilePath(key)).catch(() => null);
-  return file && { size: file.size, modifiedAt: file.mtime };
-}
+/**
+ * Runs `fn` against a local filesystem path holding `key`'s bytes.
+ * Local storage passes the file path directly; S3 downloads to a temp file and
+ * unlinks it when `fn` finishes.
+ */
+export const withLocalStoredFile = <T>(
+  key: string,
+  fn: (localPath: string) => Promise<T>
+): Promise<T> => storageBackend().withLocalFile(key, fn);
 
 const SAFE_EXTENSION = /^[a-z0-9]{1,8}$/i;
 
@@ -113,8 +142,16 @@ export function storageExtension(fileName: string, mime: string): string {
     : "bin";
 }
 
+/** A staged upload written to a local temp file before moving into storage. */
+export type StagedUpload = {
+  tempPath: string;
+  name: string;
+  type: string;
+};
+
 /**
- * Writes an upload to disk and returns the key to record on its row.
+ * Stores a staged upload into the active backend and returns the key to record
+ * on its row.
  *
  * A rejection propagates: the caller must not insert a row for a file that was
  * never written, or the row points at nothing and the API reports a success it
@@ -122,15 +159,15 @@ export function storageExtension(fileName: string, mime: string): string {
  */
 export async function storeUpload(
   kind: StorageKind,
-  file: File
+  source: StagedUpload
 ): Promise<string> {
-  const extension = storageExtension(file.name, file.type);
+  const extension = storageExtension(source.name, source.type);
   const key = newStorageKey(kind, extension);
-
-  await writeFile(storedFilePath(key), Buffer.from(await file.arrayBuffer()), {
-    flag: "wx",
-  });
-
+  await storageBackend().putFromFile(
+    key,
+    source.tempPath,
+    source.type || undefined
+  );
   return key;
 }
 
@@ -156,124 +193,22 @@ export function objectHashOf(key: string): string | null {
   return isObjectHash(hash) && objectKey(hash) === key ? hash : null;
 }
 
-/** Flushes a directory's entries to disk, so a rename or a new entry in it survives power loss. */
-async function syncDirectory(dir: string): Promise<void> {
-  const handle = await open(dir, "r");
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
-
-/**
- * Creates `dir` with any missing parents, and flushes each new directory's
- * entry in its own parent, so a file later made durable in `dir` cannot lose
- * the path to it.
- */
-async function makeDurableDirectory(dir: string): Promise<void> {
-  const created = await mkdir(dir, { recursive: true });
-  if (created === undefined) return;
-
-  const top = dirname(resolve(created));
-  let parent = resolve(dir);
-  do {
-    parent = dirname(parent);
-    await syncDirectory(parent);
-  } while (parent !== top && parent !== dirname(parent));
-}
-
 /** An object's id and its bytes, as {@link storeObjects} writes them. */
 type ObjectFile = { hash: string; bytes: Uint8Array };
 
-/** Writes `bytes` to a new file at `path` and flushes it to disk. */
-async function writeDurableFile(
-  path: string,
-  bytes: Uint8Array
-): Promise<void> {
-  const file = await open(path, "wx");
-  try {
-    await file.writeFile(bytes);
-    await file.sync();
-  } finally {
-    await file.close();
-  }
-}
-
-/**
- * Waits for every one of `work` to settle, then throws the first failure, so
- * nothing is still running when the caller cleans up after it.
- */
-async function settleAll(work: Promise<unknown>[]): Promise<void> {
-  const failed = (await Promise.allSettled(work)).find(
-    (result) => result.status === "rejected"
-  );
-  if (failed) throw failed.reason;
-}
-
 /**
  * Writes objects' bytes, unchanged, under their content-addressed keys, and
- * returns once all of them are on disk for good. The hashes are not verified
- * here: the caller that received the bytes does that.
- *
- * Each object's bytes go to a temporary sibling and are flushed, then every
- * temporary file is renamed onto its key, then each directory a rename landed
- * in is flushed once, so neither a killed process nor power loss leaves a
- * truncated file under a final name, and a row committed after this returns
- * always finds its whole file. A write or a rename that fails removes every
- * temporary file and throws; one that a crash leaves behind is unreferenced,
- * and the storage audit reaps it, as it does a file renamed into place whose
- * row never committed.
- *
- * A file already under a key is replaced. The caller holds the objects' locks
- * and has written their `objects` rows itself, so such a file is an orphan no
- * committed row vouches for, and the verified bytes in hand are the ones to
- * keep.
+ * returns once all of them are durable in the active backend. The hashes are
+ * not verified here: the caller that received the bytes does that.
  */
 export async function storeObjects(files: ObjectFile[]): Promise<void> {
-  const paths = files.map(({ hash }) => storedFilePath(objectKey(hash)));
-  const directories = [...new Set(paths.map((path) => dirname(path)))];
-  // One at a time: two creations racing up the same missing parents could
-  // each leave the flushing of a parent to the other.
-  for (const directory of directories) await makeDurableDirectory(directory);
-
-  const temporaries = paths.map((path) => `${path}.tmp-${crypto.randomUUID()}`);
-  try {
-    await settleAll(
-      files.map(({ bytes }, index) =>
-        writeDurableFile(temporaries[index]!, bytes)
-      )
-    );
-    await settleAll(
-      temporaries.map((temporary, index) => rename(temporary, paths[index]!))
-    );
-  } catch (error) {
-    await Promise.all(temporaries.map(unlinkQuietly));
-    throw error;
-  }
-  await Promise.all(directories.map(syncDirectory));
+  const keyed = files.map(({ hash, bytes }) => ({
+    key: objectKey(hash),
+    bytes,
+  }));
+  await storageBackend().putObjects(keyed);
 }
 
-/**
- * Removes a stored file, tolerating one that is already gone.
- *
- * Callers unlink after the owning row is committed, so a failure here leaves an
- * unreachable orphan rather than a broken row — worth logging, never worth
- * turning a successful delete into an error. Answers whether the file is gone:
- * false only for a failed unlink, which was logged.
- */
-export async function unlinkQuietly(path: string): Promise<boolean> {
-  try {
-    await unlink(path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      logger.error("failed to unlink", { path, ...errorFields(error) });
-      return false;
-    }
-  }
-  return true;
-}
-
-/** {@link unlinkQuietly} for the file a row's key names. */
+/** Removes the stored file a row's key names, tolerating one that is already gone. */
 export const removeStoredFile = (key: string): Promise<boolean> =>
-  unlinkQuietly(storedFilePath(key));
+  storageBackend().remove(key);

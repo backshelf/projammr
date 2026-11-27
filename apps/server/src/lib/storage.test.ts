@@ -1,8 +1,11 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import {
   isObjectHash,
   listStoredKeys,
+  LocalStorageBackend,
   objectKey,
   storageExtension,
   storeObjects,
@@ -158,5 +161,53 @@ describe("storeObjects", () => {
     await expect(
       storeObjects([{ hash: "../x", bytes: new Uint8Array() }])
     ).rejects.toThrow();
+  });
+});
+
+describe("LocalStorageBackend", () => {
+  it("supports putBytes, putFromFile, readStream ranges, withLocalFile, and skips .tmp in listEntries", async () => {
+    const root = await mkdtemp(join(tmpdir(), "projammr-local-backend-"));
+    const backend = new LocalStorageBackend(root);
+    try {
+      await backend.putBytes(
+        "assets/hello.txt",
+        new TextEncoder().encode("abcdefghij")
+      );
+      expect(await backend.exists("assets/hello.txt")).toBe(true);
+      expect(await backend.readBytes("assets/hello.txt")).toEqual(
+        new TextEncoder().encode("abcdefghij")
+      );
+
+      const ranged = new Uint8Array(
+        await new Response(
+          backend.readStream("assets/hello.txt", [2, 5])
+        ).arrayBuffer()
+      );
+      expect(new TextDecoder().decode(ranged)).toBe("cdef");
+
+      const staged = join(root, ".tmp", "staged.bin");
+      await mkdir(join(root, ".tmp"), { recursive: true });
+      await writeFile(staged, new Uint8Array([42, 43, 44]));
+      // An active temp file under `.tmp/` must not appear in `listEntries()`.
+      expect((await backend.listEntries()).map((e) => e.key)).toEqual([
+        "assets/hello.txt",
+      ]);
+
+      await backend.putFromFile("assets/moved.bin", staged);
+      expect(await backend.readBytes("assets/moved.bin")).toEqual(
+        new Uint8Array([42, 43, 44])
+      );
+
+      const resolved = await backend.withLocalFile(
+        "assets/moved.bin",
+        async (localPath) => localPath
+      );
+      expect(resolved).toBe(`${root}/assets/moved.bin`);
+
+      expect(await backend.remove("assets/moved.bin")).toBe(true);
+      expect(await backend.exists("assets/moved.bin")).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

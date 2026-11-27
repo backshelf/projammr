@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "bun --watch src/server.ts",
     "format": "bun --bun prettier --write \"**/*.ts\"",
-    "build": "bun build src/server.ts src/db/migrate.ts --target=bun --packages=external --outdir=dist && bun build scripts/reset-link.ts scripts/make-admin.ts scripts/rotate-notes-key.ts --target=bun --packages=external --outdir=dist/scripts",
+    "build": "bun build src/server.ts src/db/migrate.ts --target=bun --packages=external --outdir=dist && bun build scripts/reset-link.ts scripts/make-admin.ts scripts/rotate-notes-key.ts scripts/migrate-storage.ts --target=bun --packages=external --outdir=dist/scripts",
     "start": "bun dist/server.js",
     "lint": "bun --bun eslint .",
     "typecheck": "bun check -p tsconfig.typecheck.json",
@@ -23,6 +23,7 @@
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.5",
     "@better-auth/mcp": "^1.7.19",
+    "@mjackson/multipart-parser": "^0.10.1",
     "@modelcontextprotocol/server": "^2.4.0",
     "@scalar/hono-api-reference": "^0.12.18",
     "@workspace/dit": "workspace:*",

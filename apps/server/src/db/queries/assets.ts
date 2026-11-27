@@ -12,7 +12,9 @@ import {
 import { unionAll } from "drizzle-orm/pg-core";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
-import { stat } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   AUDIO_MIME_TYPES,
   convertAudio,
@@ -31,9 +33,15 @@ import {
 import { sessionAttachments } from "../schema/attachments.js";
 import { comments } from "../schema/comments.js";
 import {
+  LOCAL_TMP_DIR,
   removeStoredFile,
+  STATIC_ROOT,
   staticUrl,
-  storedFilePath,
+  storageBackend,
+  storedFileStat,
+  storeFileFromPath,
+  unlinkQuietly,
+  withLocalStoredFile,
 } from "../../lib/storage.js";
 import { users } from "../schema/auth.js";
 import { images, type ImageScope } from "../schema/images.js";
@@ -410,8 +418,8 @@ export async function getStaticFileByKey(
 
   if (!result || result.kind !== "analysis") return result;
 
-  const { size } = await stat(storedFilePath(result.assetPath));
-  return { ...result, size };
+  const info = await storedFileStat(result.assetPath);
+  return { ...result, size: info?.size ?? 0 };
 }
 
 const sumSpectrogramBytes = (versions: { spectrogramBytes: number }[]) =>
@@ -869,7 +877,17 @@ async function convertAssetToAsset(
   if (!row) throw new Error(`Asset ${assetId} no longer exists`);
 
   const assetPath = `assets/${crypto.randomUUID()}${format}`;
-  const outputPath = storedFilePath(assetPath);
+  let tempOutputPath: string;
+  if (storageBackend().kind === "local") {
+    const dir = join(STATIC_ROOT, LOCAL_TMP_DIR);
+    await mkdir(dir, { recursive: true });
+    tempOutputPath = join(dir, `convert-${crypto.randomUUID()}${format}`);
+  } else {
+    tempOutputPath = join(
+      tmpdir(),
+      `projammr-convert-${crypto.randomUUID()}${format}`
+    );
+  }
   const scopes = scopesOf({
     projectId: row.projectId,
     userId: createdBy ?? row.createdByUser,
@@ -877,21 +895,18 @@ async function convertAssetToAsset(
   const allowance = await remainingAllowance(scopes);
   const overrun = new AbortController();
   let outgrewAllowance = false;
+  let stored = false;
 
   try {
-    await convertAudio(
-      storedFilePath(row.assetPath),
-      outputPath,
-      format,
-      kbps ?? undefined,
-      {
+    await withLocalStoredFile(row.assetPath, async (inputPath) => {
+      await convertAudio(inputPath, tempOutputPath, format, kbps ?? undefined, {
         // The encode is measured as it writes rather than once it finishes:
         // an output that will not fit is not worth producing in full, and the
         // bytes it has already written are removed with the rest below.
         onProgress: async (fraction) => {
           if (
             allowance != null &&
-            (await writtenBytes(outputPath)) > allowance
+            (await writtenBytes(tempOutputPath)) > allowance
           ) {
             outgrewAllowance = true;
             overrun.abort();
@@ -899,8 +914,8 @@ async function convertAssetToAsset(
           await report.progress(fraction);
         },
         signal: AbortSignal.any([report.signal, overrun.signal]),
-      }
-    );
+      });
+    });
 
     const stem = row.name.includes(".")
       ? row.name.slice(0, row.name.lastIndexOf("."))
@@ -912,7 +927,13 @@ async function convertAssetToAsset(
         "-"
       );
 
-    const { size } = await stat(storedFilePath(assetPath));
+    const { size } = await stat(tempOutputPath);
+    await storeFileFromPath(
+      assetPath,
+      tempOutputPath,
+      AUDIO_MIME_TYPES[format]
+    );
+    stored = true;
 
     return await createAsset({
       assetPath,
@@ -923,7 +944,7 @@ async function convertAssetToAsset(
       projectId: row.projectId,
     });
   } catch (error) {
-    await removeStoredFile(assetPath);
+    if (stored) await removeStoredFile(assetPath);
     // Rethrown as a plain failure rather than the abort it arrived as: the job
     // was stopped because it cannot be done here, which is a failure to report
     // and not the cancellation a user asked for.
@@ -934,6 +955,8 @@ async function convertAssetToAsset(
       );
     }
     throw error;
+  } finally {
+    await unlinkQuietly(tempOutputPath);
   }
 }
 

@@ -104,7 +104,7 @@ const GRAYSCALE: Omit<Palette, "accentHue" | "accentChroma" | "accentHex"> = {
   glowDark: "oklch(0.38 0 0)",
 };
 
-export async function extractPalette(input: Buffer): Promise<Palette> {
+export async function extractPalette(input: Buffer | string): Promise<Palette> {
   const { data, info } = await sharp(input)
     .resize(160, 160, { fit: "fill" })
     .removeAlpha()

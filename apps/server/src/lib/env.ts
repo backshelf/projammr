@@ -2,6 +2,7 @@ import "dotenv/config";
 
 import addressparser from "nodemailer/lib/addressparser";
 import type { MasterKeys } from "./notes-crypto.js";
+import { parseStorageConfig, type StorageConfig } from "./storage/types.js";
 
 /**
  * Origins are matched against the browser's `Origin` header by exact string,
@@ -223,3 +224,11 @@ export const mailFromAddress: string | null = (() => {
   }
   return address;
 })();
+
+/**
+ * Which blob store the server uses (`local` or `s3`) and, when `s3`, its
+ * bucket, credentials, optional endpoint/prefix and region. Validated at boot
+ * so a misconfigured deployment refuses to start instead of failing on the
+ * first upload.
+ */
+export const storageConfig: StorageConfig = parseStorageConfig(process.env);

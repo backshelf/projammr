@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { readStoredStream, storedFileStat } from "./storage.js";
 
 /**
  * How a file on disk is handed to the browser. The type is the caller's to
@@ -70,17 +71,17 @@ export function contentDisposition(
 }
 
 /**
- * Serves a file from disk with the headers every served file carries and full
+ * Serves a stored file with the headers every served file carries and full
  * `Range` support (206 for a satisfiable span, 416 for one past the end). A
  * file that is missing is a 404: the row that names it has outlived the bytes.
  */
 export async function fileResponse(
   c: Context,
-  path: string,
+  key: string,
   options: FileResponseOptions
 ): Promise<Response> {
-  const file = Bun.file(path);
-  if (!(await file.exists())) throw new HTTPException(404);
+  const info = await storedFileStat(key);
+  if (!info) throw new HTTPException(404);
 
   const { type, attachment } = options;
   const headers = {
@@ -94,24 +95,29 @@ export async function fileResponse(
     ),
   };
 
-  const range = byteRange(c.req.header("range"), file.size);
+  const range = byteRange(c.req.header("range"), info.size);
   if (range === "unsatisfiable") {
     return c.body(null, 416, {
       ...headers,
-      "Content-Range": `bytes */${file.size}`,
+      "Content-Range": `bytes */${info.size}`,
     });
   }
   if (range) {
     const [start, end] = range;
-    return new Response(file.slice(start, end + 1, type), {
+    return new Response(readStoredStream(key, [start, end]), {
       status: 206,
       headers: {
         ...headers,
-        "Content-Range": `bytes ${start}-${end}/${file.size}`,
+        "Content-Range": `bytes ${start}-${end}/${info.size}`,
         "Content-Length": String(end - start + 1),
       },
     });
   }
 
-  return new Response(file, { headers });
+  return new Response(readStoredStream(key), {
+    headers: {
+      ...headers,
+      "Content-Length": String(info.size),
+    },
+  });
 }

@@ -1,10 +1,10 @@
-import { stat } from "node:fs/promises";
 import { inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { objects } from "../db/schema/objects.js";
 import { chunk } from "./chunk.js";
 import { storedBody } from "./object-body.js";
-import { objectKey, storedFilePath } from "./storage.js";
+import { objectKey, storedFileExists } from "./storage.js";
+import { runWithConcurrency } from "./storage/types.js";
 
 /** An object kind byte, as `objects.kind` stores it. */
 const KIND_BLOB = 1;
@@ -65,19 +65,20 @@ export async function sampleLeaves(
 }
 
 /**
- * Whether every leaf's stored file is there. One `stat` each, never an open
- * file, so a sample of thousands of chunks holds no descriptor: a download
- * checks this before its first byte, since bytes sent cannot be taken back.
+ * Whether every leaf's stored object is present. Bounded-concurrency existence
+ * checks (no open file descriptors), stopping early on the first missing leaf:
+ * a download checks this before its first byte, since bytes sent cannot be
+ * taken back.
  */
 export async function leavesPresent(leaves: string[]): Promise<boolean> {
-  for (const leaf of leaves) {
-    try {
-      await stat(storedFilePath(objectKey(leaf)));
-    } catch {
-      return false;
+  let present = true;
+  await runWithConcurrency(leaves, 16, async (leaf) => {
+    if (!present) return;
+    if (!(await storedFileExists(objectKey(leaf)))) {
+      present = false;
     }
-  }
-  return true;
+  });
+  return present;
 }
 
 /**

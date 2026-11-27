@@ -51,7 +51,7 @@ import { writeSpectrogramPng } from "../../lib/spectrogram.js";
 import {
   removeStoredFile,
   storedFileExists,
-  storedFilePath,
+  withLocalStoredFile,
 } from "../../lib/storage.js";
 import { db, type Tx } from "../index.js";
 import { z } from "zod";
@@ -1969,7 +1969,6 @@ async function analyseTrackAudio(
   if (!row || !isAudioName(row.name)) return;
   if (!isOutstandingAnalysis(row.analysisVersion)) return;
 
-  const file = storedFilePath(row.assetPath);
   const dsp = await getDsp();
   const session = new AnalysisSession(
     dsp,
@@ -1984,12 +1983,14 @@ async function analyseTrackAudio(
     // version bump, most often) already has this row's duration from the
     // run before, so it skips the probe spawn entirely; only a track audio's
     // first analysis pays for one.
-    const frames = await decodeInto(file, session, {
-      onProgress: report.progress,
-      signal: report.signal,
-      durationSeconds:
-        row.durationMs != null ? row.durationMs / 1000 : undefined,
-    });
+    const frames = await withLocalStoredFile(row.assetPath, (file) =>
+      decodeInto(file, session, {
+        onProgress: report.progress,
+        signal: report.signal,
+        durationSeconds:
+          row.durationMs != null ? row.durationMs / 1000 : undefined,
+      })
+    );
     if (frames === null) {
       throw new Error(`ffmpeg could not read ${row.name}`);
     }

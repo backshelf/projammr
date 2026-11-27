@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { Hono } from "hono";
 import type { AuthedEnv } from "../auth.js";
 import {
@@ -20,7 +19,7 @@ import {
   validator,
 } from "../lib/http.js";
 import { packRecordHeader, packRecords } from "../lib/object-pack.js";
-import { objectKey, storedFilePath } from "../lib/storage.js";
+import { objectKey, readStoredBytes } from "../lib/storage.js";
 import { streamOf } from "../lib/stream.js";
 
 const { describe, describeRaw, route } = describer("Repos");
@@ -152,7 +151,7 @@ async function* packFrames(
   records: { hash: string; kind: number }[]
 ): AsyncGenerator<Uint8Array> {
   for (const { hash, kind } of records) {
-    const frame = await readFile(storedFilePath(objectKey(hash)));
+    const frame = await readStoredBytes(objectKey(hash));
     yield packRecordHeader(hash, kind, frame.byteLength);
     yield frame;
   }

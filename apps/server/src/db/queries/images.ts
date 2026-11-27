@@ -2,11 +2,11 @@ import { and, asc, count, eq, inArray, isNotNull } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import {
-  ensureVariant,
+  ensureVariantKey,
   removeVariants,
   VARIANT_WIDTHS,
 } from "../../lib/images.js";
-import { removeStoredFile, storedFilePath } from "../../lib/storage.js";
+import { removeStoredFile, storedFileExists } from "../../lib/storage.js";
 import { ENTITIES, entityModules } from "../../entities/index.js";
 import type { EntityKind } from "../../entities/types.js";
 import { db } from "../index.js";
@@ -293,7 +293,7 @@ async function findOutstandingImageVariants() {
   await Promise.all(
     rows.map(async (row) => {
       if (row.projectId == null) return;
-      if (!(await Bun.file(storedFilePath(row.assetPath)).exists())) return;
+      if (!(await storedFileExists(row.assetPath))) return;
       subjects.push({ subjectId: row.id, projectId: row.projectId });
     })
   );
@@ -316,7 +316,7 @@ registerJobHandler(
     const image = await getImage(job.subjectId);
 
     for (const [index, width] of VARIANT_WIDTHS.entries()) {
-      await ensureVariant(image.assetPath, width);
+      await ensureVariantKey(image.assetPath, width);
       await report.progress((index + 1) / VARIANT_WIDTHS.length);
     }
 

@@ -11,7 +11,7 @@ import {
 import { isMemberAtLeast } from "./db/queries/authorization.js";
 import { trustedOrigins } from "./lib/env.js";
 import {
-  ensureVariant,
+  ensureVariantKey,
   isVariantWidth,
   VARIANT_CONTENT_TYPES,
   VARIANT_FORMATS,
@@ -20,7 +20,6 @@ import {
   VARIANT_WIDTHS,
 } from "./lib/images.js";
 import { fileResponse } from "./lib/serve-file.js";
-import { storedFilePath } from "./lib/storage.js";
 
 /**
  * The media types served in the browser rather than handed to the download
@@ -175,7 +174,7 @@ staticFiles.use("/static/*", async (c) => {
   if (width) {
     return fileResponse(
       c,
-      await ensureVariant(record.assetPath, width, format),
+      await ensureVariantKey(record.assetPath, width, format),
       {
         type: VARIANT_CONTENT_TYPES[format],
         filename,
@@ -190,7 +189,7 @@ staticFiles.use("/static/*", async (c) => {
   // The stored MIME is authoritative for the types served inline: files are
   // named by a UUID plus an extension, and a type guessed from that extension
   // can differ from what was uploaded (`audio/x-wav` for `audio/wav`).
-  return fileResponse(c, storedFilePath(storedKeyOf(c.req.path)), {
+  return fileResponse(c, storedKeyOf(c.req.path), {
     type: inline ? record.type : "application/octet-stream",
     filename,
     attachment: !inline || c.req.query("download") !== undefined,

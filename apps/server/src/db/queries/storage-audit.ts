@@ -8,12 +8,11 @@ import {
 import { instancePolicy } from "../../lib/instance-policy.js";
 import { log } from "../../lib/log.js";
 import {
-  listStoredKeys,
+  listStoredEntries,
   objectHashOf,
   objectKey,
   removeStoredFile,
   STORAGE_DIRS,
-  storedFileStat,
 } from "../../lib/storage.js";
 import { db } from "../index.js";
 import { assets } from "../schema/assets.js";
@@ -173,13 +172,13 @@ async function reconcileVariantsReady(keys: string[]): Promise<number> {
  * commit.
  */
 export async function auditStorage(): Promise<StorageAuditReport> {
-  const keys = await listStoredKeys();
+  const entries = await listStoredEntries();
   const referenced = await referencedKeys();
   const youngerThan = Date.now() - ORPHAN_AGE_MS;
   const { orphanMode } = instancePolicy().limits;
 
   const report: StorageAuditReport = {
-    scanned: keys.length,
+    scanned: entries.length,
     foreign: 0,
     deleted: 0,
     deletedBytes: 0,
@@ -201,27 +200,26 @@ export async function auditStorage(): Promise<StorageAuditReport> {
     pendingObjects.clear();
   };
 
-  for (const key of keys) {
+  for (const entry of entries) {
+    const { key } = entry;
     if (!isStorageKey(key)) {
       report.foreign++;
       continue;
     }
     if (isReferenced(key, referenced)) continue;
-    const file = await storedFileStat(key);
-    if (!file) continue;
-    if (file.modifiedAt.getTime() > youngerThan) {
+    if (entry.modifiedAt.getTime() > youngerThan) {
       report.sparedYoung++;
       continue;
     }
     if (orphanMode === "report") {
       report.reported++;
-      report.reportedBytes += file.size;
+      report.reportedBytes += entry.size;
       continue;
     }
 
     const hash = objectHashOf(key);
     if (hash) {
-      pendingObjects.set(hash, file.size);
+      pendingObjects.set(hash, entry.size);
       if (pendingObjects.size >= OBJECT_LOCKS_PER_TRANSACTION) {
         await flushObjectOrphans();
       }
@@ -230,12 +228,14 @@ export async function auditStorage(): Promise<StorageAuditReport> {
 
     if (!(await removeStoredFile(key))) continue;
     report.deleted++;
-    report.deletedBytes += file.size;
+    report.deletedBytes += entry.size;
   }
 
   await flushObjectOrphans();
 
-  report.variantsReady = await reconcileVariantsReady(keys);
+  report.variantsReady = await reconcileVariantsReady(
+    entries.map((entry) => entry.key)
+  );
   report.drift = await recomputeAllUsage();
 
   if (report.drift.length > 0) {

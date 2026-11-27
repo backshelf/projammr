@@ -28,6 +28,13 @@ describe("env", () => {
     stubEnv("NOTES_KEY_VERSION", undefined);
     stubEnv("SMTP_URL", undefined);
     stubEnv("MAIL_FROM", undefined);
+    stubEnv("STORAGE_BACKEND", undefined);
+    stubEnv("S3_BUCKET", undefined);
+    stubEnv("S3_ACCESS_KEY_ID", undefined);
+    stubEnv("S3_SECRET_ACCESS_KEY", undefined);
+    stubEnv("S3_ENDPOINT", undefined);
+    stubEnv("S3_REGION", undefined);
+    stubEnv("S3_PREFIX", undefined);
   });
 
   afterEach(() => {
@@ -290,6 +297,71 @@ describe("env", () => {
     it("returns null when nothing parses", async () => {
       const { parseMailFromAddress } = await loadEnv({});
       expect(parseMailFromAddress("")).toBeNull();
+    });
+  });
+
+  describe("storageConfig", () => {
+    it("defaults to local when STORAGE_BACKEND is unset", async () => {
+      const { storageConfig } = await loadEnv({});
+      expect(storageConfig).toEqual({ kind: "local" });
+    });
+
+    it("accepts explicit STORAGE_BACKEND=local", async () => {
+      const { storageConfig } = await loadEnv({ STORAGE_BACKEND: "local" });
+      expect(storageConfig).toEqual({ kind: "local" });
+    });
+
+    it("throws on import for an unknown STORAGE_BACKEND", async () => {
+      await expect(loadEnv({ STORAGE_BACKEND: "gcs" })).rejects.toThrow(
+        /STORAGE_BACKEND/
+      );
+    });
+
+    it("requires S3_BUCKET, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY when STORAGE_BACKEND=s3", async () => {
+      await expect(loadEnv({ STORAGE_BACKEND: "s3" })).rejects.toThrow(
+        /S3_BUCKET.*S3_ACCESS_KEY_ID.*S3_SECRET_ACCESS_KEY/
+      );
+      await expect(
+        loadEnv({
+          STORAGE_BACKEND: "s3",
+          S3_BUCKET: "projammr",
+          S3_ACCESS_KEY_ID: "key",
+        })
+      ).rejects.toThrow(/S3_SECRET_ACCESS_KEY/);
+    });
+
+    it("parses S3 settings with default region auto and normalized prefix", async () => {
+      const { storageConfig } = await loadEnv({
+        STORAGE_BACKEND: "s3",
+        S3_BUCKET: "projammr-media",
+        S3_ACCESS_KEY_ID: "ak_123",
+        S3_SECRET_ACCESS_KEY: "sk_456",
+        S3_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
+        S3_PREFIX: "/prod/blobs/",
+      });
+      expect(storageConfig).toEqual({
+        kind: "s3",
+        s3: {
+          bucket: "projammr-media",
+          accessKeyId: "ak_123",
+          secretAccessKey: "sk_456",
+          endpoint: "https://acct.r2.cloudflarestorage.com",
+          region: "auto",
+          prefix: "prod/blobs/",
+        },
+      });
+    });
+
+    it("throws on import when S3_ENDPOINT is not a valid URL", async () => {
+      await expect(
+        loadEnv({
+          STORAGE_BACKEND: "s3",
+          S3_BUCKET: "projammr",
+          S3_ACCESS_KEY_ID: "ak",
+          S3_SECRET_ACCESS_KEY: "sk",
+          S3_ENDPOINT: "not-a-url",
+        })
+      ).rejects.toThrow(/S3_ENDPOINT/);
     });
   });
 });

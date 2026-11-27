@@ -5,11 +5,10 @@
  * a value.
  */
 import { eq, isNull } from "drizzle-orm";
-import { readFile } from "node:fs/promises";
 import { db } from "./index.js";
 import { log } from "../lib/log.js";
 import { extractPalette } from "../lib/palette.js";
-import { storedFilePath } from "../lib/storage.js";
+import { readStoredBytes } from "../lib/storage.js";
 import { images } from "./schema/images.js";
 
 const logger = log("backfill-palette");
@@ -28,7 +27,7 @@ let failed = 0;
 
 for (const row of rows) {
   try {
-    const buffer = await readFile(storedFilePath(row.assetPath));
+    const buffer = Buffer.from(await readStoredBytes(row.assetPath));
     const palette = await extractPalette(buffer);
     await db
       .update(images)
