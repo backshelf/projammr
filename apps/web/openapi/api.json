@@ -36087,7 +36087,7 @@
         "tags": [
           "Audio versions"
         ],
-        "summary": "Unpin the track's primary version so it resumes following the latest bounce",
+        "summary": "Unpin the track's primary version",
         "responses": {
           "200": {
             "description": "Primary unpinned",

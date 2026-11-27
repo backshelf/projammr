@@ -67,7 +67,7 @@ app.patch(
 app.delete(
   "/:id/primary",
   describe(
-    "Unpin the track's primary version so it resumes following the latest bounce",
+    "Unpin the track's primary version",
     { schema: messageSchema, description: "Primary unpinned" },
     400,
     404

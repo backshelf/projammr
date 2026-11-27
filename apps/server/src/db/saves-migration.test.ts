@@ -138,6 +138,7 @@ describe("the session revisions to saves migration", () => {
       );
       expect(indexes.map((index) => index.indexname)).toEqual([
         "save_branch",
+        "save_hash",
         "save_machine",
         "save_project_time",
         "save_session_hash",
