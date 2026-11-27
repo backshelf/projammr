@@ -650,6 +650,13 @@ crates/dit-daw-ableton/script/tests` and by `cargo test -p dit-daw-ableton` (`te
 with a message when `python3` is missing). Bump `SCRIPT_VERSION` in `protocol.py` and `VERSION` in `script.rs`
 together; a test checks they agree.
 
+**The Live Extension** (`extensions/ableton/`, outside the Bun workspaces while Ableton's beta Extensions SDK tarballs
+stay gitignored under `vendor/`) complements the remote script on Live 12.4.5+ / Live 13 with right-click context menu
+actions and Projammr-styled modal dialogs (commit / open `dit` panel over `dit.sock`, add a note / cue point from an
+Arrangement selection, and sync timestamped Projammr comments to Live Cue Points). It cannot replace the remote script
+because Extensions `1.0.0-beta.1` exposes no background listeners, transport state, set `filePath`, track colours, or
+device kinds.
+
 **The listener, the window list and the chain** (`dit-daemon`). `script.rs`: `ScriptServer::start(folder, app,
 Sender<ScriptEvent>)` listens on a loopback port, writes `<port>\n<nonce>` (32 hex chars from `/dev/urandom`, mode 0600) to `folder/port`, and serves each connection on its own thread: the first line must be a `hello` with the nonce,
 all of it within 10 s of the connection being accepted (one deadline for the whole line, not for each read, so a

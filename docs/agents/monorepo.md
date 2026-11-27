@@ -25,6 +25,7 @@ projammr-monorepo/            Bun 1.4.3 workspace (`packageManager` pin), turbo 
 ├── packages/eslint-config     @workspace/eslint-config
 ├── packages/typescript-config @workspace/typescript-config
 ├── .env.example               template for the root .env docker-compose reads (Postgres creds, secrets, URLs)
+├── extensions/ableton/        Ableton Live 12.4.5+ / 13 JS/TS extension (outside Bun workspaces while the beta SDK `.tgz` in `vendor/` is private & gitignored)
 ├── fixtures/covers/           four cover images used as accent-extraction fixtures (copied into apps/web/src/assets/covers/)
 ├── docs/agents/               the area references for coding agents (these files)
 ├── docs/screenshots/          the JPEGs the READMEs embed (1600 px desktop, 585 px phone); demo data seeded through

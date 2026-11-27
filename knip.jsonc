@@ -45,6 +45,9 @@
       "entry": ["src/*.ts"],
     },
   },
+  // Standalone Ableton Live extension: outside Bun workspaces because Ableton's
+  // beta Extensions SDK tarballs stay private and gitignored under `vendor/`.
+  "ignore": ["extensions/ableton/**"],
   // System binaries the code spawns; none is an npm package.
   "ignoreBinaries": [
     "agent-browser",
