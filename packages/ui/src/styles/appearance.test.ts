@@ -177,6 +177,12 @@ describe("the token layer with no attribute", () => {
     ["foundation.css", ":root", "--grain-opacity", "0.5"],
     ["foundation.css", ".dark", "--grain-opacity", "0.75"],
     ["foundation.css", ":root", "--density", "1"],
+    [
+      "foundation.css",
+      ":root",
+      "--table-row-h",
+      "round(calc(2.75rem * var(--density)), 1px)",
+    ],
     ["foundation.css", ":root", "--masthead-band", "82vh"],
     ["foundation.css", ":root", "--masthead-head", "50vh"],
     ["foundation.css", ":root", "--font-body", "var(--font-mono)"],
@@ -236,16 +242,11 @@ describe("glow and ambient motion", () => {
     expect(off.declarations.display).toBe("none");
   });
 
-  it("stops the four ambient loops at ambient off, and nothing else", () => {
+  it("stops the three ambient loops at ambient off, and nothing else", () => {
     const off = rulesFor("ambient", "off")[0]!;
     const stopped = [...off.prelude.matchAll(/\.([a-z_-]+)/g)].map((m) => m[1]);
     expect(stopped.sort()).toEqual(
-      [
-        "masthead__field",
-        "masthead__tone",
-        "wash__lobe--deep",
-        "wash__lobe--lift",
-      ].sort()
+      ["masthead__field", "wash__lobe--deep", "wash__lobe--lift"].sort()
     );
     expect(off.declarations.animation).toBe("none");
     for (const name of stopped) {
@@ -256,6 +257,95 @@ describe("glow and ambient motion", () => {
           b.declarations.animation?.includes("infinite")
       );
       expect(loop, name).toBeDefined();
+    }
+  });
+
+  it("keeps .masthead__tone on a static filter with no keyframe animation", () => {
+    const motion = files["motion.css"]!;
+    expect(token("motion.css", ".masthead__tone", "filter")).toBe(
+      "blur(var(--art-blur)) saturate(var(--art-sat-mid))"
+    );
+    expect(
+      motion.some(
+        (b) =>
+          b.prelude === "@keyframes art-tone" || b.prelude.includes("art-tone")
+      )
+    ).toBe(false);
+    expect(
+      motion.some(
+        (b) =>
+          b.prelude.includes(".masthead__tone") && "animation" in b.declarations
+      )
+    ).toBe(false);
+    expect(
+      motion.some(
+        (b) =>
+          "--art-sat-low" in b.declarations ||
+          "--art-sat-high" in b.declarations
+      )
+    ).toBe(false);
+  });
+});
+
+describe("contrast floor", () => {
+  const achromaticLuminance = (value: string | undefined) => {
+    const match = value?.match(/^oklch\(([\d.]+)\s+0\s+0\)$/);
+    expect(match, value).not.toBeNull();
+    const L = Number(match![1]);
+    return L * L * L;
+  };
+  const contrastRatio = (a: number, b: number) =>
+    (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+  it.each([
+    ["light", ":root"],
+    ["dark", ".dark"],
+  ])(
+    "holds --ink-faint at WCAG AA (>= 4.5:1) against --paper and --paper-sunk in %s mode",
+    (_label, selector) => {
+      const faint = achromaticLuminance(
+        token("foundation.css", selector, "--ink-faint")
+      );
+      const paper = achromaticLuminance(
+        token("foundation.css", selector, "--paper")
+      );
+      const paperSunk = achromaticLuminance(
+        token("foundation.css", selector, "--paper-sunk")
+      );
+      expect(contrastRatio(faint, paper)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(faint, paperSunk)).toBeGreaterThanOrEqual(4.5);
+    }
+  );
+
+  it("holds .on-art-soft at WCAG AA (>= 4.5:1) across masthead scrim dips in both themes", () => {
+    const color = token("atmosphere.css", ".on-art-soft", "color");
+    const match = color?.match(
+      /^color-mix\(in oklab, var\(--ink\) ([\d.]+)%, transparent\)$/
+    );
+    expect(match, color).not.toBeNull();
+    const alpha = Number(match![1]) / 100;
+    const enc = (c: number) =>
+      c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
+    const dec = (c: number) =>
+      c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    const over = (fg: number, a: number, bg: number) => a * fg + (1 - a) * bg;
+
+    const cases = [
+      { selector: ":root", coverL: 0.25, artAlpha: 0.85, scrimDip: 0.34 },
+      { selector: ".dark", coverL: 0.85, artAlpha: 0.7, scrimDip: 0.3 },
+    ];
+    for (const { selector, coverL, artAlpha, scrimDip } of cases) {
+      const paperS = enc(
+        achromaticLuminance(token("foundation.css", selector, "--paper"))
+      );
+      const inkS = enc(
+        achromaticLuminance(token("foundation.css", selector, "--ink"))
+      );
+      const coverS = enc(coverL ** 3);
+      const bgS = over(paperS, scrimDip, over(coverS, artAlpha, paperS));
+      const bgLin = dec(bgS);
+      const fgLin = dec(over(inkS, alpha, bgS));
+      expect(contrastRatio(fgLin, bgLin), selector).toBeGreaterThanOrEqual(4.5);
     }
   });
 });

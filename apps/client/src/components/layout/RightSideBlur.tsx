@@ -47,7 +47,7 @@ function Rail({ children, more }: RailProps) {
           "stack:static stack:h-auto stack:max-h-none stack:overflow-visible",
           "stack:grid stack:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] stack:items-start",
           "stack:gap-x-6 stack:gap-y-5 stack:px-(--gutter) stack:py-5",
-          "stack:border-t stack:border-l-0 stack:border-rule",
+          "stack:border-t stack:border-b stack:border-l-0 stack:border-rule",
           "stack:bg-paper-sunk stack:backdrop-filter-none"
         )}
       >

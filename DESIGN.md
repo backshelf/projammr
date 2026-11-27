@@ -6,7 +6,7 @@ colors:
   paper-sunk: "oklch(0.965 0 0)"
   ink: "oklch(0.09 0 0)"
   ink-soft: "oklch(0.44 0 0)"
-  ink-faint: "oklch(0.63 0 0)"
+  ink-faint: "oklch(0.52 0 0)"
   rule: "oklch(0.89 0 0)"
   rule-strong: "oklch(0.78 0 0)"
   glass: "oklch(1 0 0 / 62%)"
@@ -15,7 +15,7 @@ colors:
   paper-sunk-dark: "oklch(0.105 0 0)"
   ink-dark: "oklch(0.99 0 0)"
   ink-soft-dark: "oklch(0.68 0 0)"
-  ink-faint-dark: "oklch(0.48 0 0)"
+  ink-faint-dark: "oklch(0.58 0 0)"
   rule-dark: "oklch(1 0 0 / 11%)"
   rule-strong-dark: "oklch(1 0 0 / 22%)"
   glass-dark: "oklch(0.2 0 0 / 55%)"
@@ -412,7 +412,8 @@ title and the content on narrower screens.
 | `--menubar`                               | 0rem                                                 | app chrome above the canvas; there is none                                  |
 | `--player-card`                           | 8.5rem                                               | height reserved for the music player card                                   |
 | `--radius`                                | `{rounded.lg}`                                       | base; `--radius-sm…4xl` derive from it                                      |
-| `--density`                               | 1                                                    | factor on the vertical padding of table cells and `Row`                     |
+| `--density`                               | 1                                                    | factor on `--table-row-h` and the vertical padding of `Row`                 |
+| `--table-row-h`                           | `round(calc(2.75rem * var(--density)), 1px)`         | uniform entity-table body row height (44px default)                         |
 | `--masthead-band` / `--masthead-head`     | 82vh / 50vh (52vh / 42vh on phones)                  | an entity masthead's art band and its header's floor                        |
 | `--tabbar-height` / `--miniplayer-height` | 3.5rem / 4rem                                        | phone dock rows                                                             |
 
@@ -598,12 +599,12 @@ popovers, sheets), and they share one treatment.
 ### Atmosphere layers
 
 - **Masthead art** (`MastheadArt` in the client and on the site): the cover as `background-image`, `blur(64px)`
-  (32px on phones), saturation 1.3 to 1.9 cycling with a slow `art-drift`, `scale(1.15)`, bleeding 12% past the
+  (32px on phones), static saturation 1.7 (2 on phones) with a slow `art-drift`, `scale(1.15)`, bleeding 12% past the
   sides and 64px above (48px on phones), as tall as its band (`--masthead-h`) plus that bleed, faded out by a mask.
   The frame (bleed and mask) is `.masthead__art` in `packages/ui/src/styles/atmosphere.css` and the blur, saturation
   and drift are in `motion.css`, shared by the client and the site; each surface sets only `--masthead-h` (on an
   entity page the token `--masthead-band`: 82vh, 52vh on phones). Three layers: `.masthead__art` holds the mask, opacity and bloom; `.masthead__tone`
-  clips to it and carries the blur and the saturation/hue drift; `.masthead__field`, 150% each way, holds the image
+  clips to it and carries the static blur and saturation filter; `.masthead__field`, 150% each way, holds the image
   and drifts by `translate`, so the ambient motion never repaints the blurred field. Opacity `--art-opacity` 0.85 (0.7 dark). While the page's own record is playing
   (`data-playing` on the `ArtProvider` container, set by `PlayingLight`), `--art-opacity` steps up to 1 (0.85
   dark) and eases there — the artwork is the room's only light source, so the light answering playback is that
@@ -623,7 +624,7 @@ popovers, sheets), and they share one treatment.
   0.75 dark).
 - **Art fields** (`ArtField`): on the player card, mini-player and share page, the cover blurred hard until only
   its colour survives, over a legibility floor that holds across the whole surface. Type over art uses `.on-art`
-  (a small paper-tinted text shadow) and `.on-art-soft` (82% ink) instead of `--ink-soft`.
+  (a small paper-tinted text shadow) and `.on-art-soft` (88% ink) instead of `--ink-soft`.
 - **Lava field** (`LavaField`): the now-playing sheet's background. The cover's colours as large soft blobs, each
   following a frequency band of the playing audio. Pausing eases the blobs back to rest and holds the frame;
   reduced motion shows only the resting frame; with no cover it draws nothing.
@@ -699,7 +700,7 @@ page with no attribute renders exactly as one carrying every default.
 | `data-font`     | **mono** · sans · serif              | `--font-body`, the document's face and the notes' prose: the mono, or the platform's own sans or serif (no font request). Anything that names `font-mono`, the labels' Departure Mono and the Redaction title keep their faces. |
 | `data-editor`   | **compact** · reading                | `.doc`'s type: reading sets notes and lyrics at `--t-lead` (never under 16px) on 1.85 leading.                                                                                                                                  |
 | `data-grain`    | off · subtle · **full**              | `--grain-opacity` at half each theme's strength, or none (`off` removes the layer).                                                                                                                                             |
-| `data-glow`     | off · soft · **full**                | soft: the masthead field's saturation cycles 1–1.2 and it rests at 0.6 (0.5 dark), the wash's key and haze at six tenths; off: no field and no wash, the accent alone.                                                          |
+| `data-glow`     | off · soft · **full**                | soft: the masthead field's static saturation sits at 1.1 and it rests at 0.6 (0.5 dark), the wash's key and haze at six tenths; off: no field and no wash, the accent alone.                                                     |
 | `data-ambient`  | **on** · off                         | off stops the field's drift and the wash's lobes, as reduced motion does, and nothing else; on never brings the drift back to a phone.                                                                                          |
 | `data-motion`   | **system** · reduce · full           | the reduced-motion switch (see Motion): the OS preference, every reduced-motion rule everywhere, or none of them even on a reducing OS. Haptics are not motion and do not follow it.                                            |
 

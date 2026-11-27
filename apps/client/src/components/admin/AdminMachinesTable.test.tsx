@@ -135,6 +135,22 @@ describe("AdminMachinesTable", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
+  it("renders a single entity table container without a duplicate TableScroll wrapper", () => {
+    const { container } = render(
+      <AdminMachinesTable
+        data={page([machine()])}
+        page={1}
+        pageSize={20}
+        format={format}
+      />
+    );
+
+    expect(container.querySelector('[data-slot="table-scroll"]')).toBeNull();
+    expect(
+      container.querySelectorAll('[data-slot="table-container"]')
+    ).toHaveLength(1);
+  });
+
   it("pages when there are more machines than a page holds", () => {
     render(
       <AdminMachinesTable

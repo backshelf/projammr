@@ -36,7 +36,11 @@ const iconButtonVariants = cva(
       },
     },
     compoundVariants: [
-      { variant: "play", size: "default", class: "size-8 [&_svg]:size-5.5" },
+      {
+        variant: "play",
+        size: "default",
+        class: "size-8 in-[td]:size-7 [&_svg]:size-5.5",
+      },
       { variant: "play", size: "touch", class: "size-11 [&_svg]:size-6" },
       { variant: "icon", size: "default", class: "size-7 [&_svg]:size-4" },
       { variant: "icon", size: "touch", class: "size-11 [&_svg]:size-5" },

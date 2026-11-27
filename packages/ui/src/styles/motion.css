@@ -12,9 +12,7 @@
    set it; the field inherits every custom property. */
 .masthead__art {
   --art-blur: 64px;
-  --art-sat-low: 1.3;
   --art-sat-mid: 1.7;
-  --art-sat-high: 1.9;
   --art-opacity: 0.85;
 }
 
@@ -82,20 +80,16 @@
 @media (width < 768px) {
   .masthead__art {
     --art-blur: 32px;
-    --art-sat-low: 1.85;
     --art-sat-mid: 2;
-    --art-sat-high: 2.15;
   }
 }
 
 /* Artwork glow (`data-glow` on <html>), the field's half: `soft` keeps the
-   field but calms it, its saturation cycling close to the cover's own and its
+   field but calms it, its saturation sitting close to the cover's own and its
    resting light dimmer. The playing state still steps the light up. The
    wash's half, and `off`, are in atmosphere.css. */
 :root[data-glow="soft"] .masthead__art {
-  --art-sat-low: 1;
   --art-sat-mid: 1.1;
-  --art-sat-high: 1.2;
   --art-opacity: 0.6;
 }
 
@@ -113,9 +107,9 @@
    motion constant: an eased curve settles into every waypoint and reads as
    breathing. Scale and size stay put — moving them zooms the artwork, which
    reads as the picture inflating rather than as light shifting across it.
-   Position and saturation carry the whole effect: position on the field,
-   saturation and hue on the tone layer, two keyframe sets sharing one
-   duration and start so they stay in step. */
+   Position on the field carries the motion; the tone layer holds a static blur
+   and saturation so the browser rasterises the blur once and moves the field
+   underneath it on the compositor. */
 @keyframes art-drift {
   0%,
   100% {
@@ -132,31 +126,10 @@
   }
 }
 
-@keyframes art-tone {
-  0%,
-  100% {
-    filter: blur(var(--art-blur)) saturate(var(--art-sat-low)) hue-rotate(-3deg);
-  }
-  25% {
-    filter: blur(var(--art-blur)) saturate(var(--art-sat-high)) hue-rotate(2deg);
-  }
-  50% {
-    filter: blur(var(--art-blur)) saturate(var(--art-sat-mid)) hue-rotate(4deg);
-  }
-  75% {
-    filter: blur(var(--art-blur)) saturate(var(--art-sat-high))
-      hue-rotate(-1deg);
-  }
-}
-
 /* The drift runs inside the masthead, not on it, so it never has to share an
    element with the entrance Motion writes on the frame above. */
 .masthead__field {
   animation: art-drift 28s linear infinite both;
-}
-
-.masthead__tone {
-  animation: art-tone 28s linear infinite both;
 }
 
 /* Waveform bars sweep in from the left as a single gesture, so the wave reads
@@ -306,8 +279,7 @@
    overlap, so the second one is redundant weight on a masked, full-viewport
    layer rather than a visible feature. */
 @media (width < 768px) {
-  .masthead__field,
-  .masthead__tone {
+  .masthead__field {
     animation: none;
   }
 
@@ -321,7 +293,7 @@
    alone. The phone rule above holds whatever the attribute says, so `on`
    never brings the drift back to a phone. */
 :root[data-ambient="off"]
-  :is(.masthead__field, .masthead__tone, .wash__lobe--deep, .wash__lobe--lift) {
+  :is(.masthead__field, .wash__lobe--deep, .wash__lobe--lift) {
   animation: none;
 }
 
@@ -463,7 +435,6 @@
 .wash__lobe--deep,
 .wash__lobe--lift,
 .masthead__field,
-.masthead__tone,
 .skyline__bar,
 .heatmap__cell--sweep,
 .ruler-caret {

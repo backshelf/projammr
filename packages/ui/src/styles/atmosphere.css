@@ -32,7 +32,7 @@
    sits too close to a cover to stay legible, so the byline steps up here
    rather than in each surface that carries one. */
 .on-art-soft {
-  color: color-mix(in oklab, var(--ink) 82%, transparent);
+  color: color-mix(in oklab, var(--ink) 88%, transparent);
 }
 
 /* The frame a masthead's blurred cover sits in, for every surface that

@@ -92,10 +92,14 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   );
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+function TableCell({
+  className,
+  "data-slot": dataSlot = "table-cell",
+  ...props
+}: React.ComponentProps<"td"> & { "data-slot"?: string }) {
   return (
     <td
-      data-slot="table-cell"
+      data-slot={dataSlot}
       className={cn(
         "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className
@@ -128,9 +132,9 @@ function TableCaption({
 /** The cell rules the wrapper imposes on the table inside it. Head cells are
  *  sticky so they survive the vertical scroll, and the hover tint is a flat 4%
  *  ink-over-paper mix — deliberately not artwork-tinted, since a coloured wash
- *  on every hovered row reads as noise. A cell's vertical padding is scaled by
- *  `--density` (`data-density` on `<html>`), so the whole table tightens or
- *  opens up as one. */
+ *  on every hovered row reads as noise. Header padding scales by `--density`
+ *  and body cells lock to `--table-row-h` (`data-density` on `<html>`), so the
+ *  whole table holds a uniform row spine as it tightens or opens up. */
 const entityTable = cn(
   "overflow-x-auto overscroll-x-contain border-y border-rule",
   "[&_table]:w-full [&_table]:border-collapse [&_table]:text-small [&_table]:whitespace-nowrap",
@@ -144,7 +148,7 @@ const entityTable = cn(
   // utilities whatever order they land in, so a sortable column reads exactly
   // like a plain one. Colour, family and tracking already inherit.
   "[&_th_button]:text-micro [&_th_button]:font-normal [&_th_button]:uppercase",
-  "[&_td]:border-b [&_td]:border-rule [&_td]:px-3 [&_td]:py-[calc(var(--spacing)*2*var(--density))] [&_td]:text-ink-soft",
+  "[&_td]:h-(--table-row-h) [&_td]:border-b [&_td]:border-rule [&_td]:px-3 [&_td]:py-0 [&_td]:align-middle [&_td]:text-ink-soft",
   "[&_tbody_tr:last-child_td]:border-b-0",
   "[&_tbody_tr:hover_td]:bg-[color-mix(in_oklab,var(--ink)_4%,var(--paper))]",
   "[&_tbody_tr:hover_[data-slot=pinned]]:bg-[color-mix(in_oklab,var(--ink)_4%,var(--paper))]",
