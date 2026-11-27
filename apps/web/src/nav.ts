@@ -26,6 +26,7 @@ export const FOOTER_NAV: { heading: string; links: NavLink[] }[] = [
     heading: "Docs",
     links: [
       { label: "Using Projammr", href: "/docs/guide/" },
+      { label: "dit", href: "/docs/dit/" },
       { label: "API", href: "/docs/api/" },
       { label: "Self-hosting", href: "/docs/self-hosting/" },
       { label: "Contributing", href: "/docs/contributing/" },

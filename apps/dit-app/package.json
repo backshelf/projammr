@@ -1,6 +1,6 @@
 {
   "name": "dit-app",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "license": "AGPL-3.0-only",
   "private": true,
   "description": "dit's menu bar app: the bar item, the panel and the daemon behind them",

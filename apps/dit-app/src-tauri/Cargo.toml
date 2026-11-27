@@ -1,6 +1,6 @@
 [package]
 name = "dit-app"
-version = "0.9.0"
+version = "1.0.0"
 description = "dit's menu bar app: the bar item, the panel and the daemon behind them"
 edition = "2024"
 license = "AGPL-3.0-only"

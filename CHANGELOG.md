@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-27
+
 ### Added
 
 - Projects that organise music as collections, tracks and sessions, with user-defined statuses, labels, track
@@ -17,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and clipping, with comparison between versions and duplicate detection.
 - A persistent player with a queue, a live loudness meter and timecoded comments pinned to the waveform.
 - The Lab: speed and pitch, EQ, compression, reverb and audition modes, with match EQ against another version and a
-  bounce that saves the result back to the track.
+  bounce that downloads a 24-bit FLAC locally with an opt-in upload to the track.
 - dit, a desktop app that watches your Ableton Live project folders, turns every save into a revision, and pushes
   them to your Projammr account.
 - Session history that diffs any two saves, a work heatmap and a plugin inventory.
@@ -36,6 +38,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   them.
 - Rejections shared through the hub: a backup or set you reject on one machine stays rejected on your others.
 - dit updates itself from GitHub releases.
+- Pluggable S3-compatible object storage (Cloudflare R2, AWS S3, MinIO) backing media, images, spectrograms, and dit
+  objects, with a resumable local-to-S3 migration CLI (`dist/scripts/migrate-storage.js`) and streaming multipart
+  uploads.
+- Ableton Live extension (`extensions/ableton/`) for in-DAW commits, notes, and syncing timecoded comments to Live
+  locators.
+- Dedicated `dit` documentation section (`/docs/dit/`) and GitHub Pages deployment at
+  `https://backshelf.github.io/projammr`.
 
 ### Removed
 

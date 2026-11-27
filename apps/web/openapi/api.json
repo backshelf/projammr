@@ -132715,6 +132715,47 @@
         ],
         "summary": "Upload a new image",
         "description": "Upload a new image. `variantsJobId` is the id of the queued resize job, or null for an avatar, which has no project to run one in.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "contentEncoding": "binary"
+                  },
+                  "projectId": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "contentEncoding": "binary"
+                  },
+                  "projectId": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Image uploaded successfully",
@@ -132940,7 +132981,17 @@
               }
             }
           }
-        },
+        }
+      }
+    },
+    "/api/images/instance": {
+      "post": {
+        "operationId": "postApiImagesInstance",
+        "tags": [
+          "Images"
+        ],
+        "summary": "Upload a brand image, the instance's logo or app icon",
+        "description": "Upload a brand image, the instance's logo or app icon. An instance admin's alone, it is readable by anyone at its static URL, signed in or not. It counts towards the uploader's storage, as an avatar does, and has no resize job (`variantsJobId` is null); its resizes are made on demand.",
         "requestBody": {
           "required": true,
           "content": {
@@ -132952,9 +133003,6 @@
                     "type": "string",
                     "format": "binary",
                     "contentEncoding": "binary"
-                  },
-                  "projectId": {
-                    "type": "number"
                   }
                 },
                 "required": [
@@ -132970,9 +133018,6 @@
                     "type": "string",
                     "format": "binary",
                     "contentEncoding": "binary"
-                  },
-                  "projectId": {
-                    "type": "number"
                   }
                 },
                 "required": [
@@ -132981,17 +133026,7 @@
               }
             }
           }
-        }
-      }
-    },
-    "/api/images/instance": {
-      "post": {
-        "operationId": "postApiImagesInstance",
-        "tags": [
-          "Images"
-        ],
-        "summary": "Upload a brand image, the instance's logo or app icon",
-        "description": "Upload a brand image, the instance's logo or app icon. An instance admin's alone, it is readable by anyone at its static URL, signed in or not. It counts towards the uploader's storage, as an avatar does, and has no resize job (`variantsJobId` is null); its resizes are made on demand.",
+        },
         "responses": {
           "201": {
             "description": "Image uploaded successfully",
@@ -133246,41 +133281,6 @@
                   ],
                   "additionalProperties": false
                 }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary",
-                    "contentEncoding": "binary"
-                  }
-                },
-                "required": [
-                  "file"
-                ]
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary",
-                    "contentEncoding": "binary"
-                  }
-                },
-                "required": [
-                  "file"
-                ]
               }
             }
           }
@@ -134218,6 +134218,79 @@
           "Assets"
         ],
         "summary": "Upload a new asset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "contentEncoding": "binary"
+                  },
+                  "projectId": {
+                    "type": "number"
+                  },
+                  "localFilepath": {
+                    "type": "string"
+                  },
+                  "localFileCreatedAt": {
+                    "type": "number"
+                  },
+                  "localFileUpdatedAt": {
+                    "type": "number"
+                  },
+                  "localFileMachineName": {
+                    "type": "string"
+                  },
+                  "fingerprint": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "projectId"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "contentEncoding": "binary"
+                  },
+                  "projectId": {
+                    "type": "number"
+                  },
+                  "localFilepath": {
+                    "type": "string"
+                  },
+                  "localFileCreatedAt": {
+                    "type": "number"
+                  },
+                  "localFileUpdatedAt": {
+                    "type": "number"
+                  },
+                  "localFileMachineName": {
+                    "type": "string"
+                  },
+                  "fingerprint": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "projectId"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Asset uploaded successfully",
@@ -134419,79 +134492,6 @@
                   ],
                   "additionalProperties": false
                 }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary",
-                    "contentEncoding": "binary"
-                  },
-                  "projectId": {
-                    "type": "number"
-                  },
-                  "localFilepath": {
-                    "type": "string"
-                  },
-                  "localFileCreatedAt": {
-                    "type": "number"
-                  },
-                  "localFileUpdatedAt": {
-                    "type": "number"
-                  },
-                  "localFileMachineName": {
-                    "type": "string"
-                  },
-                  "fingerprint": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "file",
-                  "projectId"
-                ]
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary",
-                    "contentEncoding": "binary"
-                  },
-                  "projectId": {
-                    "type": "number"
-                  },
-                  "localFilepath": {
-                    "type": "string"
-                  },
-                  "localFileCreatedAt": {
-                    "type": "number"
-                  },
-                  "localFileUpdatedAt": {
-                    "type": "number"
-                  },
-                  "localFileMachineName": {
-                    "type": "string"
-                  },
-                  "fingerprint": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "file",
-                  "projectId"
-                ]
               }
             }
           }

@@ -88,6 +88,10 @@ export default defineConfig({
           items: [{ autogenerate: { directory: "docs/guide" } }],
         },
         {
+          label: "dit",
+          items: [{ autogenerate: { directory: "docs/dit" } }],
+        },
+        {
           label: "Working together",
           items: [{ autogenerate: { directory: "docs/collaboration" } }],
         },

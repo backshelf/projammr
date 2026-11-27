@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "dit-cli"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "dirs",
@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "dit-core"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "apple-native-keyring-store",
  "dirs",
@@ -453,7 +453,7 @@ dependencies = [
 
 [[package]]
 name = "dit-daemon"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "core-foundation",
  "core-graphics",
@@ -471,7 +471,7 @@ dependencies = [
 
 [[package]]
 name = "dit-daw-ableton"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "dit-core",
  "libz-sys",
@@ -482,7 +482,7 @@ dependencies = [
 
 [[package]]
 name = "dit-daws"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "dit-core",
  "dit-daw-ableton",
@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "dit-ipc"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "dirs",
  "serde",
@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "dit-wasm"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "dit-core",
  "dit-daw-ableton",

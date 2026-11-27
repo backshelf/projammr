@@ -1058,7 +1058,7 @@ dependencies = [
 
 [[package]]
 name = "dit-app"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "block2",
@@ -1093,7 +1093,7 @@ dependencies = [
 
 [[package]]
 name = "dit-cli"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "dirs 7.0.0",
@@ -1108,7 +1108,7 @@ dependencies = [
 
 [[package]]
 name = "dit-core"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "apple-native-keyring-store",
  "dirs 7.0.0",
@@ -1130,7 +1130,7 @@ dependencies = [
 
 [[package]]
 name = "dit-daemon"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "core-foundation 0.10.1",
  "core-graphics",
@@ -1146,7 +1146,7 @@ dependencies = [
 
 [[package]]
 name = "dit-daw-ableton"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "dit-core",
  "libz-sys",
@@ -1156,7 +1156,7 @@ dependencies = [
 
 [[package]]
 name = "dit-daws"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "dit-core",
  "dit-daw-ableton",
@@ -1164,7 +1164,7 @@ dependencies = [
 
 [[package]]
 name = "dit-ipc"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "dirs 7.0.0",
  "serde",
