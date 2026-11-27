@@ -22,6 +22,7 @@ import {
   baseSchemaIgnores,
   blockDocumentSchema,
   imageIgnores,
+  releaseDateSchema,
   scopeIgnores,
 } from "./base.js";
 import { priorityLevels } from "./priority-levels.js";
@@ -71,28 +72,6 @@ export const collections = pgTable(
 
 export type Collection = typeof collections.$inferSelect;
 export type NewCollection = typeof collections.$inferInsert;
-
-// A pg `date` column round-trips as a bare `YYYY-MM-DD` string (mode
-// "string", drizzle-zod's default): the regex pins the shape, the refine
-// rejects a shape-valid date that isn't a real one (`2026-02-30`). Output
-// stays a string — no `z.date()` transform — so the wire contract and the
-// generated OpenAPI types don't change.
-const releaseDateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD")
-  .refine((value) => {
-    const [year, month, day] = value.split("-").map(Number) as [
-      number,
-      number,
-      number,
-    ];
-    const date = new Date(Date.UTC(year, month - 1, day));
-    return (
-      date.getUTCFullYear() === year &&
-      date.getUTCMonth() === month - 1 &&
-      date.getUTCDate() === day
-    );
-  }, "must be a real calendar date");
 
 export const collectionSchema = createSelectSchema(collections)
   .omit({ notes: true })

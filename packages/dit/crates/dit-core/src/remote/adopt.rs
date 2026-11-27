@@ -108,7 +108,17 @@ pub fn adopt_sets(
         };
         let main_rel = &sets[set_id];
         let file_name = main_rel.rsplit('/').next().unwrap_or(main_rel);
-        let answer = match hub.adopt_set_into(set_id, file_name, session_id, track_id, quiet) {
+        let local_path = repo.root().to_string_lossy();
+        let local_filepath = repo.root().join(main_rel).to_string_lossy().into_owned();
+        let answer = match hub.adopt_set_into(
+            set_id,
+            file_name,
+            session_id,
+            track_id,
+            quiet,
+            Some(local_path.as_ref()),
+            Some(local_filepath.as_str()),
+        ) {
             Ok(session_id) => {
                 repo.write_pushed(
                     set_id,

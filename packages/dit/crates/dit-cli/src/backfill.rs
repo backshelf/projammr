@@ -13,13 +13,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use dit_core::remote::{PushError, Remote};
+use dit_core::remote::{PushError, Remote, SetTarget};
 use dit_core::{Registry, RepoList};
-use dit_daemon::backfill::propose::{self, Hub};
+use dit_daemon::backfill::propose::{self, Hub, TrackMatchPolicy};
 use dit_daemon::backfill::{
-    BackfillControl, BackfillError, Checked, Config, Control, Doubt, Driver, Event, FolderPlan,
-    FolderState, FolderStatus, Plan, Recorder, RunLock, RunStatus, SetPlan, State, Summary, check,
-    discard, find_projects, project_facts, storage,
+    BackfillControl, BackfillError, Checked, Config, Control, Doubt, Driver, Event, FolderManifest,
+    FolderPlan, FolderState, FolderStatus, MAX_CONCURRENCY, Plan, Recorder, RunLock, RunStatus,
+    SetPlan, State, Summary, check, discard, find_projects, project_facts, storage,
 };
 use serde::{Deserialize, Serialize};
 
@@ -149,11 +149,30 @@ pub enum Ending {
     Waiting,
 }
 
+/// Options controlling a `dit backfill <folder>...` run.
+#[derive(Debug, Clone, Copy)]
+pub struct RunOptions {
+    pub project: Option<i64>,
+    pub match_policy: TrackMatchPolicy,
+    pub concurrency: usize,
+}
+
+impl Default for RunOptions {
+    fn default() -> Self {
+        RunOptions {
+            project: None,
+            match_policy: TrackMatchPolicy::default(),
+            concurrency: 1,
+        }
+    }
+}
+
 /// A folder of the run and how it ended.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FolderOutcome {
     pub path: String,
+    pub folder: String,
     pub state: Ending,
     /// What a folder that is done holds.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -162,19 +181,41 @@ pub struct FolderOutcome {
     pub saves: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_existing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_ids: Option<Vec<i64>>,
     /// Why a folder that failed did.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
 impl FolderOutcome {
-    fn of(path: &Path, status: Option<&FolderStatus>) -> Self {
+    fn of(
+        path: &Path,
+        status: Option<&FolderStatus>,
+        manifest: Option<&FolderManifest>,
+        hub: Option<&Hub>,
+        plan_folder: Option<&FolderPlan>,
+    ) -> Self {
         let mut outcome = FolderOutcome {
             path: path.display().to_string(),
+            folder: name_of(path),
             state: Ending::Waiting,
             sets: None,
             saves: None,
             bytes: None,
+            repo_id: None,
+            track_id: None,
+            track_title: None,
+            matched_existing: None,
+            session_ids: None,
             error: None,
         };
         let Some(status) = status else {
@@ -187,6 +228,43 @@ impl FolderOutcome {
                 outcome.sets = Some(totals.sets);
                 outcome.saves = Some(totals.saves);
                 outcome.bytes = Some(totals.bytes);
+                if let Some(manifest) = manifest {
+                    outcome.repo_id = Some(manifest.repo_id);
+                    let resolved_track_id = manifest.track_id.or_else(|| {
+                        let hub = hub?;
+                        let folder = plan_folder?;
+                        folder.sets.iter().find_map(|set| match set.target {
+                            SetTarget::Session(sid) => hub
+                                .sessions
+                                .iter()
+                                .find(|s| s.id == sid)
+                                .and_then(|s| s.track_id),
+                            SetTarget::Track(tid) => Some(tid),
+                            SetTarget::NewTrack(_) => None,
+                        })
+                    });
+                    let resolved_track_title = manifest.track_title.clone().or_else(|| {
+                        let hub = hub?;
+                        if let Some(tid) = resolved_track_id
+                            && let Some(track) = hub.tracks.iter().find(|t| t.id == tid)
+                        {
+                            return Some(track.title.clone());
+                        }
+                        let folder = plan_folder?;
+                        folder.sets.iter().find_map(|set| match set.target {
+                            SetTarget::Session(sid) => hub
+                                .sessions
+                                .iter()
+                                .find(|s| s.id == sid)
+                                .and_then(|s| s.track_title.clone()),
+                            _ => None,
+                        })
+                    });
+                    outcome.track_id = resolved_track_id;
+                    outcome.track_title = resolved_track_title;
+                    outcome.matched_existing = Some(manifest.matched_existing);
+                    outcome.session_ids = Some(manifest.session_ids.clone());
+                }
             }
             FolderState::Failed(reason) => {
                 outcome.state = Ending::Failed;
@@ -215,12 +293,36 @@ pub struct Brought {
 }
 
 /// Each folder of `plan` and how the run left it.
-fn outcomes(plan: &[PathBuf], status: Option<&RunStatus>) -> Vec<FolderOutcome> {
+fn outcomes(
+    plan: &[FolderPlan],
+    status: Option<&RunStatus>,
+    state: Option<&State>,
+    hub: &Hub,
+) -> Vec<FolderOutcome> {
     plan.iter()
-        .map(|path| {
-            let line =
-                status.and_then(|status| status.folders.iter().find(|folder| &folder.path == path));
-            FolderOutcome::of(path, line)
+        .map(|folder_plan| {
+            let line = status.and_then(|status| {
+                status
+                    .folders
+                    .iter()
+                    .find(|folder| folder.path == folder_plan.path)
+            });
+            let manifest = state.and_then(|state| {
+                state
+                    .plan
+                    .folders
+                    .iter()
+                    .zip(&state.folders)
+                    .find(|(f, _)| f.path == folder_plan.path)
+                    .and_then(|(_, run)| run.manifest.as_ref())
+            });
+            FolderOutcome::of(
+                &folder_plan.path,
+                line,
+                manifest,
+                Some(hub),
+                Some(folder_plan),
+            )
         })
         .collect()
 }
@@ -386,9 +488,10 @@ fn plan_of(
     repos: &RepoList,
     project: i64,
     checked: &[Checked],
-) -> Result<Plan, CliError> {
+    match_policy: TrackMatchPolicy,
+) -> Result<(Plan, Hub), CliError> {
     let hub: Hub = propose::read(remote, project).map_err(error)?;
-    let proposer = propose::Proposer::new(&hub);
+    let proposer = propose::Proposer::with_policy(&hub, match_policy);
     let mut folders = Vec::with_capacity(checked.len());
     let mut taken = HashSet::new();
     for folder in checked {
@@ -420,9 +523,12 @@ fn plan_of(
     }
     // `None` sorts below every time, so the folders with no save time come last.
     folders.sort_by_key(|folder| std::cmp::Reverse(folder.0));
-    Ok(Plan {
-        folders: folders.into_iter().map(|(_, folder)| folder).collect(),
-    })
+    Ok((
+        Plan {
+            folders: folders.into_iter().map(|(_, folder)| folder).collect(),
+        },
+        hub,
+    ))
 }
 
 /// Says what the folders will add to the hub's storage, or refuses when there is not the room.
@@ -538,8 +644,20 @@ pub fn run(
     cx: &mut Context,
     cwd: &Path,
     folders: &[PathBuf],
-    project: Option<i64>,
+    options: RunOptions,
 ) -> Result<Brought, CliError> {
+    if options.concurrency == 0 || options.concurrency > MAX_CONCURRENCY {
+        return Err(CliError(format!(
+            "--concurrency must be between 1 and {MAX_CONCURRENCY}."
+        )));
+    }
+    if let TrackMatchPolicy::Fuzzy(threshold) = options.match_policy
+        && (!(0.0..=1.0).contains(&threshold) || threshold.is_nan())
+    {
+        return Err(CliError(
+            "--match-threshold must be between 0 and 1.".to_string(),
+        ));
+    }
     let source = cx.remote;
     let remote = source.open().map_err(error)?;
     let registry = dit_daws::registry();
@@ -557,12 +675,11 @@ pub fn run(
     let control: &dyn BackfillControl = match cx.backfill {
         Some(app) => app,
         None => {
+            let mut driver_config =
+                Config::new(recorder.clone(), state_file.clone(), repos_file.clone());
+            driver_config.concurrency = options.concurrency;
             local = Control {
-                driver: Driver::new(Config::new(
-                    recorder.clone(),
-                    state_file.clone(),
-                    repos_file.clone(),
-                )),
+                driver: Driver::new(driver_config),
                 remote: move || source.open(),
             };
             &local
@@ -582,7 +699,7 @@ pub fn run(
         })
         .unwrap_or_default();
     let wanted = not_in_dit(cx, wanted, &repos, &held)?;
-    let project = choose_project(&remote, project, &state_file)?;
+    let project = choose_project(&remote, options.project, &state_file)?;
 
     // Acquire the backfill run lock before `check_all` creates `.dit/` in any folder,
     // so a concurrent backfill run fails fast without mutating disk state. Release it
@@ -595,16 +712,20 @@ pub fn run(
     if checked.is_empty() {
         return Err(error(BackfillError::Nothing));
     }
-    let plan = plan_of(cx, &remote, &registry, &repos, project, &checked)
-        .and_then(|plan| check_room(cx, &remote, project, &checked).map(|()| plan))
-        .inspect_err(|_| undo(&checked))?;
+    let (plan, hub) = plan_of(
+        cx,
+        &remote,
+        &registry,
+        &repos,
+        project,
+        &checked,
+        options.match_policy,
+    )
+    .and_then(|(plan, hub)| check_room(cx, &remote, project, &checked).map(|()| (plan, hub)))
+    .inspect_err(|_| undo(&checked))?;
     drop(pre_lock);
 
-    let paths: Vec<PathBuf> = plan
-        .folders
-        .iter()
-        .map(|folder| folder.path.clone())
-        .collect();
+    let planned_folders = plan.folders.clone();
     let mut narrator = Narrator::default();
     let mut hung_up = false;
     // Only install a process-wide SIGINT handler when running directly in the CLI process;
@@ -616,7 +737,7 @@ pub fn run(
         if catch_sigint {
             scope.spawn(|| interrupt::watch(control, &finished));
         }
-        let ended = control.start(plan, &mut |event| {
+        let ended = control.start_with_concurrency(plan, options.concurrency, &mut |event| {
             if hung_up {
                 return;
             }
@@ -649,7 +770,8 @@ pub fn run(
         }
     };
     let status = control.status().map_err(error)?;
-    let folders = outcomes(&paths, status.as_ref());
+    let persisted = State::load(&state_file).ok();
+    let folders = outcomes(&planned_folders, status.as_ref(), persisted.as_ref(), &hub);
     let failed = folders
         .iter()
         .filter(|folder| folder.state == Ending::Failed)

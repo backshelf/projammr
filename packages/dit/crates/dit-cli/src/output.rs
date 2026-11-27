@@ -5,6 +5,7 @@ use serde::Serialize;
 use dit_core::format_span;
 use dit_core::remote::{Logout, Rebound, SignedIn};
 use dit_daemon::renders::driver::UploadEnd;
+use dit_daemon::renders::scan::{AddedRender, ScanMatchStatus, ScanResult};
 use dit_daemon::{RenderEvent, RenderState};
 
 use crate::backfill::{Brought, Ending, Found, Listed as Folders};
@@ -13,6 +14,7 @@ use crate::commands::{
     TimeResult,
 };
 use crate::config::{PushSamplesResult, SamplesMode};
+use crate::cover::CoverSetResult;
 use crate::push::PushResult;
 use crate::renders::{Accepted, Listed, Rejected, STALE_LINE};
 use crate::script::ScriptResult;
@@ -554,6 +556,100 @@ pub fn render_rejected(result: &Rejected) -> String {
     line
 }
 
+pub fn render_added(result: &AddedRender) -> String {
+    let name = result
+        .file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| result.file.display().to_string());
+    let mut details = vec![format!("asset #{}", result.asset_id)];
+    if let Some(version) = result.version {
+        details.push(format!("v{version}"));
+    }
+    if result.is_primary {
+        details.push("primary".to_string());
+    }
+    if result.deduplicated {
+        details.push("deduplicated".to_string());
+    }
+    match result.session_id {
+        Some(session_id) => format!(
+            "Added {name} to track #{} via session #{} ({}).",
+            result.track_id,
+            session_id,
+            details.join(", ")
+        ),
+        None => format!(
+            "Added {name} to track #{} ({}).",
+            result.track_id,
+            details.join(", ")
+        ),
+    }
+}
+
+fn scan_status_name(status: ScanMatchStatus) -> &'static str {
+    match status {
+        ScanMatchStatus::Proposed => "proposed",
+        ScanMatchStatus::Uploaded => "uploaded",
+        ScanMatchStatus::Deduplicated => "deduplicated",
+        ScanMatchStatus::OverLimit => "over-limit",
+        ScanMatchStatus::SkippedNoTrack => "skipped-no-track",
+        ScanMatchStatus::Failed => "failed",
+    }
+}
+
+pub fn render_scan(result: &ScanResult) -> String {
+    if result.matches.is_empty() {
+        return format!(
+            "No matching renders found in {} ({}, {}, {} unmatched).",
+            result.dir.display(),
+            plural(result.total_audio_files, "audio file"),
+            plural(result.skipped_batch_renders, "batch render skipped"),
+            result.unmatched_renders,
+        );
+    }
+    let mut lines = Vec::new();
+    for item in &result.matches {
+        let track_part = match (item.track_id, &item.track_title) {
+            (Some(id), Some(title)) => format!("track #{id} '{title}'"),
+            (Some(id), None) => format!("track #{id}"),
+            (None, _) => "no track".to_string(),
+        };
+        let mut line = format!(
+            "{}  {} ({}, {:.0}%) -> session #{} ({track_part})",
+            scan_status_name(item.status),
+            item.name,
+            size(item.size),
+            item.confidence * 100.0,
+            item.session_id,
+        );
+        if let Some(asset_id) = item.asset_id {
+            line.push_str(&format!(" [asset #{asset_id}]"));
+        }
+        if let Some(err) = &item.error {
+            line.push_str(&format!(" — {err}"));
+        }
+        lines.push(line);
+    }
+    let mode = if result.applied { "applied" } else { "dry run" };
+    lines.push(format!(
+        "{mode}: {}, {} unmatched, {} batch skipped.",
+        plural(result.matches.len(), "match"),
+        result.unmatched_renders,
+        result.skipped_batch_renders,
+    ));
+    lines.join("\n")
+}
+
+pub fn render_scan_refusal(result: &ScanResult) -> Option<String> {
+    let failed = result
+        .matches
+        .iter()
+        .filter(|m| m.status == ScanMatchStatus::Failed)
+        .count();
+    (failed > 0).then(|| format!("{} could not be uploaded.", plural(failed, "render")))
+}
+
 /// `path` with the home folder written as `~`.
 fn tilde(path: &str, home: Option<&std::path::Path>) -> String {
     match home.and_then(|home| std::path::Path::new(path).strip_prefix(home).ok()) {
@@ -596,6 +692,16 @@ pub fn backfill_list(result: &Folders) -> String {
         .join("\n")
 }
 
+pub fn cover_set(result: &CoverSetResult) -> String {
+    format!(
+        "Set cover image #{} ({}) on {} #{}.",
+        result.image.id,
+        result.image.asset_path,
+        result.target.kind_name(),
+        result.target.id()
+    )
+}
+
 /// What a backfill brought in, folder by folder, then how it ended and what the history now holds.
 pub fn backfill_result(result: &Brought) -> String {
     let mut lines = Vec::new();
@@ -604,12 +710,32 @@ pub fn backfill_result(result: &Brought) -> String {
             .file_name()
             .map_or_else(|| folder.path.clone(), |n| n.to_string_lossy().into_owned());
         match folder.state {
-            Ending::Done => lines.push(format!(
-                "brought in {name}: {}, {}, {}",
-                counted(u64::from(folder.sets.unwrap_or(0)), "set"),
-                counted(folder.saves.unwrap_or(0), "save"),
-                size(folder.bytes.unwrap_or(0))
-            )),
+            Ending::Done => {
+                let mut line = format!(
+                    "brought in {name}: {}, {}, {}",
+                    counted(u64::from(folder.sets.unwrap_or(0)), "set"),
+                    counted(folder.saves.unwrap_or(0), "save"),
+                    size(folder.bytes.unwrap_or(0))
+                );
+                if let Some(repo_id) = folder.repo_id {
+                    let mut detail = vec![format!("repo #{repo_id}")];
+                    if let Some(track_id) = folder.track_id {
+                        let kind = if folder.matched_existing == Some(true) {
+                            "matched"
+                        } else {
+                            "new"
+                        };
+                        match &folder.track_title {
+                            Some(title) => {
+                                detail.push(format!("track #{track_id} '{title}' ({kind})"))
+                            }
+                            None => detail.push(format!("track #{track_id} ({kind})")),
+                        }
+                    }
+                    line.push_str(&format!(" ({})", detail.join(", ")));
+                }
+                lines.push(line);
+            }
             Ending::Failed => lines.push(format!(
                 "failed {name}: {}",
                 folder

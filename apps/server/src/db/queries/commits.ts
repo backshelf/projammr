@@ -54,6 +54,7 @@ import {
   objectHashSchema as hashSchema,
 } from "./objects.js";
 import { saveMetaFields } from "./saves.js";
+import { setSessionLocalFilepath, upsertRepoMachinePath } from "./repo-paths.js";
 import { sessionTimeInSet, timeInSetCoveredBy } from "./segments.js";
 import { replaceSessionSamples } from "./session-samples.js";
 
@@ -83,6 +84,8 @@ export const pushSavesBodySchema = z.object({
   ditSetId: ditSetIdSchema,
   branch: branchNameSchema,
   saves: z.array(pushedSaveSchema).min(1).max(1000),
+  localPath: z.string().trim().min(1).max(4096).optional(),
+  localFilepath: z.string().trim().min(1).max(4096).optional(),
 });
 
 /** A save a commit covers, with the objects that save rebuilds from. */
@@ -351,8 +354,18 @@ export async function recordSaves(input: {
   machine: PushMachine;
   branch: string;
   saves: PushedSave[];
+  localPath?: string;
+  localFilepath?: string;
 }): Promise<number> {
-  const { repoId, sessionId, machine, branch, saves: pushed } = input;
+  const {
+    repoId,
+    sessionId,
+    machine,
+    branch,
+    saves: pushed,
+    localPath,
+    localFilepath,
+  } = input;
 
   try {
     return await db.transaction(async (tx) => {
@@ -426,6 +439,19 @@ export async function recordSaves(input: {
         .where(eq(sessions.id, sessionId));
 
       await mirrorSamples(tx, sessionId, session!.projectId, pushed);
+
+      if (localPath) {
+        await upsertRepoMachinePath(tx, repoId, machine.id, localPath);
+      }
+      if (localFilepath && branch === "main") {
+        await setSessionLocalFilepath(
+          tx,
+          sessionId,
+          session!.projectId,
+          localFilepath,
+          machine.name
+        );
+      }
 
       await recordPush(
         tx,

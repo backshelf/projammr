@@ -7,6 +7,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -49,6 +50,32 @@ export const repos = pgTable(
 export type Repo = typeof repos.$inferSelect;
 
 export const repoSchema = createSelectSchema(repos);
+
+/**
+ * Where a dit repo lives on disk on a given machine. A repo pushed from
+ * several machines keeps one row per machine so each machine's folder path
+ * stays intact.
+ */
+export const repoMachines = pgTable(
+  "repo_machines",
+  {
+    repoId: integer("repo_id")
+      .references(() => repos.id, { onDelete: "cascade" })
+      .notNull(),
+    machineId: text("machine_id")
+      .references(() => machines.id, { onDelete: "cascade" })
+      .notNull(),
+    localPath: text("local_path").notNull(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    primaryKey({ columns: [t.repoId, t.machineId] }),
+    index("repo_machines_machine").on(t.machineId),
+  ]
+);
 
 /**
  * A line of commits within one session (a session is a set's lineage).

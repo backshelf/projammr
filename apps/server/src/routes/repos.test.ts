@@ -9,6 +9,7 @@ import {
   objectsOf,
   pushCommits,
   pushSaves,
+  registerMachine,
   savePayload,
   trackSeeds,
 } from "../test/dit-history.js";
@@ -113,6 +114,7 @@ describe("repos", () => {
               ditSetId: "set-listed",
               sessionId,
               sessionName: "Listed",
+              localFilepath: null,
               branches: [],
             },
           ]);
@@ -631,6 +633,100 @@ describe("repo reads with branches and tips", () => {
     ).toBe(404);
     expect((await request("owner", "/tracks/999999999/repos")).status).toBe(
       404
+    );
+  });
+
+  it("tracks per-machine repo paths and populates sessions.localFilepath across create, adopt and push", async () => {
+    requireProject();
+    const mac = await registerMachine(suite, "owner", "Mac Studio Paths");
+    const laptop = await registerMachine(suite, "owner", "Laptop Paths");
+
+    const created = await request(
+      "owner",
+      `/projects/${suite.projectId}/repos`,
+      {
+        method: "POST",
+        headers: { "X-Machine-Id": mac },
+        body: JSON.stringify({
+          name: "Tasmania Project",
+          localPath: "/Users/spence/Music/Tasmania Project",
+        }),
+      }
+    );
+    expect(created.status).toBe(201);
+    const repo = (await created.json()) as {
+      id: number;
+      localPath: string | null;
+      localPaths: { machineId: string; machineName: string; path: string }[];
+    };
+    expect(repo.localPath).toBe("/Users/spence/Music/Tasmania Project");
+    expect(repo.localPaths).toMatchObject([
+      {
+        machineId: mac,
+        machineName: "Mac Studio Paths",
+        path: "/Users/spence/Music/Tasmania Project",
+      },
+    ]);
+
+    const adopted = await request("owner", `/repos/${repo.id}/sets`, {
+      method: "POST",
+      headers: { "X-Machine-Id": mac },
+      body: JSON.stringify({
+        ditSetId: "set-tasmania",
+        fileName: "Tasmania.als",
+        localPath: "/Users/spence/Music/Tasmania Project",
+        localFilepath: "/Users/spence/Music/Tasmania Project/Tasmania.als",
+      }),
+    });
+    expect(adopted.status).toBe(201);
+    const { sessionId } = (await adopted.json()) as { sessionId: number };
+    const adoptedSession = await sessionRow(sessionId);
+    expect(adoptedSession.localFilepath).toBe(
+      "/Users/spence/Music/Tasmania Project/Tasmania.als"
+    );
+    expect(adoptedSession.localFileMachineName).toBe("Mac Studio Paths");
+
+    // Second machine pushes saves from its own folder path; both machine paths stay recorded.
+    const save = savePayload("tasmania-laptop", Date.UTC(2026, 6, 1), {
+      machineName: "Laptop Paths",
+    });
+    const pushed = await request("owner", `/repos/${repo.id}/saves`, {
+      method: "POST",
+      headers: { "X-Machine-Id": laptop },
+      body: JSON.stringify({
+        ditSetId: "set-tasmania",
+        branch: "main",
+        saves: [save],
+        localPath: "/Volumes/Work/Tasmania Project",
+        localFilepath: "/Volumes/Work/Tasmania Project/Tasmania.als",
+      }),
+    });
+    expect(pushed.status).toBe(200);
+
+    const detail = (await (
+      await request("owner", `/repos/${repo.id}`)
+    ).json()) as {
+      localPath: string | null;
+      localPaths: { machineId: string; machineName: string; path: string }[];
+      sets: { ditSetId: string; localFilepath: string | null }[];
+    };
+    // Preferred localPath follows lastPushMachine (laptop).
+    expect(detail.localPath).toBe("/Volumes/Work/Tasmania Project");
+    expect(detail.localPaths).toHaveLength(2);
+    expect(detail.localPaths).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          machineId: mac,
+          path: "/Users/spence/Music/Tasmania Project",
+        }),
+        expect.objectContaining({
+          machineId: laptop,
+          path: "/Volumes/Work/Tasmania Project",
+        }),
+      ])
+    );
+    expect(detail.sets[0]?.localFilepath).toBe(
+      "/Volumes/Work/Tasmania Project/Tasmania.als"
     );
   });
 });

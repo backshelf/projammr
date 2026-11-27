@@ -538,6 +538,7 @@ const trackSortColumns = {
   key: mainSessionKey,
   isrc: tracks.isrc,
   iswc: tracks.iswc,
+  releaseDate: tracks.releaseDate,
   explicit: tracks.explicit,
   tracks: sessions.tracksCount,
   status: statuses.percentage,

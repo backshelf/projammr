@@ -10,11 +10,12 @@
 //! is repeated records nothing twice: a recording that is there is skipped, a set already bound is left bound, and a
 //! push sends only what the hub does not hold.
 
+use std::collections::VecDeque;
 use std::fmt;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -25,9 +26,13 @@ use dit_core::remote::{
 
 use super::run::{self, Recorder, Trouble};
 use super::state::{
-    FolderPlan, FolderRun, FolderState, Plan, RunLock, RunStatus, State, Summary, Totals,
+    FolderManifest, FolderPlan, FolderRun, FolderState, Plan, RunLock, RunStatus, State, Summary,
+    Totals,
 };
 use crate::beat::retry_delay_ms;
+
+/// Maximum number of project folders a backfill run pushes concurrently.
+pub const MAX_CONCURRENCY: usize = 4;
 
 /// What a run tells whoever started it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,6 +94,17 @@ pub trait BackfillControl: Send + Sync {
     /// happens, on the calling thread.
     fn start(&self, plan: Plan, out: &mut dyn FnMut(Event)) -> Result<Summary, BackfillError>;
 
+    /// Like [`BackfillControl::start`], overlapping up to `concurrency` independent folders (clamped to
+    /// `1..=MAX_CONCURRENCY`).
+    fn start_with_concurrency(
+        &self,
+        plan: Plan,
+        _concurrency: usize,
+        out: &mut dyn FnMut(Event),
+    ) -> Result<Summary, BackfillError> {
+        self.start(plan, out)
+    }
+
     /// How the run stands, `None` when there has never been one. Reads the state file, so a run another process
     /// started shows too; a state file that cannot be read is an error.
     fn status(&self) -> Result<Option<RunStatus>, BackfillError>;
@@ -130,6 +146,8 @@ pub struct Config {
     pub retry: fn(u32) -> Duration,
     /// How often an upload's progress is reported.
     pub progress_every: Duration,
+    /// How many independent folders may push concurrently (clamped to `1..=MAX_CONCURRENCY`).
+    pub concurrency: usize,
 }
 
 fn retry_after(failures: u32) -> Duration {
@@ -146,6 +164,7 @@ impl Config {
             owner: Arc::new(Alone),
             retry: retry_after,
             progress_every: Duration::from_millis(250),
+            concurrency: 1,
         }
     }
 }
@@ -204,11 +223,22 @@ impl Driver {
     }
 
     /// Brings in the folders of `plan`. The state file is started over for it, keeping what a stopped run of the same
-    /// work already did, then every folder not done is brought in, one at a time. See [`BackfillControl::start`].
+    /// work already did, then every folder not done is brought in. See [`BackfillControl::start`].
     pub fn start(
         &self,
         remote: &Remote,
         plan: Plan,
+        out: &mut dyn FnMut(Event),
+    ) -> Result<Summary, BackfillError> {
+        self.start_with_concurrency(remote, plan, self.config.concurrency, out)
+    }
+
+    /// Like [`Driver::start`], running up to `concurrency` folders concurrently (clamped to `1..=MAX_CONCURRENCY`).
+    pub fn start_with_concurrency(
+        &self,
+        remote: &Remote,
+        plan: Plan,
+        concurrency: usize,
         out: &mut dyn FnMut(Event),
     ) -> Result<Summary, BackfillError> {
         if plan.folders.is_empty() {
@@ -218,7 +248,7 @@ impl Driver {
         self.clear_pause();
         State::update(&self.config.state, |state| state.begin(plan))
             .map_err(BackfillError::state)?;
-        let ended = self.go(remote, lock, out);
+        let ended = self.go(remote, lock, concurrency.clamp(1, MAX_CONCURRENCY), out);
         self.clear_pause();
         ended
     }
@@ -239,7 +269,12 @@ impl Driver {
         if !held {
             return Err(BackfillError::Nothing);
         }
-        let ended = self.go(remote, lock, out);
+        let ended = self.go(
+            remote,
+            lock,
+            self.config.concurrency.clamp(1, MAX_CONCURRENCY),
+            out,
+        );
         self.clear_pause();
         ended
     }
@@ -258,34 +293,137 @@ impl Driver {
         &self,
         remote: &Remote,
         _lock: RunLock,
+        concurrency: usize,
         out: &mut dyn FnMut(Event),
     ) -> Result<Summary, BackfillError> {
         let state = State::load(&self.config.state).map_err(BackfillError::state)?;
-        let mut reporter = Reporter {
-            out,
-            state: &self.config.state,
-            every: self.config.progress_every,
-            last: None,
-            current: FolderState::Waiting,
-        };
-        for (index, folder) in state.plan.folders.iter().enumerate() {
-            let run = &state.folders[index];
-            if run.state == FolderState::Done {
-                continue;
-            }
-            if self.stopped() {
-                return self.paused(&mut reporter);
-            }
-            match self.folder(remote, &mut reporter, index, folder, run) {
-                Ok(()) | Err(Stop::Failed(_)) => {}
-                Err(Stop::Paused) => return self.paused(&mut reporter),
-                Err(Stop::SignedOut(host)) => {
-                    self.mark_paused()?;
-                    return Err(BackfillError::SignedOut { host });
+        let pending: VecDeque<(usize, &FolderPlan, &FolderRun)> = state
+            .plan
+            .folders
+            .iter()
+            .enumerate()
+            .filter_map(|(index, folder)| {
+                let run = &state.folders[index];
+                (run.state != FolderState::Done).then_some((index, folder, run))
+            })
+            .collect();
+
+        if concurrency <= 1 || pending.len() <= 1 {
+            let mut reporter = Reporter {
+                sink: Sink::Direct(out),
+                state: &self.config.state,
+                every: self.config.progress_every,
+                last: None,
+                current: FolderState::Waiting,
+            };
+            for (index, folder, run) in pending {
+                if self.stopped() {
+                    return self.paused(&mut reporter);
                 }
-                Err(Stop::State(message)) => return Err(BackfillError::State(message)),
+                match self.folder(remote, &mut reporter, index, folder, run) {
+                    Ok(()) | Err(Stop::Failed(_)) => {}
+                    Err(Stop::Paused) => return self.paused(&mut reporter),
+                    Err(Stop::SignedOut(host)) => {
+                        self.mark_paused()?;
+                        return Err(BackfillError::SignedOut { host });
+                    }
+                    Err(Stop::State(message)) => return Err(BackfillError::State(message)),
+                }
             }
+            let state = State::load(&self.config.state).map_err(BackfillError::state)?;
+            return Ok(state.status(true).summary());
         }
+
+        enum RunStop {
+            Paused,
+            SignedOut(String),
+            State(String),
+        }
+
+        let workers = concurrency.min(pending.len());
+        let queue = Mutex::new(pending);
+        let stop_reason: Mutex<Option<RunStop>> = Mutex::new(None);
+        let (tx, rx) = mpsc::channel::<Event>();
+
+        thread::scope(|scope| {
+            for _ in 0..workers {
+                let tx = tx.clone();
+                scope.spawn(|| {
+                    let mut reporter = Reporter {
+                        sink: Sink::Channel(tx),
+                        state: &self.config.state,
+                        every: self.config.progress_every,
+                        last: None,
+                        current: FolderState::Waiting,
+                    };
+                    loop {
+                        if self.stopped() {
+                            let mut guard = stop_reason
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            if guard.is_none() {
+                                *guard = Some(RunStop::Paused);
+                            }
+                            return;
+                        }
+                        let next = queue
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner())
+                            .pop_front();
+                        let Some((index, folder, run)) = next else {
+                            return;
+                        };
+                        match self.folder(remote, &mut reporter, index, folder, run) {
+                            Ok(()) | Err(Stop::Failed(_)) => {}
+                            Err(Stop::Paused) => {
+                                let mut guard = stop_reason
+                                    .lock()
+                                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                                if guard.is_none() {
+                                    *guard = Some(RunStop::Paused);
+                                }
+                                return;
+                            }
+                            Err(Stop::SignedOut(host)) => {
+                                self.pause();
+                                let mut guard = stop_reason
+                                    .lock()
+                                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                                *guard = Some(RunStop::SignedOut(host));
+                                return;
+                            }
+                            Err(Stop::State(message)) => {
+                                self.pause();
+                                let mut guard = stop_reason
+                                    .lock()
+                                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                                *guard = Some(RunStop::State(message));
+                                return;
+                            }
+                        }
+                    }
+                });
+            }
+            drop(tx);
+            for event in rx {
+                out(event);
+            }
+        });
+
+        match stop_reason.into_inner().unwrap_or_else(|p| p.into_inner()) {
+            Some(RunStop::Paused) => {
+                self.mark_paused()?;
+                out(Event::Paused);
+                return Err(BackfillError::Paused);
+            }
+            Some(RunStop::SignedOut(host)) => {
+                self.mark_paused()?;
+                return Err(BackfillError::SignedOut { host });
+            }
+            Some(RunStop::State(message)) => return Err(BackfillError::State(message)),
+            None => {}
+        }
+
         let state = State::load(&self.config.state).map_err(BackfillError::state)?;
         Ok(state.status(true).summary())
     }
@@ -296,7 +434,7 @@ impl Driver {
 
     fn paused(&self, reporter: &mut Reporter) -> Result<Summary, BackfillError> {
         self.mark_paused()?;
-        (reporter.out)(Event::Paused);
+        reporter.sink.send(Event::Paused);
         Err(BackfillError::Paused)
     }
 
@@ -315,12 +453,13 @@ impl Driver {
         let ended = self.bring_in(remote, reporter, index, folder, run);
         owner.release(&folder.path);
         match ended {
-            Ok(totals) => {
+            Ok((totals, manifest)) => {
                 // A list that cannot be written must not fail a folder that is on the hub: the app's own `Join`
                 // tracks it now and `dit init` leaves it out of the list the same way.
                 let _ = RepoList::update(&self.config.repos, |list| list.add(&folder.path));
                 reporter.set(index, &folder.path, FolderState::Done, |run| {
                     run.totals = Some(totals);
+                    run.manifest = Some(manifest);
                 })?;
                 owner.join(&folder.path);
                 Ok(())
@@ -353,7 +492,7 @@ impl Driver {
         index: usize,
         folder: &FolderPlan,
         run: &FolderRun,
-    ) -> Result<Totals, Stop> {
+    ) -> Result<(Totals, FolderManifest), Stop> {
         let committed = run.committed;
         let path = folder.path.as_path();
         if !path.is_dir() {
@@ -427,13 +566,36 @@ impl Driver {
             remote::adopt_sets(&repo, remote, folder.project_id, &targets, true)
         })?;
         let mut adopted: Vec<&str> = Vec::with_capacity(adoption.sets.len());
+        let mut session_ids: Vec<i64> = Vec::with_capacity(adoption.sets.len());
         let mut taken: Vec<&str> = Vec::new();
         for (set_id, answer) in &adoption.sets {
             match answer {
-                SetAdoption::Adopted { .. } => adopted.push(set_id),
+                SetAdoption::Adopted { session_id } => {
+                    adopted.push(set_id);
+                    session_ids.push(*session_id);
+                }
                 SetAdoption::Taken { message } => taken.push(message),
             }
         }
+        let track_id = targets.iter().find_map(|(_, target)| match target {
+            SetTarget::Track(id) => Some(*id),
+            _ => None,
+        });
+        let track_title = folder.sets.iter().find_map(|set| match &set.target {
+            SetTarget::NewTrack(title) => Some(title.clone()),
+            _ => None,
+        });
+        let matched_existing = folder
+            .sets
+            .iter()
+            .any(|set| matches!(set.target, SetTarget::Session(_) | SetTarget::Track(_)));
+        let manifest = FolderManifest {
+            repo_id: adoption.repo_id,
+            track_id,
+            track_title,
+            matched_existing,
+            session_ids,
+        };
 
         let samples = self.hub(reporter, index, path, &host, |_| {
             remote::pushes_samples(&repo, remote)
@@ -495,7 +657,9 @@ impl Driver {
                 folder.sets.len()
             )));
         }
-        run::totals(&repo, &adopted, before + sent).map_err(|error| Stop::Failed(error.to_string()))
+        let totals = run::totals(&repo, &adopted, before + sent)
+            .map_err(|error| Stop::Failed(error.to_string()))?;
+        Ok((totals, manifest))
     }
 
     /// Runs one step that talks to the hub. A hub that cannot be reached, is busy or is rate limiting leaves the folder
@@ -546,9 +710,25 @@ impl Driver {
     }
 }
 
+enum Sink<'a> {
+    Direct(&'a mut dyn FnMut(Event)),
+    Channel(mpsc::Sender<Event>),
+}
+
+impl Sink<'_> {
+    fn send(&mut self, event: Event) {
+        match self {
+            Sink::Direct(out) => out(event),
+            Sink::Channel(tx) => {
+                let _ = tx.send(event);
+            }
+        }
+    }
+}
+
 /// Writes a folder's state and tells the run's listener.
 struct Reporter<'a> {
-    out: &'a mut dyn FnMut(Event),
+    sink: Sink<'a>,
     state: &'a Path,
     every: Duration,
     /// When the last progress event went out.
@@ -610,7 +790,7 @@ impl Reporter<'_> {
         if state != FolderState::WaitingForHub {
             self.current = state.clone();
         }
-        (self.out)(Event::Folder {
+        self.sink.send(Event::Folder {
             path: path.to_path_buf(),
             state,
         });
@@ -632,6 +812,17 @@ where
     fn start(&self, plan: Plan, out: &mut dyn FnMut(Event)) -> Result<Summary, BackfillError> {
         let remote = (self.remote)().map_err(BackfillError::Remote)?;
         self.driver.start(&remote, plan, out)
+    }
+
+    fn start_with_concurrency(
+        &self,
+        plan: Plan,
+        concurrency: usize,
+        out: &mut dyn FnMut(Event),
+    ) -> Result<Summary, BackfillError> {
+        let remote = (self.remote)().map_err(BackfillError::Remote)?;
+        self.driver
+            .start_with_concurrency(&remote, plan, concurrency, out)
     }
 
     fn status(&self) -> Result<Option<RunStatus>, BackfillError> {

@@ -527,7 +527,8 @@ pub(super) fn bind_project(
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let repo_id = hub::create_repo(remote, project_id, &name)?;
+    let local_path = repo.root().to_string_lossy();
+    let repo_id = hub::create_repo(remote, project_id, &name, Some(local_path.as_ref()))?;
     let binding = RemoteBinding {
         instance: remote.client().instance().url().to_string(),
         repo: repo_id,
@@ -582,10 +583,17 @@ fn adopt(
     main_rel: &str,
 ) -> Result<PushedSet, PushError> {
     let file_name = main_rel.rsplit('/').next().unwrap_or(main_rel);
+    let local_path = repo.root().to_string_lossy();
+    let local_filepath = repo.root().join(main_rel).to_string_lossy().into_owned();
     let pushed = PushedSet {
         instance: binding.instance.clone(),
         repo_id: binding.repo,
-        session_id: hub.adopt_set(set_id, file_name)?,
+        session_id: hub.adopt_set(
+            set_id,
+            file_name,
+            Some(local_path.as_ref()),
+            Some(local_filepath.as_str()),
+        )?,
         branches: Default::default(),
     };
     repo.write_pushed(set_id, &pushed)?;
@@ -745,13 +753,33 @@ fn push_branch(
     let sent: HashSet<ObjectId> = state.saves.iter().copied().collect();
     let unsent: Vec<ObjectId> = log.into_iter().filter(|id| !sent.contains(id)).collect();
 
-    for chunk in unsent.chunks(batching.saves.max(1)) {
+    let local_path = repo.root().to_string_lossy().into_owned();
+    let local_filepath = if branch == MAIN_BRANCH {
+        repo.sets()?
+            .get(set_id)
+            .map(|rel| repo.root().join(rel).to_string_lossy().into_owned())
+    } else {
+        None
+    };
+
+    for (chunk_idx, chunk) in unsent.chunks(batching.saves.max(1)).enumerate() {
         shared.notify(PushProgress::Between)?;
         let saves = chunk
             .iter()
             .map(|id| repo.read_save(id).map(|save| (*id, save)))
             .collect::<Result<Vec<_>, _>>()?;
-        hub.push_saves(set_id, branch, &saves)?;
+        let send_paths = chunk_idx == 0;
+        hub.push_saves(
+            set_id,
+            branch,
+            &saves,
+            send_paths.then_some(local_path.as_str()),
+            if send_paths {
+                local_filepath.as_deref()
+            } else {
+                None
+            },
+        )?;
         branch_state(pushed, branch).saves.extend_from_slice(chunk);
         repo.write_pushed(set_id, pushed)?;
         push.saves += chunk.len();

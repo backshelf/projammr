@@ -131,23 +131,46 @@ fn recorded_paths(hub: &Hub) -> Vec<Option<(PathBuf, Option<PathBuf>)>> {
         .collect()
 }
 
+/// How unmatched sets choose an existing track vs creating a fresh one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TrackMatchPolicy {
+    /// Match existing tracks whose title similarity is at least `threshold` (default [`NAMES_A_TRACK`]).
+    Fuzzy(f64),
+    /// Match an existing track only when its title matches the folder's track name exactly (case-insensitive, trimmed).
+    Exact,
+    /// Never match an existing track for unmatched sets: always create a fresh track.
+    CreateNew,
+}
+
+impl Default for TrackMatchPolicy {
+    fn default() -> Self {
+        TrackMatchPolicy::Fuzzy(NAMES_A_TRACK)
+    }
+}
+
 /// Pre-resolved candidate paths for a [`Hub`], so proposing across many folders
 /// canonicalizes each hub session's recorded path once rather than once per folder.
 pub struct Proposer<'a> {
     hub: &'a Hub,
     paths: Vec<Option<(PathBuf, Option<PathBuf>)>>,
+    policy: TrackMatchPolicy,
 }
 
 impl<'a> Proposer<'a> {
     pub fn new(hub: &'a Hub) -> Self {
+        Self::with_policy(hub, TrackMatchPolicy::default())
+    }
+
+    pub fn with_policy(hub: &'a Hub, policy: TrackMatchPolicy) -> Self {
         Self {
             hub,
             paths: recorded_paths(hub),
+            policy,
         }
     }
 
     pub fn propose(&self, checked: &Checked, taken: &mut HashSet<i64>) -> Vec<Proposal> {
-        propose_with_paths(self.hub, &self.paths, checked, taken)
+        propose_with_paths(self.hub, &self.paths, self.policy, checked, taken)
     }
 }
 
@@ -164,6 +187,7 @@ pub fn propose(hub: &Hub, checked: &Checked, taken: &mut HashSet<i64>) -> Vec<Pr
 fn propose_with_paths(
     hub: &Hub,
     paths: &[Option<(PathBuf, Option<PathBuf>)>],
+    policy: TrackMatchPolicy,
     checked: &Checked,
     taken: &mut HashSet<i64>,
 ) -> Vec<Proposal> {
@@ -213,13 +237,14 @@ fn propose_with_paths(
         }
     }
 
-    let new_track = new_session_track(
+    let new_track = new_session_track_with_policy(
         &hub.tracks,
         &checked.path,
         matches
             .iter()
             .flatten()
             .filter_map(|(index, _)| hub.sessions[*index].track_id),
+        policy,
     );
     sets.iter()
         .zip(matches)
@@ -249,15 +274,13 @@ fn propose_with_paths(
         .collect()
 }
 
-/// The ids of the tracks a folder's new sessions may go on, best first: the track most of `matched_tracks` (the tracks
-/// of the sessions its sets matched) are, the lowest id among equals, then the tracks of `tracks` whose titles read
-/// like the folder's name or `set_name`, the most alike first. The one ranking for the backfill and for the panel's
-/// first-commit proposal.
-pub fn track_ranking(
+/// Like [`track_ranking`], with an explicit fuzzy similarity `threshold`.
+fn track_ranking_at(
     tracks: &[Track],
     folder: &Path,
     set_name: Option<&str>,
     matched_tracks: impl IntoIterator<Item = i64>,
+    threshold: f64,
 ) -> Vec<i64> {
     let mut counts: HashMap<i64, usize> = HashMap::new();
     for track in matched_tracks {
@@ -272,7 +295,7 @@ pub fn track_ranking(
     let titles: Vec<&str> = tracks.iter().map(|track| track.title.as_str()).collect();
     let mut scored: Vec<(usize, f64)> = Vec::new();
     for name in std::iter::once(track_name(folder)).chain(set_name.map(str::to_string)) {
-        for (index, score) in ranked_matches(&name, &titles, NAMES_A_TRACK) {
+        for (index, score) in ranked_matches(&name, &titles, threshold) {
             match scored.iter_mut().find(|(held, _)| *held == index) {
                 Some(held) => held.1 = held.1.max(score),
                 None => scored.push((index, score)),
@@ -288,15 +311,64 @@ pub fn track_ranking(
     ranking
 }
 
+/// The ids of the tracks a folder's new sessions may go on, best first: the track most of `matched_tracks` (the tracks
+/// of the sessions its sets matched) are, the lowest id among equals, then the tracks of `tracks` whose titles read
+/// like the folder's name or `set_name`, the most alike first. The one ranking for the backfill and for the panel's
+/// first-commit proposal.
+pub fn track_ranking(
+    tracks: &[Track],
+    folder: &Path,
+    set_name: Option<&str>,
+    matched_tracks: impl IntoIterator<Item = i64>,
+) -> Vec<i64> {
+    track_ranking_at(tracks, folder, set_name, matched_tracks, NAMES_A_TRACK)
+}
+
 /// Where a folder's new sessions go: the first of [`track_ranking`], else a new track named after the folder.
 pub fn new_session_track(
     tracks: &[Track],
     folder: &Path,
     matched_tracks: impl IntoIterator<Item = i64>,
 ) -> SetTarget {
-    match track_ranking(tracks, folder, None, matched_tracks).first() {
-        Some(id) => SetTarget::Track(*id),
-        None => SetTarget::NewTrack(track_name(folder)),
+    new_session_track_with_policy(tracks, folder, matched_tracks, TrackMatchPolicy::default())
+}
+
+/// Where a folder's new sessions go under `policy`.
+pub fn new_session_track_with_policy(
+    tracks: &[Track],
+    folder: &Path,
+    matched_tracks: impl IntoIterator<Item = i64>,
+    policy: TrackMatchPolicy,
+) -> SetTarget {
+    match policy {
+        TrackMatchPolicy::CreateNew => SetTarget::NewTrack(track_name(folder)),
+        TrackMatchPolicy::Exact => {
+            let mut counts: HashMap<i64, usize> = HashMap::new();
+            for track in matched_tracks {
+                *counts.entry(track).or_default() += 1;
+            }
+            if let Some((id, _)) = counts
+                .into_iter()
+                .max_by(|(a_id, a), (b_id, b)| a.cmp(b).then_with(|| b_id.cmp(a_id)))
+            {
+                return SetTarget::Track(id);
+            }
+            let target_name = track_name(folder);
+            let folded = target_name.trim().to_lowercase();
+            match tracks
+                .iter()
+                .find(|track| track.title.trim().to_lowercase() == folded)
+            {
+                Some(track) => SetTarget::Track(track.id),
+                None => SetTarget::NewTrack(target_name),
+            }
+        }
+        TrackMatchPolicy::Fuzzy(threshold) => {
+            match track_ranking_at(tracks, folder, None, matched_tracks, threshold).first() {
+                Some(id) => SetTarget::Track(*id),
+                None => SetTarget::NewTrack(track_name(folder)),
+            }
+        }
     }
 }
 
@@ -587,6 +659,65 @@ mod tests {
                 "/api/projects/8/sessions/dit-candidates",
                 "/api/projects/8/tracks/summary"
             ]
+        );
+    }
+
+    #[test]
+    fn exact_and_create_new_policies_do_not_fuzzy_merge_distinct_tracks() {
+        let track = |id, title: &str| Track {
+            id,
+            title: title.to_string(),
+        };
+        let hub = Hub {
+            sessions: Vec::new(),
+            tracks: vec![
+                track(1, "Tasmania (Demo)"),
+                track(2, "Roses (Gretta Ray cover)"),
+                track(3, "Canopy"),
+            ],
+        };
+        let tasmania = Checked {
+            path: PathBuf::from("/music/Tasmania Project"),
+            ..checked(vec![set("s1", "/music/Tasmania Project/Tasmania.als", &[])])
+        };
+        let canopy = Checked {
+            path: PathBuf::from("/music/canopy Project"),
+            ..checked(vec![set("s2", "/music/canopy Project/canopy.als", &[])])
+        };
+
+        // Default fuzzy matching merges Tasmania into Tasmania (Demo).
+        assert_eq!(
+            targets(&Proposer::new(&hub).propose(&tasmania, &mut HashSet::new())),
+            [SetTarget::Track(1)]
+        );
+
+        // Exact policy refuses fuzzy merges, but matches case-insensitive exact titles.
+        let exact = Proposer::with_policy(&hub, TrackMatchPolicy::Exact);
+        assert_eq!(
+            targets(&exact.propose(&tasmania, &mut HashSet::new())),
+            [SetTarget::NewTrack("Tasmania".into())]
+        );
+        assert_eq!(
+            targets(&exact.propose(&canopy, &mut HashSet::new())),
+            [SetTarget::Track(3)]
+        );
+
+        // CreateNew always creates fresh tracks even when an exact title exists.
+        let fresh = Proposer::with_policy(&hub, TrackMatchPolicy::CreateNew);
+        assert_eq!(
+            targets(&fresh.propose(&canopy, &mut HashSet::new())),
+            [SetTarget::NewTrack("canopy".into())]
+        );
+
+        // High custom threshold prevents partial matches while allowing exact matches.
+        let strict = Proposer::with_policy(&hub, TrackMatchPolicy::Fuzzy(0.99));
+        assert_eq!(
+            targets(&strict.propose(&tasmania, &mut HashSet::new())),
+            [SetTarget::NewTrack("Tasmania".into())]
+        );
+        assert_eq!(
+            targets(&strict.propose(&canopy, &mut HashSet::new())),
+            [SetTarget::Track(3)]
         );
     }
 }

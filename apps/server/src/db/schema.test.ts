@@ -154,6 +154,7 @@ describe("insert and update schemas", () => {
       notes: null,
       notesText: null,
       image: null,
+      releaseDate: null,
       isrc: null,
       iswc: null,
       explicit: false,

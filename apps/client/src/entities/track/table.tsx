@@ -60,7 +60,8 @@ import {
 } from "./columns";
 
 /** The ids `trackToPeekRow` gives its fields — what a card's `keyFields` may name. */
-type TrackPeekFieldId = "collections" | "bpm" | "key" | "id" | "isrc" | "iswc";
+type TrackPeekFieldId =
+  "collections" | "releaseDate" | "bpm" | "key" | "id" | "isrc" | "iswc";
 
 /** A track's row data projected onto the peek panel's shape — shared by the
  *  table and the board view, which both open the same panel from a row. */
@@ -71,6 +72,13 @@ function trackToPeekRow(row: ListTrack): PeekRow {
       id: "collections",
       label: "Collections",
       value: (row.collections ?? []).map((c) => c.title).join(", "),
+    },
+    {
+      id: "releaseDate",
+      label: "Release",
+      value: row.releaseDate ? (
+        <Formatted>{(format) => format.date(row.releaseDate!)}</Formatted>
+      ) : null,
     },
     {
       id: "bpm",
@@ -287,6 +295,7 @@ export const trackTable = {
         artists: { type: "list", placeholder: "Comma-separated names" },
         priority: { type: "priority", priorityLevels },
         status: { type: "status", statuses },
+        releaseDate: { type: "date" },
         isrc: { type: "text", placeholder: "USXX12300000" },
         iswc: { type: "text", placeholder: "T-00000000000" },
         explicit: { type: "checkbox" },
@@ -647,6 +656,7 @@ export const trackTable = {
 
     const initiallyHiddenColumns = useMemo(
       () => [
+        "releaseDate",
         "isrc",
         "iswc",
         "explicit",

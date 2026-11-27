@@ -9,6 +9,7 @@ mod backfill;
 mod commands;
 mod config;
 mod context;
+mod cover;
 mod interrupt;
 mod login;
 mod output;
@@ -22,8 +23,9 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand, ValueEnum};
-use dit_daemon::backfill::BackfillControl;
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use dit_core::remote::CoverTarget;
+use dit_daemon::backfill::{BackfillControl, TrackMatchPolicy};
 use dit_daemon::renders::RenderControl;
 use serde::Serialize;
 
@@ -147,6 +149,11 @@ pub enum Command {
         #[command(subcommand)]
         command: Option<RendersCommand>,
     },
+    /// Upload and set cover artwork on a track, collection or project.
+    Cover {
+        #[command(subcommand)]
+        command: CoverCommand,
+    },
     /// Bring the Live projects you already have into dit, oldest saves and all. With no folder, list the project
     /// folders found; with folders, bring them in.
     Backfill {
@@ -159,7 +166,66 @@ pub enum Command {
         /// The project on the instance to bring them into: the last one used, or your only one, when left out.
         #[arg(long, value_name = "ID")]
         project: Option<i64>,
+        /// Match existing tracks only by exact title (case-insensitive) instead of fuzzy matching.
+        #[arg(
+            long,
+            conflicts_with_all = ["create_new", "match_threshold", "roots"]
+        )]
+        no_fuzzy_match: bool,
+        /// Always create a fresh track for each folder's unmatched sets rather than attaching to an existing track.
+        #[arg(
+            long,
+            conflicts_with_all = ["no_fuzzy_match", "match_threshold", "roots"]
+        )]
+        create_new: bool,
+        /// Custom fuzzy track-matching threshold in 0..1 (default 0.6).
+        #[arg(
+            long,
+            value_name = "SCORE",
+            conflicts_with_all = ["no_fuzzy_match", "create_new", "roots"]
+        )]
+        match_threshold: Option<f64>,
+        /// Number of independent project folders to push concurrently (1..=4, default 1).
+        #[arg(long, default_value_t = 1, value_name = "N", conflicts_with = "roots")]
+        concurrency: usize,
     },
+}
+
+#[derive(Subcommand)]
+pub enum CoverCommand {
+    /// Stream a local image file to the instance and pin it on a track, collection or project.
+    Set {
+        /// The local image file to upload.
+        file: PathBuf,
+        #[command(flatten)]
+        target: CoverTargetArgs,
+    },
+}
+
+#[derive(Args)]
+#[group(required = true, multiple = false)]
+pub struct CoverTargetArgs {
+    /// Pin the cover on this track id.
+    #[arg(long, value_name = "ID")]
+    track: Option<i64>,
+    /// Pin the cover on this collection id.
+    #[arg(long, value_name = "ID")]
+    collection: Option<i64>,
+    /// Pin the cover on this project id.
+    #[arg(long, value_name = "ID")]
+    project: Option<i64>,
+}
+
+impl CoverTargetArgs {
+    fn into_target(self) -> CoverTarget {
+        if let Some(id) = self.track {
+            CoverTarget::Track(id)
+        } else if let Some(id) = self.collection {
+            CoverTarget::Collection(id)
+        } else {
+            CoverTarget::Project(self.project.expect("clap group requires one target"))
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -179,6 +245,37 @@ pub enum RendersCommand {
         /// Also propose nothing from the folder it is in.
         #[arg(long)]
         never_here: bool,
+    },
+    /// Stream a local audio file to the instance and attach it as a version of a track.
+    Add {
+        /// The local audio file to upload.
+        file: PathBuf,
+        /// The track id to attach the audio version to.
+        #[arg(long, value_name = "ID")]
+        track: i64,
+        /// Optional session id to record as the bounce's source session.
+        #[arg(long, value_name = "ID")]
+        session: Option<i64>,
+        /// Pin the uploaded version as the track's primary audio.
+        #[arg(long)]
+        primary: bool,
+    },
+    /// Scan a directory of historical bounces, score them against pushed sessions, and optionally upload them.
+    Scan {
+        /// Directory to scan recursively for audio bounces.
+        dir: PathBuf,
+        /// Preview proposed matches without uploading (default when --apply is not passed).
+        #[arg(long, conflicts_with = "apply")]
+        dry_run: bool,
+        /// Upload and attach all matched renders that pass the confidence threshold.
+        #[arg(long, conflicts_with = "dry_run")]
+        apply: bool,
+        /// Minimum confidence score in 0..=1 (default 0.45).
+        #[arg(long, value_name = "SCORE")]
+        min_confidence: Option<f64>,
+        /// Maximum file size to upload in MiB (0 for no limit; defaults to user config).
+        #[arg(long, value_name = "MB")]
+        max_upload_mb: Option<u64>,
     },
 }
 
@@ -317,16 +414,68 @@ pub fn run(cli: Cli, cwd: &Path, cx: &mut Context) -> Result<Done, CliError> {
                 &renders::reject(cx, id, never_here)?,
                 output::render_rejected,
             ),
+            Some(RendersCommand::Add {
+                file,
+                track,
+                session,
+                primary,
+            }) => render(
+                cli.json,
+                &renders::add(cx, cwd, &file, track, session, primary)?,
+                output::render_added,
+            ),
+            Some(RendersCommand::Scan {
+                dir,
+                dry_run: _,
+                apply,
+                min_confidence,
+                max_upload_mb,
+            }) => {
+                let scanned = renders::scan(cx, cwd, &dir, apply, min_confidence, max_upload_mb)?;
+                refusal = output::render_scan_refusal(&scanned);
+                render(cli.json, &scanned, output::render_scan)
+            }
         },
+        Command::Cover {
+            command: CoverCommand::Set { file, target },
+        } => render(
+            cli.json,
+            &cover::set(cx, cwd, &file, target.into_target())?,
+            output::cover_set,
+        ),
         Command::Backfill { folders, roots, .. } if folders.is_empty() => render(
             cli.json,
             &backfill::list(cx, cwd, &roots)?,
             output::backfill_list,
         ),
         Command::Backfill {
-            folders, project, ..
+            folders,
+            project,
+            no_fuzzy_match,
+            create_new,
+            match_threshold,
+            concurrency,
+            ..
         } => {
-            let result = backfill::run(cx, cwd, &folders, project)?;
+            let match_policy = if create_new {
+                TrackMatchPolicy::CreateNew
+            } else if no_fuzzy_match {
+                TrackMatchPolicy::Exact
+            } else if let Some(threshold) = match_threshold {
+                TrackMatchPolicy::Fuzzy(threshold)
+            } else {
+                TrackMatchPolicy::default()
+            };
+            let result = backfill::run(
+                cx,
+                cwd,
+                &folders,
+                backfill::RunOptions {
+                    project,
+                    match_policy,
+                    concurrency,
+                },
+            )?;
             refusal = result.refusal.clone();
             render(cli.json, &result, output::backfill_result)
         }

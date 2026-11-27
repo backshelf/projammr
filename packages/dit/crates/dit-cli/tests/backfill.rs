@@ -47,6 +47,7 @@ impl RemoteSource for Bench {
 struct Hub {
     projects: Value,
     sessions: Value,
+    tracks: Value,
     bytes: u64,
     remaining: Option<u64>,
 }
@@ -56,6 +57,7 @@ impl Hub {
         Hub {
             projects: json!([{ "id": 3, "name": "Album" }]),
             sessions,
+            tracks: json!([]),
             bytes: 5_000,
             remaining: None,
         }
@@ -71,7 +73,7 @@ impl Bench {
             } else if path.ends_with("/sessions/dit-candidates") {
                 json!({ "sessions": hub.sessions })
             } else if path.ends_with("/tracks/summary") {
-                json!([])
+                hub.tracks.clone()
             } else if path == "/api/uploads/limits" {
                 json!({ "maxBytes": 1024, "audioTypes": [], "pushSamplesEverywhere": false })
             } else if path.ends_with("/repos/storage-check") {
@@ -397,6 +399,7 @@ fn json_has_one_object_with_a_done_folder_and_a_failed_one() {
         json!({
             "folders": [
                 {
+                    "folder": "New Project",
                     "path": new.to_str().unwrap(),
                     "state": "done",
                     "sets": 2,
@@ -404,6 +407,7 @@ fn json_has_one_object_with_a_done_folder_and_a_failed_one() {
                     "bytes": 2_469_606_195u64,
                 },
                 {
+                    "folder": "Old Project",
                     "path": old.to_str().unwrap(),
                     "state": "failed",
                     "error": "the hub said no",
@@ -826,4 +830,138 @@ fn a_set_that_cannot_be_read_is_noted_and_kept() {
     );
     let plan = shape(&fake.plan().unwrap());
     assert!(plan[0].3.iter().any(|set| set.0 == "Broken.als"));
+}
+
+#[test]
+fn create_new_and_no_fuzzy_match_control_how_existing_tracks_are_proposed() {
+    let root = tempfile::tempdir().unwrap();
+    let folder = project(
+        root.path(),
+        "Night Drive Project",
+        &["Empty Set.als"],
+        1_000_000_000,
+    );
+    // "Night Drive Extended" is a fuzzy match to "Night Drive" (above default 0.6, below 0.95).
+    let mut hub = Hub::one_project(json!([]));
+    hub.tracks = json!([{ "id": 9, "title": "Night Drive Extended", "archivedAt": null }]);
+    let bench = Bench::start(root, hub);
+
+    let default_fake = Fake::new();
+    bench.run(&["backfill", "Night Drive Project"], &default_fake);
+    assert_eq!(
+        shape(&default_fake.plan().unwrap())[0].3[0].1,
+        SetTarget::Track(9),
+        "default fuzzy matching links close titles"
+    );
+    fs::remove_dir_all(folder.join(".dit")).unwrap();
+
+    let exact_fake = Fake::new();
+    bench.run(
+        &["backfill", "--no-fuzzy-match", "Night Drive Project"],
+        &exact_fake,
+    );
+    assert_eq!(
+        shape(&exact_fake.plan().unwrap())[0].3[0].1,
+        SetTarget::NewTrack("Night Drive".to_string()),
+        "--no-fuzzy-match rejects non-exact fuzzy matches"
+    );
+    fs::remove_dir_all(folder.join(".dit")).unwrap();
+
+    let fresh_fake = Fake::new();
+    bench.run(
+        &["backfill", "--create-new", "Night Drive Project"],
+        &fresh_fake,
+    );
+    assert_eq!(
+        shape(&fresh_fake.plan().unwrap())[0].3[0].1,
+        SetTarget::NewTrack("Night Drive".to_string()),
+        "--create-new always creates a fresh track"
+    );
+    fs::remove_dir_all(folder.join(".dit")).unwrap();
+
+    let strict_fake = Fake::new();
+    bench.run(
+        &[
+            "backfill",
+            "--match-threshold",
+            "0.95",
+            "Night Drive Project",
+        ],
+        &strict_fake,
+    );
+    assert_eq!(
+        shape(&strict_fake.plan().unwrap())[0].3[0].1,
+        SetTarget::NewTrack("Night Drive".to_string()),
+        "--match-threshold raises the fuzzy bar"
+    );
+}
+
+#[test]
+fn invalid_match_threshold_or_concurrency_is_refused() {
+    let (bench, _, _) = two_projects();
+    let (bad_thresh, _) = bench.run(
+        &["backfill", "--match-threshold", "1.5", "New Project"],
+        &Fake::new(),
+    );
+    assert_eq!(bad_thresh.code, 1);
+    assert!(
+        bad_thresh
+            .refusal
+            .as_deref()
+            .unwrap_or_default()
+            .contains("--match-threshold"),
+        "{:?}",
+        bad_thresh.refusal
+    );
+
+    let (bad_conc, _) = bench.run(
+        &["backfill", "--concurrency", "8", "New Project"],
+        &Fake::new(),
+    );
+    assert_eq!(bad_conc.code, 1);
+    assert!(
+        bad_conc
+            .refusal
+            .as_deref()
+            .unwrap_or_default()
+            .contains("--concurrency"),
+        "{:?}",
+        bad_conc.refusal
+    );
+}
+
+#[test]
+fn json_manifest_includes_repo_track_and_session_ids_from_persisted_state() {
+    let (bench, old, new) = two_projects();
+    State::update(&State::beside(&bench.config()), |state| {
+        state.plan.folders.push(FolderPlan {
+            path: new.clone(),
+            project_id: 4,
+            created_dit: false,
+            sets: Vec::new(),
+        });
+        state.folders.push(dit_daemon::backfill::state::FolderRun {
+            state: FolderState::Done,
+            manifest: Some(dit_daemon::backfill::FolderManifest {
+                repo_id: 42,
+                track_id: Some(77),
+                track_title: Some("New Song".to_string()),
+                matched_existing: true,
+                session_ids: vec![101, 102],
+            }),
+            ..Default::default()
+        });
+    })
+    .unwrap();
+
+    let mut fake = Fake::new();
+    fake.after = Some(finished(&new, &old));
+    let (done, _) = bench.run(&["backfill", "Old Project", "New Project", "--json"], &fake);
+    let result: Value = serde_json::from_str(&done.stdout).unwrap();
+    assert_eq!(result["folders"][0]["folder"], "New Project");
+    assert_eq!(result["folders"][0]["repoId"], 42);
+    assert_eq!(result["folders"][0]["trackId"], 77);
+    assert_eq!(result["folders"][0]["trackTitle"], "New Song");
+    assert_eq!(result["folders"][0]["matchedExisting"], true);
+    assert_eq!(result["folders"][0]["sessionIds"], json!([101, 102]));
 }

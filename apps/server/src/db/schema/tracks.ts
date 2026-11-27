@@ -1,6 +1,7 @@
 import { eq, getColumns, sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   foreignKey,
   index,
   integer,
@@ -28,6 +29,7 @@ import {
   baseSchemaIgnores,
   blockDocumentSchema,
   imageIgnores,
+  releaseDateSchema,
   scopeIgnores,
 } from "./base.js";
 import { commitKindEnum } from "./enums.js";
@@ -73,6 +75,7 @@ export const tracks = pgTable(
 
     isrc: varchar("isrc", { length: 26 }),
     iswc: varchar("iswc", { length: 26 }),
+    releaseDate: date("release_date"),
 
     /** Carries explicit content (a parental advisory on release). */
     explicit: boolean("explicit").notNull().default(false),
@@ -130,6 +133,7 @@ export const newTrackSchema = createInsertSchema(tracks)
     // `status` is not nullable.
     artists: z.array(z.string()).optional(),
     notes: blockDocumentSchema.nullish(),
+    releaseDate: releaseDateSchema.nullable().optional(),
     statusId: z.number().int().optional(),
     // Omitted, the project's default level applies.
     priorityId: z.number().int().optional(),
@@ -146,6 +150,7 @@ export const editTrackSchema = createUpdateSchema(tracks)
     title: z.string().trim().min(1).optional(),
     artists: z.array(z.string()).optional(),
     notes: blockDocumentSchema.nullish(),
+    releaseDate: releaseDateSchema.nullable().optional(),
     statusId: z.number().int().optional(),
   });
 

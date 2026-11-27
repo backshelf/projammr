@@ -68,7 +68,12 @@ describe("repo reads", () => {
     const listed = (await listRepos(suite.projectId)).find(
       (row) => row.id === repo.id
     );
-    const set = { ditSetId: "set-1", sessionId, sessionName: "One" };
+    const set = {
+      ditSetId: "set-1",
+      sessionId,
+      sessionName: "One",
+      localFilepath: null,
+    };
     expect(listed?.sets).toEqual([{ ...set, branches: [] }]);
     expect((await getRepo(repo.id)).sets).toEqual([{ ...set, branches: [] }]);
     await expect(getRepo(999999999)).rejects.toMatchObject({ status: 404 });

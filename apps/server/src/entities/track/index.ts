@@ -90,6 +90,7 @@ const trackMcpSessionSummarySchema = sessionSchema.pick({
   timeSignature: true,
   rootNote: true,
   scale: true,
+  localFilepath: true,
   localFileUpdatedAt: true,
   updatedAt: true,
 });
@@ -188,6 +189,7 @@ export const track = defineEntity({
           timeSignature: session.timeSignature,
           rootNote: session.rootNote,
           scale: session.scale,
+          localFilepath: session.localFilepath,
           localFileUpdatedAt: session.localFileUpdatedAt,
           updatedAt: session.updatedAt,
         })),

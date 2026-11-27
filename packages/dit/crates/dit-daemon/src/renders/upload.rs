@@ -5,12 +5,9 @@
 //! fingerprint, then [`upload`] when the hub does not hold it, then write the asset id down, then [`accept`]. Every
 //! step is safe to repeat: a lookup hit skips the upload, and the hub converges a repeated accept on the same rows.
 
-use std::fs::File;
-use std::io::{self, Cursor, Read};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
+use dit_core::remote::multipart::{MultipartError, upload_file};
 use dit_core::remote::{Remote, RemoteError};
 use serde::{Deserialize, Serialize};
 
@@ -104,6 +101,25 @@ impl From<RemoteError> for UploadError {
     }
 }
 
+impl From<MultipartError> for UploadError {
+    fn from(error: MultipartError) -> Self {
+        match error {
+            MultipartError::Local(message) => UploadError::Local(message),
+            MultipartError::Remote(error) => UploadError::Remote(error),
+        }
+    }
+}
+
+/// Optional local file provenance passed alongside an asset upload so the hub can order historical versions by
+/// their filesystem timestamps.
+#[derive(Debug, Clone, Default)]
+pub struct UploadMeta<'a> {
+    pub local_filepath: Option<&'a str>,
+    pub local_file_created_at: Option<i64>,
+    pub local_file_updated_at: Option<i64>,
+    pub local_file_machine_name: Option<&'a str>,
+}
+
 /// Uploads the file at `path` to `project_id` as an asset carrying `fingerprint`, and returns the asset's id. The
 /// caller persists the id before [`accept`].
 ///
@@ -119,36 +135,67 @@ pub fn upload(
     path: &Path,
     progress: &mut dyn FnMut(u64, u64),
 ) -> Result<i64, UploadError> {
-    let io_failure = |error: io::Error| {
-        UploadError::Local(format!("could not read {}: {error}", path.display()))
-    };
-    let file = File::open(path).map_err(io_failure)?;
-    let size = file.metadata().map_err(io_failure)?.len();
-    let name = path.file_name().map_or_else(
-        || "render".to_string(),
-        |name| name.to_string_lossy().into(),
-    );
-    let envelope = Envelope::new(
-        &boundary(),
-        &[
-            ("projectId", project_id.to_string()),
-            ("fingerprint", fingerprint.to_string()),
-        ],
-        &name,
+    upload_with_meta(remote, project_id, fingerprint, path, None, progress)
+}
+
+/// Like [`upload`], additionally sending local provenance fields when provided.
+pub fn upload_with_meta(
+    remote: &Remote,
+    project_id: i64,
+    fingerprint: &str,
+    path: &Path,
+    meta: Option<&UploadMeta<'_>>,
+    progress: &mut dyn FnMut(u64, u64),
+) -> Result<i64, UploadError> {
+    let mut fields = vec![
+        ("projectId", project_id.to_string()),
+        ("fingerprint", fingerprint.to_string()),
+    ];
+    if let Some(meta) = meta {
+        if let Some(local_path) = meta.local_filepath {
+            fields.push(("localFilepath", local_path.to_string()));
+        }
+        if let Some(created_at) = meta.local_file_created_at {
+            fields.push(("localFileCreatedAt", created_at.to_string()));
+        }
+        if let Some(updated_at) = meta.local_file_updated_at {
+            fields.push(("localFileUpdatedAt", updated_at.to_string()));
+        }
+        if let Some(machine) = meta.local_file_machine_name {
+            fields.push(("localFileMachineName", machine.to_string()));
+        }
+    }
+    let uploaded: Uploaded = upload_file(
+        remote,
+        "/assets/upload",
+        &fields,
+        path,
+        "render",
         content_type(path),
-        size,
-    );
-    let length = envelope.length();
-    let content_type = envelope.content_type();
-    let mut body = Counting {
-        inner: envelope.reader(file, size),
-        sent: 0,
-        total: length,
         progress,
-    };
-    let uploaded: Uploaded =
-        remote.post_stream("/assets/upload", &content_type, length, &mut body)?;
+    )?;
     Ok(uploaded.id)
+}
+
+/// A linked audio version on a track, as returned by `POST /tracks/:id/audios` and `POST /sessions/:id/renders`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackAudioSummary {
+    pub id: i64,
+    pub asset_id: i64,
+    pub version: i64,
+    #[serde(default)]
+    pub is_primary: bool,
+}
+
+/// Detailed outcome of accepting a render on a session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AcceptDetailed {
+    Accepted {
+        track_id: Option<i64>,
+        audios: Vec<TrackAudioSummary>,
+    },
+    NoTrack,
 }
 
 /// What the hub did with an accept.
@@ -163,15 +210,14 @@ pub enum AcceptOutcome {
     NoTrack,
 }
 
-/// Accepts the asset `asset_id` as a render of session `session_id`, recording the save it was bounced from. A
-/// session without a track is [`AcceptOutcome::NoTrack`]; an asset or save the hub rejects (400, 404) is
-/// [`RemoteError::Refused`].
-pub fn accept(
+/// Accepts the asset `asset_id` as a render of session `session_id`, recording the save it was bounced from and
+/// returning the updated track audios.
+pub fn accept_detailed(
     remote: &Remote,
     session_id: i64,
     asset_id: i64,
     bounced_from_save_id: Option<i64>,
-) -> Result<AcceptOutcome, RemoteError> {
+) -> Result<AcceptDetailed, RemoteError> {
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
     struct Body {
@@ -182,6 +228,8 @@ pub fn accept(
     #[serde(rename_all = "camelCase")]
     struct Accepted {
         track_id: Option<i64>,
+        #[serde(default)]
+        audios: Vec<TrackAudioSummary>,
     }
     let answer: Result<Accepted, RemoteError> = remote.post(
         &format!("/sessions/{session_id}/renders"),
@@ -191,16 +239,70 @@ pub fn accept(
         },
     );
     match answer {
-        Ok(accepted) => Ok(AcceptOutcome::Accepted {
+        Ok(accepted) => Ok(AcceptDetailed::Accepted {
             track_id: accepted.track_id,
+            audios: accepted.audios,
         }),
         Err(RemoteError::Refused {
             status: CONFLICT,
             code: Some(code),
             ..
-        }) if code == NO_TRACK_CODE => Ok(AcceptOutcome::NoTrack),
+        }) if code == NO_TRACK_CODE => Ok(AcceptDetailed::NoTrack),
         Err(error) => Err(error),
     }
+}
+
+/// Accepts the asset `asset_id` as a render of session `session_id`, recording the save it was bounced from. A
+/// session without a track is [`AcceptOutcome::NoTrack`]; an asset or save the hub rejects (400, 404) is
+/// [`RemoteError::Refused`].
+pub fn accept(
+    remote: &Remote,
+    session_id: i64,
+    asset_id: i64,
+    bounced_from_save_id: Option<i64>,
+) -> Result<AcceptOutcome, RemoteError> {
+    match accept_detailed(remote, session_id, asset_id, bounced_from_save_id)? {
+        AcceptDetailed::Accepted { track_id, .. } => Ok(AcceptOutcome::Accepted { track_id }),
+        AcceptDetailed::NoTrack => Ok(AcceptOutcome::NoTrack),
+    }
+}
+
+/// Links `asset_id` directly as an audio version of `track_id`, optionally pinning it as the primary version.
+pub fn link_track_audio(
+    remote: &Remote,
+    track_id: i64,
+    asset_id: i64,
+    primary: bool,
+) -> Result<Vec<TrackAudioSummary>, RemoteError> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Body {
+        asset_ids: [i64; 1],
+        #[serde(skip_serializing_if = "Option::is_none")]
+        primary_asset_id: Option<i64>,
+    }
+    #[derive(Deserialize)]
+    struct Linked {
+        #[serde(default)]
+        audios: Vec<TrackAudioSummary>,
+    }
+    let linked: Linked = remote.post(
+        &format!("/tracks/{track_id}/audios"),
+        &Body {
+            asset_ids: [asset_id],
+            primary_asset_id: primary.then_some(asset_id),
+        },
+    )?;
+    Ok(linked.audios)
+}
+
+/// Pins `track_audio_id` as its track's primary version.
+pub fn set_primary_audio(remote: &Remote, track_audio_id: i64) -> Result<(), RemoteError> {
+    let _: serde_json::Value = remote.patch(
+        &format!("/track-audios/{track_audio_id}/primary"),
+        &serde_json::json!({}),
+    )?;
+    Ok(())
 }
 
 /// The MIME type an audio file is declared as, by its extension; an extension the hub does not know is plain bytes.
@@ -219,133 +321,12 @@ fn content_type(path: &Path) -> &'static str {
     }
 }
 
-/// A boundary no file is likely to contain: the time to the nanosecond, the process and a counter, hashed together
-/// with the address of a stack value.
-fn boundary() -> String {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_nanos());
-    let count = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let marker = 0u8;
-    let address = std::ptr::addr_of!(marker) as usize;
-    format!(
-        "----dit-{nanos:x}-{:x}-{count:x}-{address:x}",
-        std::process::id()
-    )
-}
-
-/// A `multipart/form-data` body of text fields and one file, as the bytes before the file's, the length of the file
-/// and the bytes after it.
-struct Envelope {
-    boundary: String,
-    head: Vec<u8>,
-    tail: Vec<u8>,
-    file_size: u64,
-}
-
-impl Envelope {
-    /// The envelope of `fields` and a file part named `file` holding `file_size` bytes, uploaded as `filename` of
-    /// `file_type`.
-    fn new(
-        boundary: &str,
-        fields: &[(&str, String)],
-        filename: &str,
-        file_type: &str,
-        file_size: u64,
-    ) -> Self {
-        let mut head = Vec::new();
-        for (name, value) in fields {
-            head.extend_from_slice(
-                format!(
-                    "--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
-                )
-                .as_bytes(),
-            );
-        }
-        let filename = filename
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace(['\r', '\n'], " ");
-        head.extend_from_slice(
-            format!(
-                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: {file_type}\r\n\r\n"
-            )
-            .as_bytes(),
-        );
-        Envelope {
-            boundary: boundary.to_string(),
-            head,
-            tail: format!("\r\n--{boundary}--\r\n").into_bytes(),
-            file_size,
-        }
-    }
-
-    /// The `Content-Type` of the request.
-    fn content_type(&self) -> String {
-        format!("multipart/form-data; boundary={}", self.boundary)
-    }
-
-    /// The length of the whole body.
-    fn length(&self) -> u64 {
-        self.head.len() as u64 + self.file_size + self.tail.len() as u64
-    }
-
-    /// The body, reading `size` bytes of the file from `file`.
-    fn reader<R: Read>(self, file: R, size: u64) -> impl Read {
-        Cursor::new(self.head)
-            .chain(Exact {
-                inner: file.take(size),
-                remaining: size,
-            })
-            .chain(Cursor::new(self.tail))
-    }
-}
-
-/// A reader that must yield exactly the bytes it was promised: a file that ends early is an error rather than a
-/// request shorter than its `Content-Length`.
-struct Exact<R> {
-    inner: R,
-    remaining: u64,
-}
-
-impl<R: Read> Read for Exact<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let read = self.inner.read(buf)?;
-        if read == 0 && self.remaining > 0 && !buf.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "the file got shorter while it was being uploaded",
-            ));
-        }
-        self.remaining -= read as u64;
-        Ok(read)
-    }
-}
-
-/// A reader that reports the bytes read so far to `progress` after each read.
-struct Counting<'a, R> {
-    inner: R,
-    sent: u64,
-    total: u64,
-    progress: &'a mut dyn FnMut(u64, u64),
-}
-
-impl<R: Read> Read for Counting<'_, R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let read = self.inner.read(buf)?;
-        if read > 0 {
-            self.sent += read as u64;
-            (self.progress)(self.sent, self.total);
-        }
-        Ok(read)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::{self, Read};
 
+    use dit_core::remote::multipart::Envelope;
     use dit_core::remote::test_support::{MockServer, Recorded, Reply, remote_to};
 
     use super::*;
@@ -554,11 +535,6 @@ mod tests {
         let mut sink = Vec::new();
         let error = reader.read_to_end(&mut sink).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::UnexpectedEof);
-    }
-
-    #[test]
-    fn boundaries_differ() {
-        assert_ne!(boundary(), boundary());
     }
 
     #[test]

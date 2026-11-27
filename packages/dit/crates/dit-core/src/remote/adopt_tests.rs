@@ -87,13 +87,21 @@ fn a_set_adopted_into_a_session_is_pushed_onto_it_and_the_push_adopts_nothing() 
         paths(&server),
         ["POST /api/projects/4/repos", "POST /api/repos/3/sets"]
     );
+    let expected_root = repo.root().to_string_lossy().into_owned();
+    let expected_file = repo.root().join("Song.tset").to_string_lossy().into_owned();
     assert_eq!(
         server.requests()[0].json(),
-        json!({ "name": "Song Project" })
+        json!({ "name": "Song Project", "localPath": expected_root })
     );
     assert_eq!(
         server.requests()[1].json(),
-        json!({ "ditSetId": set, "fileName": "Song.tset", "sessionId": 812 })
+        json!({
+            "ditSetId": set,
+            "fileName": "Song.tset",
+            "sessionId": 812,
+            "localPath": expected_root,
+            "localFilepath": expected_file
+        })
     );
     assert_eq!(
         repo.remote_binding().unwrap(),
@@ -138,7 +146,14 @@ fn a_track_target_and_the_quiet_flag_go_in_the_body() {
 
     assert_eq!(
         server.requests()[1].json(),
-        json!({ "ditSetId": set, "fileName": "Song.tset", "trackId": 9, "quiet": true })
+        json!({
+            "ditSetId": set,
+            "fileName": "Song.tset",
+            "trackId": 9,
+            "quiet": true,
+            "localPath": repo.root().to_string_lossy(),
+            "localFilepath": repo.root().join("Song.tset").to_string_lossy(),
+        })
     );
 }
 

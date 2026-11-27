@@ -214,15 +214,31 @@ fn a_first_push_binds_the_repo_and_sends_the_saves_objects_and_commit() {
             "POST /api/repos/3/commits",
         ]
     );
-    assert_eq!(body(&server, 1), json!({ "name": "Song Project" }));
+    assert_eq!(
+        body(&server, 1),
+        json!({
+            "name": "Song Project",
+            "localPath": repo.root().to_string_lossy(),
+        })
+    );
     assert_eq!(
         body(&server, 3),
-        json!({ "ditSetId": set, "fileName": "Song.tset" })
+        json!({
+            "ditSetId": set,
+            "fileName": "Song.tset",
+            "localPath": repo.root().to_string_lossy(),
+            "localFilepath": repo.root().join("Song.tset").to_string_lossy(),
+        })
     );
     let recorded = repo.read_save(&save).unwrap();
     let saves = body(&server, 4);
     assert_eq!(saves["ditSetId"], json!(set));
     assert_eq!(saves["branch"], json!("main"));
+    assert_eq!(saves["localPath"], json!(repo.root().to_string_lossy()));
+    assert_eq!(
+        saves["localFilepath"],
+        json!(repo.root().join("Song.tset").to_string_lossy())
+    );
     assert_eq!(
         saves["saves"],
         json!([{

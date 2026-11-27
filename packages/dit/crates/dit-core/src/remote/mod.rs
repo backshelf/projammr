@@ -10,6 +10,7 @@ mod adopt;
 mod adopt_tests;
 mod auth;
 mod client;
+pub mod cover;
 #[cfg(feature = "store")]
 mod hub;
 #[cfg(target_vendor = "apple")]
@@ -17,6 +18,7 @@ mod keychain;
 mod machines;
 #[cfg(test)]
 mod machines_tests;
+pub mod multipart;
 #[cfg(feature = "store")]
 mod pack;
 #[cfg(all(test, feature = "store"))]
@@ -54,12 +56,14 @@ pub use auth::{
 pub use client::{
     Client, HTTPS_DOCS_URL, Instance, Remote, Token, download_timeout, upload_timeout,
 };
+pub use cover::{CoverError, CoverImage, CoverTarget, set_cover};
 #[cfg(feature = "store")]
 pub use hub::create_track;
 pub use machines::{
     Machine, MachineView, NAME_TAKEN_CODE, NOT_REGISTERED_CODE, Presence, beat, platform, register,
     remove as remove_machine,
 };
+pub use multipart::MultipartError;
 #[cfg(feature = "store")]
 pub use pack::{
     MAX_OBJECT_BYTES, PACK_TARGET_BYTES, PackError, PackLimit, Place, object_sizes, packs,

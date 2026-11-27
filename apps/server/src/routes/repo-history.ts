@@ -96,6 +96,8 @@ export function repoHistoryRoutes(): Hono<AuthedEnv> {
         machine,
         branch: body.branch,
         saves: body.saves,
+        localPath: body.localPath,
+        localFilepath: body.localFilepath,
       });
       return respond(c, savesPushedSchema, { saved });
     }

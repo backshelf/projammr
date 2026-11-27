@@ -305,3 +305,143 @@ fn with_no_app_the_list_ends_with_the_stale_line() {
         "1 proposed Canopy v3 (1 file, 2.0 KB)\nThe dit app isn't running; this list may be out of date.\n"
     );
 }
+
+fn write_wav(path: &std::path::Path, seconds: u32, mtime_secs: u64) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    let sample_rate: u32 = 8_000;
+    let data_size: u32 = sample_rate * seconds;
+    let mut bytes = Vec::with_capacity(44 + 64);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_size).to_le_bytes());
+    bytes.extend_from_slice(b"WAVE");
+    bytes.extend_from_slice(b"fmt ");
+    bytes.extend_from_slice(&16u32.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&sample_rate.to_le_bytes());
+    bytes.extend_from_slice(&sample_rate.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&8u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_size.to_le_bytes());
+    bytes.extend_from_slice(&[0x80u8; 64]);
+    fs::write(path, bytes).unwrap();
+    let mtime = std::time::UNIX_EPOCH + std::time::Duration::from_secs(mtime_secs);
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(mtime)
+        .unwrap();
+}
+
+#[test]
+fn renders_add_uploads_directly_to_track_and_supports_session_primary() {
+    let server = MockServer::route(|req| match (req.method.as_str(), req.path_only()) {
+        ("GET", "/api/tracks/9") => Reply::json(200, r#"{"id":9,"projectId":3}"#),
+        ("GET", "/api/sessions/5") => Reply::json(
+            200,
+            r#"{"id":5,"projectId":3,"track":{"id":9,"title":"Canopy"}}"#,
+        ),
+        ("GET", "/api/sessions/5/commits") => Reply::json(200, "[]"),
+        ("POST", "/api/assets/lookup") => Reply::json(200, "[]"),
+        ("POST", "/api/assets/upload") => Reply::json(201, r#"{"id":77}"#),
+        ("POST", "/api/tracks/9/audios") => Reply::json(
+            201,
+            r#"{"audios":[{"id":501,"assetId":77,"version":1,"isPrimary":true}]}"#,
+        ),
+        ("POST", "/api/sessions/5/renders") => Reply::json(
+            201,
+            r#"{"trackId":9,"attached":true,"audios":[{"id":502,"assetId":77,"version":2,"isPrimary":false}]}"#,
+        ),
+        ("PATCH", "/api/track-audios/502/primary") => {
+            Reply::json(200, r#"{"message":"Primary set"}"#)
+        }
+        other => panic!("unexpected request {other:?}"),
+    });
+    let source = Source::new(Some(server));
+    let bounce = source.config.parent().unwrap().join("Canopy v1.wav");
+    write_wav(&bounce, 60, 1_700_000_000);
+
+    let (direct, stderr) = source.handle(
+        &[
+            "renders",
+            "add",
+            "Canopy v1.wav",
+            "--track",
+            "9",
+            "--primary",
+            "--json",
+        ],
+        None,
+    );
+    assert_eq!(direct.code, 0, "{:?}", direct.refusal);
+    assert_eq!(stderr, "Uploading Canopy v1.wav…\n");
+    let json: serde_json::Value = serde_json::from_str(&direct.stdout).unwrap();
+    assert_eq!(json["trackId"], 9);
+    assert_eq!(json["assetId"], 77);
+    assert_eq!(json["trackAudioId"], 501);
+    assert_eq!(json["version"], 1);
+    assert_eq!(json["isPrimary"], true);
+    assert_eq!(json["deduplicated"], false);
+
+    let (via_session, _) = source.handle(
+        &[
+            "renders",
+            "add",
+            "Canopy v1.wav",
+            "--track",
+            "9",
+            "--session",
+            "5",
+            "--primary",
+        ],
+        None,
+    );
+    assert_eq!(via_session.code, 0, "{:?}", via_session.refusal);
+    assert!(
+        via_session
+            .stdout
+            .contains("Added Canopy v1.wav to track #9 via session #5"),
+        "{}",
+        via_session.stdout
+    );
+    assert!(
+        source
+            .server
+            .as_ref()
+            .unwrap()
+            .requests()
+            .iter()
+            .any(|r| r.method == "PATCH" && r.path_only() == "/api/track-audios/502/primary"),
+        "primary flag pins the audio when attaching via session"
+    );
+}
+
+#[test]
+fn renders_scan_validates_confidence_and_reports_empty_scan() {
+    let server = MockServer::route(|req| panic!("unexpected request {}", req.path_only()));
+    let source = Source::new(Some(server));
+    let bounces = source.config.parent().unwrap().join("Bounces");
+    fs::create_dir_all(&bounces).unwrap();
+
+    let (bad, _) = source.handle(
+        &["renders", "scan", "Bounces", "--min-confidence", "1.5"],
+        None,
+    );
+    assert_eq!(bad.code, 1);
+    assert!(
+        bad.refusal
+            .as_deref()
+            .unwrap_or_default()
+            .contains("--min-confidence")
+    );
+
+    let (empty, _) = source.handle(&["renders", "scan", "Bounces", "--dry-run", "--json"], None);
+    assert_eq!(empty.code, 0, "{:?}", empty.refusal);
+    let parsed: serde_json::Value = serde_json::from_str(&empty.stdout).unwrap();
+    assert_eq!(parsed["applied"], false);
+    assert_eq!(parsed["matches"], serde_json::json!([]));
+}

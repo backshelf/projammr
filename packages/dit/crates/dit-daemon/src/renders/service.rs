@@ -92,6 +92,67 @@ pub struct HubCatalogue {
     cache: Mutex<Cache>,
 }
 
+/// Reads every pushed set bound to `instance` from the tracked repos listed in `repos_file`.
+pub fn read_sets_for_instance(
+    registry: &Registry,
+    repos_file: &std::path::Path,
+    instance: &str,
+) -> Vec<SetRef> {
+    let Ok(list) = RepoList::load(repos_file) else {
+        return Vec::new();
+    };
+    let mut sets = Vec::new();
+    for folder in list.repos {
+        let Ok(repo) = Repo::open(&folder, registry) else {
+            continue;
+        };
+        let Ok(Some(binding)) = repo.remote_binding() else {
+            continue;
+        };
+        if binding.instance != instance {
+            continue;
+        }
+        let (Ok(pushed), Ok(files)) = (repo.pushed_sets_to(&binding), repo.sets()) else {
+            continue;
+        };
+        for (set_id, pushed) in pushed {
+            let Some(file) = files.get(&set_id) else {
+                continue;
+            };
+            let mut branches = vec!["main".to_string()];
+            if let Ok(branch_files) = repo.branch_files(&set_id) {
+                for branch in branch_files.into_keys() {
+                    if !branches.contains(&branch) {
+                        branches.push(branch);
+                    }
+                }
+            }
+            for branch in pushed.branches.keys() {
+                if !branches.contains(branch) {
+                    branches.push(branch.clone());
+                }
+            }
+            let mut save_times_ms: Vec<i64> = branches
+                .iter()
+                .flat_map(|branch| {
+                    repo.saves(&set_id, branch)
+                        .map(|saves| saves.into_iter().map(|save| save.file_updated_at).collect())
+                        .unwrap_or_else(|_| Vec::new())
+                })
+                .collect();
+            save_times_ms.sort_unstable();
+            save_times_ms.dedup();
+            sets.push(SetRef {
+                session_id: pushed.session_id,
+                set_path: repo.root().join(file),
+                project_folder: Some(repo.root().to_path_buf()),
+                save_times_ms,
+            });
+        }
+    }
+    sets
+}
+
 impl HubCatalogue {
     pub fn new(
         registry: Registry,
@@ -113,61 +174,7 @@ impl HubCatalogue {
 
     fn read_sets(&self) -> Vec<SetRef> {
         let instance = self.remote.get().client().instance().url().to_string();
-        let Ok(list) = RepoList::load(&self.repos_file) else {
-            return Vec::new();
-        };
-        let mut sets = Vec::new();
-        for folder in list.repos {
-            let Ok(repo) = Repo::open(&folder, &self.registry) else {
-                continue;
-            };
-            let Ok(Some(binding)) = repo.remote_binding() else {
-                continue;
-            };
-            if binding.instance != instance {
-                continue;
-            }
-            let (Ok(pushed), Ok(files)) = (repo.pushed_sets_to(&binding), repo.sets()) else {
-                continue;
-            };
-            for (set_id, pushed) in pushed {
-                let Some(file) = files.get(&set_id) else {
-                    continue;
-                };
-                let mut branches = vec!["main".to_string()];
-                if let Ok(branch_files) = repo.branch_files(&set_id) {
-                    for branch in branch_files.into_keys() {
-                        if !branches.contains(&branch) {
-                            branches.push(branch);
-                        }
-                    }
-                }
-                for branch in pushed.branches.keys() {
-                    if !branches.contains(branch) {
-                        branches.push(branch.clone());
-                    }
-                }
-                let mut save_times_ms: Vec<i64> = branches
-                    .iter()
-                    .flat_map(|branch| {
-                        repo.saves(&set_id, branch)
-                            .map(|saves| {
-                                saves.into_iter().map(|save| save.file_updated_at).collect()
-                            })
-                            .unwrap_or_else(|_| Vec::new())
-                    })
-                    .collect();
-                save_times_ms.sort_unstable();
-                save_times_ms.dedup();
-                sets.push(SetRef {
-                    session_id: pushed.session_id,
-                    set_path: repo.root().join(file),
-                    project_folder: Some(repo.root().to_path_buf()),
-                    save_times_ms,
-                });
-            }
-        }
-        sets
+        read_sets_for_instance(&self.registry, &self.repos_file, &instance)
     }
 }
 

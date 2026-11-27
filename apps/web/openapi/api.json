@@ -7372,6 +7372,12 @@
                                   }
                                 ]
                               },
+                              "releaseDate": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
                               "explicit": {
                                 "type": "boolean"
                               },
@@ -7422,6 +7428,7 @@
                               "image",
                               "isrc",
                               "iswc",
+                              "releaseDate",
                               "explicit",
                               "archivedAt",
                               "artists",
@@ -15902,6 +15909,12 @@
                               }
                             ]
                           },
+                          "releaseDate": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "explicit": {
                             "type": "boolean"
                           },
@@ -15934,6 +15947,7 @@
                           "image",
                           "isrc",
                           "iswc",
+                          "releaseDate",
                           "explicit",
                           "archivedAt",
                           "artists"
@@ -17359,6 +17373,17 @@
                           {
                             "type": "string",
                             "maxLength": 26
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "releaseDate": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
                           },
                           {
                             "type": "null"
@@ -21191,6 +21216,12 @@
                         }
                       ]
                     },
+                    "releaseDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "explicit": {
                       "type": "boolean"
                     },
@@ -21314,6 +21345,7 @@
                     "image",
                     "isrc",
                     "iswc",
+                    "releaseDate",
                     "explicit",
                     "archivedAt",
                     "artists",
@@ -21511,6 +21543,12 @@
                         }
                       ]
                     },
+                    "releaseDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "explicit": {
                       "type": "boolean"
                     },
@@ -21576,6 +21614,7 @@
                     "image",
                     "isrc",
                     "iswc",
+                    "releaseDate",
                     "explicit",
                     "archivedAt",
                     "artists",
@@ -21731,6 +21770,17 @@
                       }
                     ]
                   },
+                  "releaseDate": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "explicit": {
                     "type": "boolean"
                   },
@@ -21869,6 +21919,12 @@
                         {
                           "type": "null"
                         }
+                      ]
+                    },
+                    "releaseDate": {
+                      "type": [
+                        "string",
+                        "null"
                       ]
                     },
                     "explicit": {
@@ -23617,6 +23673,7 @@
                     "image",
                     "isrc",
                     "iswc",
+                    "releaseDate",
                     "explicit",
                     "archivedAt",
                     "artists",
@@ -23838,6 +23895,12 @@
                         }
                       ]
                     },
+                    "releaseDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "explicit": {
                       "type": "boolean"
                     },
@@ -23903,6 +23966,7 @@
                     "image",
                     "isrc",
                     "iswc",
+                    "releaseDate",
                     "explicit",
                     "archivedAt",
                     "artists",
@@ -24025,6 +24089,17 @@
                       {
                         "type": "string",
                         "maxLength": 26
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "releaseDate": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
                       },
                       {
                         "type": "null"
@@ -28046,6 +28121,12 @@
                                 }
                               ]
                             },
+                            "releaseDate": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
                             "explicit": {
                               "type": "boolean"
                             },
@@ -28203,6 +28284,7 @@
                             "image",
                             "isrc",
                             "iswc",
+                            "releaseDate",
                             "explicit",
                             "archivedAt",
                             "artists",
@@ -30807,7 +30889,7 @@
           "Tracks"
         ],
         "summary": "Get a page of a project's tracks",
-        "description": "Get a page of a project's tracks. Filtered, sorted and paginated. Sort keys: id, title, priority, bpm, key, isrc, iswc, explicit, tracks, status, lufs, lastSaveAt, saveCount, createdAt, updatedAt, trackNumber.",
+        "description": "Get a page of a project's tracks. Filtered, sorted and paginated. Sort keys: id, title, priority, bpm, key, isrc, iswc, releaseDate, explicit, tracks, status, lufs, lastSaveAt, saveCount, createdAt, updatedAt, trackNumber.",
         "responses": {
           "200": {
             "description": "Track page fetched",
@@ -30885,6 +30967,12 @@
                               {
                                 "type": "null"
                               }
+                            ]
+                          },
+                          "releaseDate": {
+                            "type": [
+                              "string",
+                              "null"
                             ]
                           },
                           "explicit": {
@@ -31262,6 +31350,7 @@
                           "image",
                           "isrc",
                           "iswc",
+                          "releaseDate",
                           "explicit",
                           "archivedAt",
                           "artists",
@@ -32526,6 +32615,40 @@
                         }
                       ]
                     },
+                    "localPath": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "localPaths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "machineId": {
+                            "type": "string"
+                          },
+                          "machineName": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "machineId",
+                          "machineName",
+                          "path",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "sets": {
                       "type": "array",
                       "items": {
@@ -32541,6 +32664,12 @@
                           },
                           "sessionName": {
                             "type": "string"
+                          },
+                          "localFilepath": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "branches": {
                             "type": "array",
@@ -32593,6 +32722,7 @@
                           "ditSetId",
                           "sessionId",
                           "sessionName",
+                          "localFilepath",
                           "branches"
                         ],
                         "additionalProperties": false
@@ -32632,6 +32762,8 @@
                     "lastPushAt",
                     "pushSamples",
                     "lastPushMachine",
+                    "localPath",
+                    "localPaths",
                     "sets",
                     "pushSamplesForced",
                     "storage"
@@ -32720,6 +32852,40 @@
                         }
                       ]
                     },
+                    "localPath": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "localPaths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "machineId": {
+                            "type": "string"
+                          },
+                          "machineName": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "machineId",
+                          "machineName",
+                          "path",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "sets": {
                       "type": "array",
                       "items": {
@@ -32735,6 +32901,12 @@
                           },
                           "sessionName": {
                             "type": "string"
+                          },
+                          "localFilepath": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "branches": {
                             "type": "array",
@@ -32787,6 +32959,7 @@
                           "ditSetId",
                           "sessionId",
                           "sessionName",
+                          "localFilepath",
                           "branches"
                         ],
                         "additionalProperties": false
@@ -32826,6 +32999,8 @@
                     "lastPushAt",
                     "pushSamples",
                     "lastPushMachine",
+                    "localPath",
+                    "localPaths",
                     "sets",
                     "pushSamplesForced",
                     "storage"
@@ -32954,6 +33129,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "localPath": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
                   }
                 },
                 "required": [
@@ -33053,6 +33233,40 @@
                           }
                         ]
                       },
+                      "localPath": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "localPaths": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "machineId": {
+                              "type": "string"
+                            },
+                            "machineName": {
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "machineId",
+                            "machineName",
+                            "path",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "sets": {
                         "type": "array",
                         "items": {
@@ -33068,6 +33282,12 @@
                             },
                             "sessionName": {
                               "type": "string"
+                            },
+                            "localFilepath": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
                             },
                             "branches": {
                               "type": "array",
@@ -33120,6 +33340,7 @@
                             "ditSetId",
                             "sessionId",
                             "sessionName",
+                            "localFilepath",
                             "branches"
                           ],
                           "additionalProperties": false
@@ -33159,6 +33380,8 @@
                       "lastPushAt",
                       "pushSamples",
                       "lastPushMachine",
+                      "localPath",
+                      "localPaths",
                       "sets",
                       "pushSamplesForced",
                       "storage"
@@ -33532,6 +33755,40 @@
                           }
                         ]
                       },
+                      "localPath": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "localPaths": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "machineId": {
+                              "type": "string"
+                            },
+                            "machineName": {
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "machineId",
+                            "machineName",
+                            "path",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "sets": {
                         "type": "array",
                         "items": {
@@ -33547,6 +33804,12 @@
                             },
                             "sessionName": {
                               "type": "string"
+                            },
+                            "localFilepath": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
                             },
                             "branches": {
                               "type": "array",
@@ -33599,6 +33862,7 @@
                             "ditSetId",
                             "sessionId",
                             "sessionName",
+                            "localFilepath",
                             "branches"
                           ],
                           "additionalProperties": false
@@ -33638,6 +33902,8 @@
                       "lastPushAt",
                       "pushSamples",
                       "lastPushMachine",
+                      "localPath",
+                      "localPaths",
                       "sets",
                       "pushSamplesForced",
                       "storage"
@@ -33816,6 +34082,40 @@
                           }
                         ]
                       },
+                      "localPath": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "localPaths": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "machineId": {
+                              "type": "string"
+                            },
+                            "machineName": {
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            },
+                            "updatedAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "machineId",
+                            "machineName",
+                            "path",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "sets": {
                         "type": "array",
                         "items": {
@@ -33831,6 +34131,12 @@
                             },
                             "sessionName": {
                               "type": "string"
+                            },
+                            "localFilepath": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
                             },
                             "branches": {
                               "type": "array",
@@ -33883,6 +34189,7 @@
                             "ditSetId",
                             "sessionId",
                             "sessionName",
+                            "localFilepath",
                             "branches"
                           ],
                           "additionalProperties": false
@@ -33922,6 +34229,8 @@
                       "lastPushAt",
                       "pushSamples",
                       "lastPushMachine",
+                      "localPath",
+                      "localPaths",
                       "sets",
                       "pushSamplesForced",
                       "storage"
@@ -138537,6 +138846,40 @@
                         }
                       ]
                     },
+                    "localPath": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "localPaths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "machineId": {
+                            "type": "string"
+                          },
+                          "machineName": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "machineId",
+                          "machineName",
+                          "path",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "sets": {
                       "type": "array",
                       "items": {
@@ -138552,6 +138895,12 @@
                           },
                           "sessionName": {
                             "type": "string"
+                          },
+                          "localFilepath": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "branches": {
                             "type": "array",
@@ -138604,6 +138953,7 @@
                           "ditSetId",
                           "sessionId",
                           "sessionName",
+                          "localFilepath",
                           "branches"
                         ],
                         "additionalProperties": false
@@ -138643,6 +138993,8 @@
                     "lastPushAt",
                     "pushSamples",
                     "lastPushMachine",
+                    "localPath",
+                    "localPaths",
                     "sets",
                     "pushSamplesForced",
                     "storage"
@@ -138816,6 +139168,40 @@
                         }
                       ]
                     },
+                    "localPath": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "localPaths": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "machineId": {
+                            "type": "string"
+                          },
+                          "machineName": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "machineId",
+                          "machineName",
+                          "path",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "sets": {
                       "type": "array",
                       "items": {
@@ -138831,6 +139217,12 @@
                           },
                           "sessionName": {
                             "type": "string"
+                          },
+                          "localFilepath": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "branches": {
                             "type": "array",
@@ -138883,6 +139275,7 @@
                           "ditSetId",
                           "sessionId",
                           "sessionName",
+                          "localFilepath",
                           "branches"
                         ],
                         "additionalProperties": false
@@ -138922,6 +139315,8 @@
                     "lastPushAt",
                     "pushSamples",
                     "lastPushMachine",
+                    "localPath",
+                    "localPaths",
                     "sets",
                     "pushSamplesForced",
                     "storage"
@@ -139313,6 +139708,16 @@
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
+                  },
+                  "localPath": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "localFilepath": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
                   },
                   "quiet": {
                     "type": "boolean"
@@ -140071,6 +140476,16 @@
                         "unreadable"
                       ]
                     }
+                  },
+                  "localPath": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "localFilepath": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
                   }
                 },
                 "required": [

@@ -159,3 +159,16 @@ describe("track artists column", () => {
     expect(artistsValue({ ...live, artists: [] })).toEqual([]);
   });
 });
+
+describe("track releaseDate column", () => {
+  it("exposes the track's YYYY-MM-DD release date when set", () => {
+    const column = trackColumns(7, [], undefined, mock(), mock()).find(
+      (c) => c.id === "releaseDate"
+    ) as { accessorFn: (row: ListTrack) => unknown } | undefined;
+    expect(column).toBeDefined();
+    expect(column?.accessorFn({ ...live, releaseDate: "2026-07-15" })).toBe(
+      "2026-07-15"
+    );
+    expect(column?.accessorFn({ ...live, releaseDate: null })).toBeUndefined();
+  });
+});

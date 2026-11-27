@@ -6,6 +6,7 @@ import {
   labelsColumn,
   PLAY_COLUMN_SIZE,
   priorityColumn,
+  releaseDateColumn,
   TABLE_THUMB_WIDTH,
   textColumn,
   timestampColumns,
@@ -14,9 +15,7 @@ import {
 import { customFieldColumns } from "@/components/tables/custom-field-columns";
 import { TableRowPlay } from "@/components/tables/TableRowPlay";
 import { hrefFromParsedRoute, imageUrl } from "@/lib/utils";
-import { releasePhrase } from "@/lib/release";
 import type { CustomField, Label, ListCollection } from "@workspace/api/api";
-import { Formatted } from "@workspace/ui/components/format-provider";
 import { createAppColumnHelper } from "@/components/tables/data-table-hook";
 
 const columnHelper = createAppColumnHelper<ListCollection>();
@@ -64,23 +63,7 @@ export function collectionColumns(
       },
     }),
     labelsColumn(columnHelper, "collection", projectLabels),
-    columnHelper.accessor((row) => row.releaseDate ?? undefined, {
-      id: "releaseDate",
-      header: "Release",
-      cell: (info) => {
-        const releaseDate = info.getValue();
-        if (!releaseDate) return undefined;
-        return (
-          <Formatted>
-            {(format) => (
-              <span title={format.date(releaseDate)}>
-                {releasePhrase(releaseDate).label}
-              </span>
-            )}
-          </Formatted>
-        );
-      },
-    }),
+    releaseDateColumn(columnHelper),
     textColumn(columnHelper, {
       id: "upc",
       header: "UPC",

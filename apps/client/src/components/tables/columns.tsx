@@ -1,4 +1,5 @@
 import { AppLink } from "@/components/navigation/AppLink";
+import { releasePhrase } from "@/lib/release";
 import { useSetting } from "@/lib/settings/provider";
 import type { ImageWidth } from "@/lib/utils";
 import type { RowData } from "@tanstack/react-table";
@@ -302,6 +303,29 @@ export function countColumn<T extends RowData>(
     cell: (info) => (
       <span className="block text-right tabular-nums">{info.getValue()}</span>
     ),
+  });
+}
+
+/** A calendar release date column (`YYYY-MM-DD`), rendered with a relative phrase and full date tooltip. */
+export function releaseDateColumn<
+  T extends { releaseDate: string | null | undefined },
+>(helper: Helper<T>) {
+  return helper.accessor((row) => row.releaseDate ?? undefined, {
+    id: "releaseDate",
+    header: "Release",
+    cell: (info) => {
+      const releaseDate = info.getValue();
+      if (!releaseDate) return undefined;
+      return (
+        <Formatted>
+          {(format) => (
+            <span title={format.date(releaseDate)}>
+              {releasePhrase(releaseDate).label}
+            </span>
+          )}
+        </Formatted>
+      );
+    },
   });
 }
 

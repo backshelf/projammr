@@ -1,4 +1,7 @@
-import { pushingMachine } from "../db/queries/machines.js";
+import {
+  optionalPushingMachine,
+  pushingMachine,
+} from "../db/queries/machines.js";
 
 /** The header every dit request names its machine in. */
 const MACHINE_HEADER = "x-machine-id";
@@ -15,6 +18,20 @@ export function pushMachine(
   userId: string
 ): Promise<PushMachine> {
   return pushingMachine(headers.get(MACHINE_HEADER) ?? undefined, userId);
+}
+
+/**
+ * The machine named by `X-Machine-Id` when present and registered to `userId`,
+ * or `null` when omitted or unregistered.
+ */
+export function optionalPushMachine(
+  headers: Headers,
+  userId: string
+): Promise<PushMachine | null> {
+  return optionalPushingMachine(
+    headers.get(MACHINE_HEADER) ?? undefined,
+    userId
+  );
 }
 
 /**

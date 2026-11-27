@@ -109,3 +109,25 @@ describe("a collection's release date", () => {
     ).toBe(true);
   });
 });
+
+describe("a track's release date", () => {
+  it("validates YYYY-MM-DD real calendar dates and keeps them strings", () => {
+    expect(
+      newTrackSchema.safeParse({
+        title: "Single",
+        projectId: 1,
+        releaseDate: "2026-02-30",
+      }).success
+    ).toBe(false);
+    expect(
+      editTrackSchema.safeParse({ releaseDate: "not-a-date" }).success
+    ).toBe(false);
+    const parsed = newTrackSchema.parse({
+      title: "Single",
+      projectId: 1,
+      releaseDate: "2026-07-15",
+    });
+    expect(parsed.releaseDate).toBe("2026-07-15");
+    expect(editTrackSchema.parse({ releaseDate: null }).releaseDate).toBeNull();
+  });
+});

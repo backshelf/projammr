@@ -23,6 +23,7 @@ type TrackFormDraft = {
   notes: string;
   artists: string;
   trackPosition: string;
+  releaseDate: string;
   isrc: string;
   iswc: string;
   statusId: string;
@@ -34,6 +35,7 @@ type TrackFormValues = {
   notes: string;
   artists: string[];
   trackPosition: number | null;
+  releaseDate: string | null;
   isrc: string | null;
   iswc: string | null;
   statusId: number | null;
@@ -126,10 +128,21 @@ export const TrackForm = ({
       ],
     },
     {
-      kind: "field-kind",
-      name: "explicit",
-      field: "checkbox",
-      label: "Explicit",
+      kind: "pair",
+      fields: [
+        {
+          kind: "field-kind",
+          name: "releaseDate",
+          field: "date",
+          label: "Release date",
+        },
+        {
+          kind: "field-kind",
+          name: "explicit",
+          field: "checkbox",
+          label: "Explicit",
+        },
+      ],
     },
     ...customFieldSpecs<TrackFormDraft>(customFields),
   ];
@@ -139,6 +152,7 @@ export const TrackForm = ({
     notes: "",
     artists: defaultArtists.join(", "),
     trackPosition: "",
+    releaseDate: "",
     isrc: "",
     iswc: "",
     statusId: defaultStatusId,

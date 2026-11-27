@@ -15,9 +15,12 @@ mod test_hub;
 
 pub use discover::{ProjectFacts, find_projects, project_facts, synced_by};
 pub use dit_core::remote::SetTarget;
-pub use driver::{Alone, BackfillControl, BackfillError, Config, Control, Driver, Event, Owner};
+pub use driver::{
+    Alone, BackfillControl, BackfillError, Config, Control, Driver, Event, MAX_CONCURRENCY, Owner,
+};
+pub use propose::TrackMatchPolicy;
 pub use run::{CheckError, Checked, CheckedSet, Doubt, Recorder, Storage, check, discard, storage};
 pub use state::{
-    FolderPlan, FolderState, FolderStatus, Plan, RunLock, RunStatus, SetPlan, State, Summary,
-    Totals,
+    FolderManifest, FolderPlan, FolderState, FolderStatus, Plan, RunLock, RunStatus, SetPlan,
+    State, Summary, Totals,
 };

@@ -1,4 +1,5 @@
 import { roleSatisfies } from "@/lib/roles";
+import { releasePhrase } from "@/lib/release";
 import { cn } from "@workspace/ui/lib/utils";
 import { BODY, CANVAS, MASTHEAD_AREA, SPLIT } from "@/components/layout/shell";
 import { getLabels } from "@/actions/labels";
@@ -422,6 +423,26 @@ export default async function TrackPage({
                     </Suspense>
                   </RailBlock>
                 )}
+                <RailBlock>
+                  <InlinePropertyEditor
+                    label="RELEASE DATE"
+                    value={track.releaseDate || undefined}
+                    displayValue={
+                      track.releaseDate
+                        ? format.date(track.releaseDate)
+                        : undefined
+                    }
+                    hint={
+                      track.releaseDate
+                        ? releasePhrase(track.releaseDate).label
+                        : undefined
+                    }
+                    type="date"
+                    entityType="track"
+                    entityId={trackId}
+                    fieldName="releaseDate"
+                  />
+                </RailBlock>
                 <RailBlock grid>
                   <InlinePropertyEditor
                     label="ISRC"

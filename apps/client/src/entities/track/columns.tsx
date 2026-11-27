@@ -13,6 +13,7 @@ import {
   PLAY_COLUMN_SIZE,
   priorityColumn,
   relativeDateColumn,
+  releaseDateColumn,
   TABLE_THUMB_WIDTH,
   textColumn,
   timestampColumns,
@@ -182,6 +183,7 @@ export function trackColumns(
       ),
     }),
     labelsColumn(columnHelper, "track", projectLabels),
+    releaseDateColumn(columnHelper),
     textColumn(columnHelper, {
       id: "isrc",
       header: "ISRC",

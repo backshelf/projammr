@@ -875,3 +875,37 @@ fn a_backup_folder_that_cannot_be_read_fails_check_instead_of_dropping_the_copie
         "{result:?}"
     );
 }
+
+#[test]
+fn concurrent_backfill_pushes_independent_folders_and_persists_manifest() {
+    let world = World::new();
+    let alpha = world.project("alpha", &[("a", doc("alpha"))]);
+    let beta = world.project("beta", &[("b", doc("beta"))]);
+    let plan = world.plan(&[&alpha, &beta]);
+
+    let mut events = Vec::new();
+    let summary = world
+        .driver
+        .start_with_concurrency(&world.remote, plan, 2, &mut |event| events.push(event))
+        .unwrap();
+
+    assert_eq!(summary.projects, 2);
+    assert_eq!(summary.sets, 2);
+    assert_eq!(world.state_of(&alpha), FolderState::Done);
+    assert_eq!(world.state_of(&beta), FolderState::Done);
+
+    let state_path = super::state::State::beside(&world.home.path().join("config.toml"));
+    let state = super::state::State::load(&state_path).unwrap();
+    assert_eq!(state.folders.len(), 2);
+    for folder in &state.folders {
+        let manifest = folder
+            .manifest
+            .as_ref()
+            .expect("manifest recorded for completed folder");
+        assert!(manifest.repo_id > 0);
+        assert!(manifest.track_id.is_some());
+        assert_eq!(manifest.track_title.as_deref(), Some("science"));
+        assert!(!manifest.matched_existing);
+        assert_eq!(manifest.session_ids.len(), 1);
+    }
+}

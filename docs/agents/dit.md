@@ -968,19 +968,27 @@ file…` go to stderr. It is the cli face of the app panel's restore and needs a
   lines of `Log.txt`; `unknown` with no Live log); connected is `needs the dit app`. Neither touches Live's own files.
 - `dit login [<url>]`, `dit logout`, `dit whoami`: sign this machine in to an instance, end its session, and say who
   it is signed in as (see "Signing in"). They run anywhere, not only in a project folder.
-- `dit renders [accept <id> [--set <session>] | reject <id> [--never-here]]`: the audio renders the app found (see
-  "Renders"). They run anywhere, not only in a project folder. The list is one line per render not rejected, `<id>
+- `dit renders [accept <id> [--set <session>] | reject <id> [--never-here] | add <file> --track <id> [--session <id>] [--primary] | scan <dir> [--dry-run | --apply] [--min-confidence <0..1>] [--max-upload-mb <n>]]`: the audio renders the app found (see
+  "Renders"), plus direct render upload and historical directory scanning (`dit-daemon/src/renders/scan.rs`). They run anywhere, not only in a project folder. The list is one line per render not rejected, `<id>
 <state> <name> (<N files>, <size>)`, or `No renders.`; with no app answering it is read from `renders.json` and ends
   with `The dit app isn't running; this list may be out of date.` (on stderr under `--json`, which prints the array of
   cards). `accept` has the app upload in the background, or with no app uploads here (`Uploading <file>…` on stderr)
-  and prints `Added <name> to session <n>.`; `reject` prints `Rejected <name> as not a bounce.`
+  and prints `Added <name> to session <n>.`; `reject` prints `Rejected <name> as not a bounce.`; `add` fingerprints the
+  file, deduplicates via `POST /assets/lookup`, streams to `POST /assets/upload` with local timestamps, and attaches to
+  `--track` (via `POST /tracks/:id/audios`, or `POST /sessions/:id/renders` + optional `PATCH /track-audios/:id/primary`
+  when `--session` is given); `scan` walks `<dir>` applying pair deduping (`.wav`/`.flac`/`.mp3`), stem-batch exclusion,
+  and the render scorer against pushed sets from `repos.toml`, previewing by default (`--dry-run`) or uploading matches
+  with `--apply`.
+- `dit cover set <file> (--track <id> | --collection <id> | --project <id>)`: streams a local image file to
+  `POST /images/upload` under the target's project and pins it via `PUT /images/parent/:kind/:parentId`
+  (`dit-core/src/remote/cover.rs`, sharing `dit-core/src/remote/multipart.rs` with render uploads).
 - `dit backfill [--in <root>...]`: with no folder, lists the project folders found under the roots (`--in`, repeatable,
   else each DAW's `project_roots` and `~/Music`; roots that do not exist are skipped, a folder reached twice is listed
   once), newest save first: `<path>  <n> sets  <size>  last saved <d Mon yyyy>`, with the home folder as `~` and ` ·
 already in dit` or ` · synced by <service>` after it, or `No Live projects found.`. `--json` is the array of
   `{path, sets, bytes, newest, already, syncedBy}`. Sizes are 1024-based with one decimal (`2.3 GB`, the unit of the
   hub's caps), dates are UTC.
-- `dit backfill <folder>... [--project <id>]`: brings those project folders in (see "The backfill"). Each argument must
+- `dit backfill <folder>... [--project <id>] [--no-fuzzy-match | --create-new | --match-threshold <0..1>] [--concurrency <1..4>]`: brings those project folders in (see "The backfill"). Track matching defaults to fuzzy matching at `0.6`; `--no-fuzzy-match` requires exact normalized title equality, `--create-new` always creates fresh tracks, and `--match-threshold` tunes the fuzzy threshold. `--concurrency` runs up to 4 independent folders in parallel via `Driver::start_with_concurrency`. Completed folders persist a `FolderManifest` (`repoId`, `trackId`, `trackTitle`, `matchedExisting`, `sessionIds`) in `backfill.json`, emitted per folder in `--json` alongside `folder` and `path`. Each argument must
   be a project folder of a DAW; a folder already in dit (on `repos.toml`, or holding a `.dit/`) is skipped with a note
   (`Everything here is already in dit.` when none is left), except a folder the stopped run in the state file still
   holds, which is that run being resumed. The project is `--project`, else the last backfill's, else the account's only

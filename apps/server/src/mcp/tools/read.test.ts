@@ -241,6 +241,7 @@ describe("read tools over /api/mcp", () => {
         "timeSignature",
         "rootNote",
         "scale",
+        "localFilepath",
         "localFileUpdatedAt",
         "updatedAt",
       ].sort()

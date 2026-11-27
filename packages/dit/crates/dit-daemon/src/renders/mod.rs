@@ -12,6 +12,7 @@ pub mod ledger;
 pub mod probe;
 pub mod rejections;
 pub mod rules;
+pub mod scan;
 pub mod score;
 pub mod service;
 pub mod upload;

@@ -97,6 +97,20 @@ pub struct Totals {
     pub bytes: u64,
 }
 
+/// The hub entities a finished folder mapped to: the repo, track and sessions created or matched.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderManifest {
+    pub repo_id: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_title: Option<String>,
+    pub matched_existing: bool,
+    #[serde(default)]
+    pub session_ids: Vec<i64>,
+}
+
 /// A folder's line in the state file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,6 +127,9 @@ pub struct FolderRun {
     pub bytes: u64,
     /// Set once the folder is [`FolderState::Done`].
     pub totals: Option<Totals>,
+    /// Set once the folder is [`FolderState::Done`]: the hub repo, track and sessions it resolved to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<FolderManifest>,
 }
 
 impl Default for FolderRun {
@@ -123,6 +140,7 @@ impl Default for FolderRun {
             tracks: BTreeMap::new(),
             bytes: 0,
             totals: None,
+            manifest: None,
         }
     }
 }
@@ -191,6 +209,7 @@ impl State {
                         tracks: run.tracks.clone(),
                         bytes: run.bytes,
                         totals: run.totals.clone(),
+                        manifest: run.manifest.clone(),
                     }
                 }
                 None => FolderRun::default(),

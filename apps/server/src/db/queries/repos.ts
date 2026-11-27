@@ -1,6 +1,7 @@
 import {
   and,
   asc,
+  desc,
   eq,
   exists,
   inArray,
@@ -13,19 +14,22 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { ENTITIES } from "../../entities/index.js";
 import { instancePolicy } from "../../lib/instance-policy.js";
-import { db } from "../index.js";
+import type { PushMachine } from "../../lib/push-machine.js";
+import { db, type Tx } from "../index.js";
 import { collectionTracks } from "../schema/collections.js";
 import { machines } from "../schema/machines.js";
 import {
   branches,
   commits,
   type Repo,
+  repoMachines,
   repoSchema,
   repos,
 } from "../schema/repos.js";
 import { sessions } from "../schema/sessions.js";
 import { isUniqueViolation } from "../unique-violation.js";
 import type { ProjectResolution } from "./authorization.js";
+import { setSessionLocalFilepath, upsertRepoMachinePath } from "./repo-paths.js";
 import { emptyRepoStorage, repoStorages } from "./storage-usage.js";
 
 const rowId = z.number().int().positive();
@@ -51,7 +55,16 @@ const repoBranchSchema = z.object({
 /** An adopted set as the repo reads show it: its session by name, its branches by tip. */
 const repoSetDetailSchema = repoSetSchema.extend({
   sessionName: z.string(),
+  localFilepath: z.string().nullable(),
   branches: z.array(repoBranchSchema),
+});
+
+/** One machine's local folder path for a repo. */
+const repoMachinePathSchema = z.object({
+  machineId: z.string(),
+  machineName: z.string(),
+  path: z.string(),
+  updatedAt: z.date(),
 });
 
 /**
@@ -79,6 +92,8 @@ export const repoWithSetsSchema = repoSchema
   .omit({ lastPushMachineId: true })
   .extend({
     lastPushMachine: lastPushMachineSchema,
+    localPath: z.string().nullable(),
+    localPaths: z.array(repoMachinePathSchema),
     sets: z.array(repoSetDetailSchema),
     pushSamplesForced: z.boolean(),
     storage: z.object({
@@ -90,8 +105,11 @@ export const repoWithSetsSchema = repoSchema
 
 export type RepoWithSets = z.infer<typeof repoWithSetsSchema>;
 
+const localPathSchema = z.string().trim().min(1).max(4096);
+
 export const newRepoSchema = z.object({
   name: z.string().trim().min(1).max(200),
+  localPath: localPathSchema.optional(),
 });
 
 /** A Live set's file name without its `.als` extension: the session's name. */
@@ -106,6 +124,8 @@ export const adoptSetBodySchema = z
       .refine((name) => setNameOf(name).length > 0, "File name is empty"),
     sessionId: rowId.optional(),
     trackId: rowId.optional(),
+    localPath: localPathSchema.optional(),
+    localFilepath: localPathSchema.optional(),
     /** Logs no activity for a session the set creates: a backfill adopts hundreds. */
     quiet: z.boolean().optional(),
   })
@@ -144,6 +164,7 @@ async function setsByRepo(
       ditSetId: sessions.ditSetId,
       sessionId: sessions.id,
       sessionName: sessions.name,
+      localFilepath: sessions.localFilepath,
       branchName: branches.name,
       commitId: commits.id,
       message: commits.message,
@@ -171,6 +192,7 @@ async function setsByRepo(
         ditSetId,
         sessionId,
         sessionName: row.sessionName,
+        localFilepath: row.localFilepath,
         branches: [],
       };
       setOf.set(sessionId, set);
@@ -224,24 +246,65 @@ async function lastPushMachines(
   );
 }
 
+/** Every recorded per-machine folder path for `repoIds`, newest first per repo. */
+async function repoPathsByRepo(
+  repoIds: readonly number[]
+): Promise<Map<number, RepoWithSets["localPaths"]>> {
+  const byRepo = new Map<number, RepoWithSets["localPaths"]>();
+  if (repoIds.length === 0) return byRepo;
+  const rows = await db
+    .select({
+      repoId: repoMachines.repoId,
+      machineId: repoMachines.machineId,
+      machineName: machines.name,
+      path: repoMachines.localPath,
+      updatedAt: repoMachines.updatedAt,
+    })
+    .from(repoMachines)
+    .innerJoin(machines, eq(machines.id, repoMachines.machineId))
+    .where(inArray(repoMachines.repoId, [...repoIds]))
+    .orderBy(desc(repoMachines.updatedAt), asc(repoMachines.machineId));
+  for (const row of rows) {
+    const list = byRepo.get(row.repoId) ?? [];
+    list.push({
+      machineId: row.machineId,
+      machineName: row.machineName,
+      path: row.path,
+      updatedAt: row.updatedAt,
+    });
+    byRepo.set(row.repoId, list);
+  }
+  return byRepo;
+}
+
 async function withSets(rows: Repo[]): Promise<RepoWithSets[]> {
   const ids = rows.map((row) => row.id);
-  const [sets, storage, pushers] = await Promise.all([
+  const [sets, storage, pushers, paths] = await Promise.all([
     setsByRepo(ids),
     repoStorages(ids),
     lastPushMachines(rows),
+    repoPathsByRepo(ids),
   ]);
   const forced = instancePolicy().limits.pushSamplesEverywhere;
-  return rows.map(({ lastPushMachineId, ...row }) => ({
-    ...row,
-    lastPushMachine: lastPushMachineId
-      ? (pushers.get(lastPushMachineId) ?? null)
-      : null,
-    pushSamples: forced || row.pushSamples,
-    pushSamplesForced: forced,
-    sets: sets.get(row.id) ?? [],
-    storage: storage.get(row.id) ?? emptyRepoStorage(),
-  }));
+  return rows.map(({ lastPushMachineId, ...row }) => {
+    const localPaths = paths.get(row.id) ?? [];
+    const preferred =
+      (lastPushMachineId
+        ? localPaths.find((entry) => entry.machineId === lastPushMachineId)
+        : undefined) ?? localPaths[0];
+    return {
+      ...row,
+      lastPushMachine: lastPushMachineId
+        ? (pushers.get(lastPushMachineId) ?? null)
+        : null,
+      localPath: preferred?.path ?? null,
+      localPaths,
+      pushSamples: forced || row.pushSamples,
+      pushSamplesForced: forced,
+      sets: sets.get(row.id) ?? [],
+      storage: storage.get(row.id) ?? emptyRepoStorage(),
+    };
+  });
 }
 
 /**
@@ -251,7 +314,8 @@ async function withSets(rows: Repo[]): Promise<RepoWithSets[]> {
 export async function createOrGetRepo(
   projectId: number,
   name: string,
-  userId: string
+  userId: string,
+  opts?: { machine?: PushMachine | null; localPath?: string }
 ): Promise<{ repo: RepoWithSets; created: boolean }> {
   const [inserted] = await db
     .insert(repos)
@@ -259,6 +323,14 @@ export async function createOrGetRepo(
     .onConflictDoNothing()
     .returning();
   if (inserted) {
+    if (opts?.machine && opts.localPath) {
+      await upsertRepoMachinePath(
+        db,
+        inserted.id,
+        opts.machine.id,
+        opts.localPath
+      );
+    }
     const [repo] = await withSets([inserted]);
     return { repo: repo!, created: true };
   }
@@ -271,6 +343,14 @@ export async function createOrGetRepo(
     throw new HTTPException(409, {
       message: "Repo was removed while it was being created",
     });
+  }
+  if (opts?.machine && opts.localPath) {
+    await upsertRepoMachinePath(
+      db,
+      existing.id,
+      opts.machine.id,
+      opts.localPath
+    );
   }
   const [repo] = await withSets([existing]);
   return { repo: repo!, created: false };
@@ -424,14 +504,29 @@ async function linkSession(
 export async function adoptSet(
   repo: { id: number; projectId: number },
   userId: string,
-  body: AdoptSetBody
+  body: AdoptSetBody,
+  machine?: PushMachine | null
 ): Promise<{ sessionId: number; ditSetId: string; created: boolean }> {
   const { ditSetId, sessionId } = body;
-  const adopted = (id: number, created = false) => ({
-    sessionId: id,
-    ditSetId,
-    created,
-  });
+  if (body.localPath && machine) {
+    await upsertRepoMachinePath(db, repo.id, machine.id, body.localPath);
+  }
+  const adopted = async (id: number, created = false) => {
+    if (body.localFilepath) {
+      await setSessionLocalFilepath(
+        db,
+        id,
+        repo.projectId,
+        body.localFilepath,
+        machine?.name ?? null
+      );
+    }
+    return {
+      sessionId: id,
+      ditSetId,
+      created,
+    };
+  };
 
   const held = await sessionOfSet(repo.id, ditSetId);
   if (held != null) {

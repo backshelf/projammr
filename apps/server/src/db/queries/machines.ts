@@ -118,6 +118,34 @@ export async function pushingMachine(
   return { id: row.id, name: row.name };
 }
 
+/**
+ * Resolves the `X-Machine-Id` header when present and registered to `userId`,
+ * or returns `null` when absent or unregistered (routes like repo creation
+ * and set adoption accept callers without a registered machine). Another
+ * account's machine is still a 403 and a removed one a 401.
+ */
+export async function optionalPushingMachine(
+  header: string | undefined,
+  userId: string
+): Promise<{ id: string; name: string } | null> {
+  if (!header) return null;
+  const id = deviceIdSchema.safeParse(header);
+  if (!id.success) return null;
+  const [row] = await db
+    .select({
+      id: machines.id,
+      name: machines.name,
+      userId: machines.userId,
+      removedAt: machines.removedAt,
+    })
+    .from(machines)
+    .where(eq(machines.id, id.data));
+  if (!row) return null;
+  if (row.userId !== userId) throw foreignMachine();
+  if (row.removedAt !== null) throw removedMachine();
+  return { id: row.id, name: row.name };
+}
+
 /** The session when `userId` is a member of its project, else null. */
 async function openableSession(
   sessionId: number,

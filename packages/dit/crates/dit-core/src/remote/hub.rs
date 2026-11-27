@@ -91,16 +91,23 @@ pub(super) fn create_repo(
     remote: &Remote,
     project_id: i64,
     name: &str,
+    local_path: Option<&str>,
 ) -> Result<i64, RemoteError> {
     #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
     struct Body<'a> {
         name: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        local_path: Option<&'a str>,
     }
     #[derive(Deserialize)]
     struct Created {
         id: i64,
     }
-    let created: Created = remote.post(&format!("/projects/{project_id}/repos"), &Body { name })?;
+    let created: Created = remote.post(
+        &format!("/projects/{project_id}/repos"),
+        &Body { name, local_path },
+    )?;
     Ok(created.id)
 }
 
@@ -205,12 +212,27 @@ pub(super) struct HubRepo<'a> {
 impl HubRepo<'_> {
     /// Adopts a set into the repo and returns the hub session that holds it; a set already adopted answers with its
     /// session.
-    pub(super) fn adopt_set(&self, set_id: &str, file_name: &str) -> Result<i64, RemoteError> {
-        self.adopt_set_into(set_id, file_name, None, None, false)
+    pub(super) fn adopt_set(
+        &self,
+        set_id: &str,
+        file_name: &str,
+        local_path: Option<&str>,
+        local_filepath: Option<&str>,
+    ) -> Result<i64, RemoteError> {
+        self.adopt_set_into(
+            set_id,
+            file_name,
+            None,
+            None,
+            false,
+            local_path,
+            local_filepath,
+        )
     }
 
     /// Like [`HubRepo::adopt_set`], into the session `session_id` names, or onto the track `track_id` names, when
     /// either is given. A session a repo holds already is a 409. `quiet` has the hub log no activity.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn adopt_set_into(
         &self,
         set_id: &str,
@@ -218,6 +240,8 @@ impl HubRepo<'_> {
         session_id: Option<i64>,
         track_id: Option<i64>,
         quiet: bool,
+        local_path: Option<&str>,
+        local_filepath: Option<&str>,
     ) -> Result<i64, RemoteError> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -228,6 +252,10 @@ impl HubRepo<'_> {
             session_id: Option<i64>,
             #[serde(skip_serializing_if = "Option::is_none")]
             track_id: Option<i64>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            local_path: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            local_filepath: Option<&'a str>,
             #[serde(skip_serializing_if = "std::ops::Not::not")]
             quiet: bool,
         }
@@ -243,6 +271,8 @@ impl HubRepo<'_> {
                 file_name,
                 session_id,
                 track_id,
+                local_path,
+                local_filepath,
                 quiet,
             },
         )?;
@@ -255,6 +285,8 @@ impl HubRepo<'_> {
         set_id: &str,
         branch: &str,
         saves: &[(ObjectId, Save)],
+        local_path: Option<&str>,
+        local_filepath: Option<&str>,
     ) -> Result<(), RemoteError> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -262,6 +294,10 @@ impl HubRepo<'_> {
             dit_set_id: &'a str,
             branch: &'a str,
             saves: Vec<SaveItem<'a>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            local_path: Option<&'a str>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            local_filepath: Option<&'a str>,
         }
         let saves = saves
             .iter()
@@ -273,6 +309,8 @@ impl HubRepo<'_> {
                 dit_set_id: set_id,
                 branch,
                 saves,
+                local_path,
+                local_filepath,
             },
         )?;
         Ok(())

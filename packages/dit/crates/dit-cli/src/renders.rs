@@ -6,12 +6,18 @@
 //! and writes the ledger itself: rejecting is a ledger write and accepting uploads the file here, step by step, the
 //! way the app's uploader does, so the two cannot disagree about where an upload stands.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use dit_core::remote::UserConfig;
 use dit_daemon::renders::driver::{self, UploadEnd, run_upload};
 use dit_daemon::renders::event::{RenderEvent, cards};
 use dit_daemon::renders::ledger::{Ledger, ProposalState};
 use dit_daemon::renders::rejections;
+use dit_daemon::renders::scan::{
+    AddOptions, AddedRender, ScanOptions, ScanResult, add_render, scan_dir,
+};
+use dit_daemon::renders::score::ASK_CONFIDENCE;
+use dit_daemon::renders::service::read_sets_for_instance;
 use serde::Serialize;
 
 use crate::commands::CliError;
@@ -148,4 +154,101 @@ pub fn reject(cx: &mut Context, id: u64, never_here: bool) -> Result<Rejected, C
         }
     };
     Ok(Rejected { card, never_here })
+}
+
+/// Streams a local audio file (deduplicating via fingerprint lookup) and attaches it to `track`, optionally via
+/// `session` and/or pinned as primary.
+pub fn add(
+    cx: &mut Context,
+    cwd: &Path,
+    file: &Path,
+    track: i64,
+    session: Option<i64>,
+    primary: bool,
+) -> Result<AddedRender, CliError> {
+    let path = cwd.join(file);
+    let remote = cx.remote.open().map_err(error)?;
+    let machine_name = Some((cx.saving_machine())());
+    let added = add_render(
+        &remote,
+        &path,
+        AddOptions {
+            track_id: track,
+            session_id: session,
+            primary,
+            machine_name,
+        },
+        &mut |upload_path, _| {
+            let label = upload_path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| upload_path.display().to_string());
+            cx.say(format!("Uploading {label}…"));
+        },
+    )
+    .map_err(error)?;
+    cx.flush_notes();
+    Ok(added)
+}
+
+/// Scans `dir` recursively for historical audio renders, scores them against pushed sessions from `repos.toml`,
+/// and uploads matched renders when `apply` is true.
+pub fn scan(
+    cx: &mut Context,
+    cwd: &Path,
+    dir: &Path,
+    apply: bool,
+    min_confidence: Option<f64>,
+    max_upload_mb: Option<u64>,
+) -> Result<ScanResult, CliError> {
+    let min_confidence = match min_confidence {
+        Some(value) if !value.is_finite() || !(0.0..=1.0).contains(&value) => {
+            return Err(error("--min-confidence must be a number between 0 and 1."));
+        }
+        Some(value) => value,
+        None => ASK_CONFIDENCE,
+    };
+
+    let config_path = cx.remote.config_path().map_err(error)?;
+    let repos_path = config_path.with_file_name("repos.toml");
+    let ledger = Ledger::beside(&config_path);
+    let user_config = UserConfig::load(&config_path).unwrap_or_default();
+    let remote = cx.remote.open().map_err(error)?;
+    let registry = dit_daws::registry();
+    let instance = remote.client().instance().url().to_string();
+    let sets = read_sets_for_instance(&registry, &repos_path, &instance);
+
+    let managed_subfolders: Vec<String> = registry
+        .all()
+        .iter()
+        .flat_map(|daw| daw.managed_subfolders().iter().map(|s| (*s).to_string()))
+        .collect();
+    let target_dir = cwd.join(dir);
+    let canonical_dir = target_dir.canonicalize().unwrap_or(target_dir);
+    let export_dirs = vec![canonical_dir.clone()];
+
+    let machine_name = Some((cx.saving_machine())());
+    let result = scan_dir(
+        &remote,
+        &sets,
+        &ScanOptions {
+            dir: canonical_dir,
+            apply,
+            min_confidence,
+            max_upload_mb: max_upload_mb.or(user_config.max_upload_mb).unwrap_or(0),
+            export_dirs,
+            excluded: user_config
+                .excluded
+                .into_iter()
+                .map(PathBuf::from)
+                .collect(),
+            managed_subfolders,
+            ledger_path: Some(ledger),
+            machine_name,
+        },
+        &mut |line| cx.say(line),
+    )
+    .map_err(error)?;
+    cx.flush_notes();
+    Ok(result)
 }

@@ -28,6 +28,7 @@ import {
   respond,
   validator,
 } from "../lib/http.js";
+import { optionalPushMachine } from "../lib/push-machine.js";
 import { gatedProject } from "../middleware/authorize-project.js";
 import { logCreate } from "./activity-log.js";
 
@@ -59,12 +60,13 @@ export function projectRepoRoutes(): Hono<AuthedEnv> {
     validator("json", newRepoSchema),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { name } = c.req.valid("json");
-      const { repo, created } = await createOrGetRepo(
-        id,
-        name,
-        c.get("user").id
-      );
+      const { name, localPath } = c.req.valid("json");
+      const userId = c.get("user").id;
+      const machine = await optionalPushMachine(c.req.raw.headers, userId);
+      const { repo, created } = await createOrGetRepo(id, name, userId, {
+        machine,
+        localPath,
+      });
       return respond(c, repoWithSetsSchema, repo, created ? 201 : 200);
     }
   );
@@ -220,10 +222,12 @@ export function repoRoutes(): Hono<AuthedEnv> {
       const projectId = gatedProject(c);
       const userId = c.get("user").id;
       const body = c.req.valid("json");
+      const machine = await optionalPushMachine(c.req.raw.headers, userId);
       const { created, ...set } = await adoptSet(
         { id, projectId },
         userId,
-        body
+        body,
+        machine
       );
       if (created && !body.quiet) {
         await logCreate(c, "session", projectId, set.sessionId);

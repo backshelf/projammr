@@ -355,27 +355,7 @@ impl Engine {
     /// Whether `render` has a name or a place or a time that ties it to some set: a file with none is not worth a
     /// card.
     fn relates(&self, render: &Render, sets: &[SetRef]) -> bool {
-        let Some(dir) = render.files.first().and_then(|file| file.path.parent()) else {
-            return false;
-        };
-        let mtime = render.mtime_ms();
-        sets.iter().any(|set| {
-            self.place(dir, set) != Place::Elsewhere
-                || set
-                    .names()
-                    .iter()
-                    .any(|name| title_similarity(&render.name, name) >= NAMES_A_TRACK)
-                || timing_of(mtime, &set.save_times_ms) >= 0.5
-        })
-    }
-
-    fn place(&self, dir: &Path, set: &SetRef) -> Place {
-        place_of(
-            dir,
-            set.set_path.parent().unwrap_or(Path::new("")),
-            set.project_folder.as_deref(),
-            &self.cfg.export_dirs,
-        )
+        render_relates(render, sets, &self.cfg.export_dirs)
     }
 
     /// Brings the ledger's held renders up to date with the files that settled or went: a render with a stable file
@@ -731,65 +711,15 @@ impl Engine {
 
     /// The session a render most likely belongs to and how sure that is, or `None` when it is not worth offering.
     fn judge(&self, render: &Render) -> Option<Best> {
-        let dir = render.files.first()?.path.parent()?;
         let sets = self.catalogue.sets();
-        let largest = render
-            .files
-            .iter()
-            .max_by_key(|file| file.size)
-            .map(|file| file.path.as_path())?;
-        let chosen = match upload_choice(render, self.cfg.max_upload_mb) {
-            Choice::Upload(index) => render.files[index].path.as_path(),
-            Choice::OverLimit => largest,
-        };
-        let header: Header = probe(chosen);
-        let mtime_ms = render.mtime_ms();
-
-        let evaluate = |set: &SetRef, title: Option<&str>| {
-            let own = set.names();
-            let names: Vec<&str> = title
-                .into_iter()
-                .chain(own.iter().map(String::as_str))
-                .collect();
-            score(&Evidence {
-                file_stem: &render.name,
-                names: &names,
-                mtime_ms,
-                save_times_ms: &set.save_times_ms,
-                place: self.place(dir, set),
-                duration_ms: header.duration_ms,
-                format: header.format.as_deref(),
-                min_render_ms: MIN_RENDER_MS,
-                version: None,
-            })
-        };
-
-        let mut related: Vec<(&SetRef, f64)> = sets
-            .iter()
-            .filter(|set| self.relates(render, std::slice::from_ref(*set)))
-            .map(|set| (set, evaluate(set, None).value))
-            .collect();
-        related.sort_by(|a, b| {
-            b.1.total_cmp(&a.1)
-                .then(a.0.session_id.cmp(&b.0.session_id))
-        });
-        related.truncate(TITLED_SETS);
-
-        let mut best: Option<Best> = None;
-        for (set, _) in related {
-            let title = self.catalogue.track_title(set.session_id);
-            let found = evaluate(set, title.as_deref());
-            if best
-                .as_ref()
-                .is_none_or(|best| found.value > best.score.value)
-            {
-                best = Some(Best {
-                    session_id: set.session_id,
-                    score: found,
-                });
-            }
-        }
-        best.filter(|best| best.score.is_offered())
+        judge_render(
+            render,
+            &sets,
+            &self.cfg.export_dirs,
+            self.cfg.max_upload_mb,
+            super::score::ASK_CONFIDENCE,
+            &mut |session_id| self.catalogue.track_title(session_id),
+        )
     }
 
     /// An upload attempt ended. `Offline` is retried after the beat's backoff; a refused sign-in pauses every
@@ -867,9 +797,105 @@ impl Engine {
 }
 
 /// The best session for a render.
-struct Best {
-    session_id: i64,
-    score: Score,
+pub struct Best {
+    pub session_id: i64,
+    pub score: Score,
+}
+
+fn place_for_set(dir: &Path, set: &SetRef, export_dirs: &[PathBuf]) -> Place {
+    place_of(
+        dir,
+        set.set_path.parent().unwrap_or(Path::new("")),
+        set.project_folder.as_deref(),
+        export_dirs,
+    )
+}
+
+/// Whether `render` has a name, place, or timing tying it to any set in `sets`.
+pub(crate) fn render_relates(render: &Render, sets: &[SetRef], export_dirs: &[PathBuf]) -> bool {
+    let Some(dir) = render.files.first().and_then(|file| file.path.parent()) else {
+        return false;
+    };
+    let mtime = render.mtime_ms();
+    sets.iter().any(|set| {
+        place_for_set(dir, set, export_dirs) != Place::Elsewhere
+            || set
+                .names()
+                .iter()
+                .any(|name| title_similarity(&render.name, name) >= NAMES_A_TRACK)
+            || timing_of(mtime, &set.save_times_ms) >= 0.5
+    })
+}
+
+/// Scores `render` against `sets` using the render engine's rules, returning the best session whose score reaches
+/// `min_confidence` and passes eligibility (`is_offered` when using the default threshold, or `eligible && value >=
+/// min_confidence`).
+pub fn judge_render(
+    render: &Render,
+    sets: &[SetRef],
+    export_dirs: &[PathBuf],
+    max_upload_mb: u64,
+    min_confidence: f64,
+    track_title: &mut dyn FnMut(i64) -> Option<String>,
+) -> Option<Best> {
+    let dir = render.files.first()?.path.parent()?;
+    let largest = render
+        .files
+        .iter()
+        .max_by_key(|file| file.size)
+        .map(|file| file.path.as_path())?;
+    let chosen = match upload_choice(render, max_upload_mb) {
+        Choice::Upload(index) => render.files[index].path.as_path(),
+        Choice::OverLimit => largest,
+    };
+    let header: Header = probe(chosen);
+    let mtime_ms = render.mtime_ms();
+
+    let evaluate = |set: &SetRef, title: Option<&str>| {
+        let own = set.names();
+        let names: Vec<&str> = title
+            .into_iter()
+            .chain(own.iter().map(String::as_str))
+            .collect();
+        score(&Evidence {
+            file_stem: &render.name,
+            names: &names,
+            mtime_ms,
+            save_times_ms: &set.save_times_ms,
+            place: place_for_set(dir, set, export_dirs),
+            duration_ms: header.duration_ms,
+            format: header.format.as_deref(),
+            min_render_ms: MIN_RENDER_MS,
+            version: None,
+        })
+    };
+
+    let mut related: Vec<(&SetRef, f64)> = sets
+        .iter()
+        .filter(|set| render_relates(render, std::slice::from_ref(*set), export_dirs))
+        .map(|set| (set, evaluate(set, None).value))
+        .collect();
+    related.sort_by(|a, b| {
+        b.1.total_cmp(&a.1)
+            .then(a.0.session_id.cmp(&b.0.session_id))
+    });
+    related.truncate(TITLED_SETS);
+
+    let mut best: Option<Best> = None;
+    for (set, _) in related {
+        let title = track_title(set.session_id);
+        let found = evaluate(set, title.as_deref());
+        if best
+            .as_ref()
+            .is_none_or(|best| found.value > best.score.value)
+        {
+            best = Some(Best {
+                session_id: set.session_id,
+                score: found,
+            });
+        }
+    }
+    best.filter(|best| best.score.value > 0.0 && best.score.value >= min_confidence)
 }
 
 /// Whether two lists of files are the same files, as found: paths, sizes and times.
