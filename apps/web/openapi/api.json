@@ -31226,6 +31226,15 @@
                           "saveCount": {
                             "type": "number"
                           },
+                          "hasNotes": {
+                            "type": "boolean"
+                          },
+                          "hasLyrics": {
+                            "type": "boolean"
+                          },
+                          "audioCount": {
+                            "type": "number"
+                          },
                           "fields": {
                             "type": "object",
                             "propertyNames": {
@@ -31270,6 +31279,9 @@
                           "duplicateOfVersion",
                           "lastSaveAt",
                           "saveCount",
+                          "hasNotes",
+                          "hasLyrics",
+                          "audioCount",
                           "fields"
                         ],
                         "additionalProperties": false
@@ -31474,6 +31486,83 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "unlabeled",
+            "schema": {
+              "type": [
+                "boolean",
+                "string"
+              ]
+            },
+            "description": "When true, tracks with zero labels; when false, tracks with at least one label."
+          },
+          {
+            "in": "query",
+            "name": "uncollected",
+            "schema": {
+              "type": [
+                "boolean",
+                "string"
+              ]
+            },
+            "description": "When true, tracks in no collection; when false, tracks in at least one collection."
+          },
+          {
+            "in": "query",
+            "name": "hasNotes",
+            "schema": {
+              "type": [
+                "boolean",
+                "string"
+              ]
+            },
+            "description": "When true, tracks with a non-empty notes document; when false, null or empty notes."
+          },
+          {
+            "in": "query",
+            "name": "hasLyrics",
+            "schema": {
+              "type": [
+                "boolean",
+                "string"
+              ]
+            },
+            "description": "When true, tracks with a linked lyrics note; when false, tracks without one."
+          },
+          {
+            "in": "query",
+            "name": "hasImage",
+            "schema": {
+              "type": [
+                "boolean",
+                "string"
+              ]
+            },
+            "description": "When true, tracks with their own cover artwork; when false, tracks without one."
+          },
+          {
+            "in": "query",
+            "name": "hasAudio",
+            "schema": {
+              "type": [
+                "boolean",
+                "string"
+              ]
+            },
+            "description": "When true, tracks with at least one audio version; when false, tracks with none."
+          },
+          {
+            "in": "query",
+            "name": "hasSessions",
+            "schema": {
+              "type": [
+                "boolean",
+                "string"
+              ]
+            },
+            "description": "When true, tracks with at least one linked DAW session; when false, tracks with none."
           },
           {
             "in": "query",
@@ -41700,6 +41789,16 @@
                               "write"
                             ]
                           }
+                        },
+                        "instance-integrations.mcpAccessTokenHours": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 720
+                        },
+                        "instance-integrations.mcpRefreshTokenDays": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 365
                         },
                         "instance-integrations.logLevel": {
                           "type": "string",
@@ -54719,6 +54818,240 @@
                             }
                           },
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "effective",
+                        "source",
+                        "writable",
+                        "lockable",
+                        "values",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "instance-integrations.mcpAccessTokenHours": {
+                      "type": "object",
+                      "properties": {
+                        "effective": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 720
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "project",
+                            "instance",
+                            "env",
+                            "default"
+                          ]
+                        },
+                        "lockedBy": {
+                          "type": "string",
+                          "enum": [
+                            "project",
+                            "instance"
+                          ]
+                        },
+                        "writable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "lockable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "values": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            },
+                            "project": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            },
+                            "instance": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "updatedAt": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "project": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "instance": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "running": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 720
+                        },
+                        "deploymentOff": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "effective",
+                        "source",
+                        "writable",
+                        "lockable",
+                        "values",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "instance-integrations.mcpRefreshTokenDays": {
+                      "type": "object",
+                      "properties": {
+                        "effective": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 365
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "project",
+                            "instance",
+                            "env",
+                            "default"
+                          ]
+                        },
+                        "lockedBy": {
+                          "type": "string",
+                          "enum": [
+                            "project",
+                            "instance"
+                          ]
+                        },
+                        "writable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "lockable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "values": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 365
+                            },
+                            "project": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 365
+                            },
+                            "instance": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 365
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "updatedAt": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "project": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "instance": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "running": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 365
+                        },
+                        "deploymentOff": {
+                          "type": "boolean",
+                          "const": true
                         }
                       },
                       "required": [
@@ -82138,6 +82471,240 @@
                       ],
                       "additionalProperties": false
                     },
+                    "instance-integrations.mcpAccessTokenHours": {
+                      "type": "object",
+                      "properties": {
+                        "effective": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 720
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "project",
+                            "instance",
+                            "env",
+                            "default"
+                          ]
+                        },
+                        "lockedBy": {
+                          "type": "string",
+                          "enum": [
+                            "project",
+                            "instance"
+                          ]
+                        },
+                        "writable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "lockable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "values": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            },
+                            "project": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            },
+                            "instance": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "updatedAt": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "project": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "instance": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "running": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 720
+                        },
+                        "deploymentOff": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "effective",
+                        "source",
+                        "writable",
+                        "lockable",
+                        "values",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "instance-integrations.mcpRefreshTokenDays": {
+                      "type": "object",
+                      "properties": {
+                        "effective": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 365
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "project",
+                            "instance",
+                            "env",
+                            "default"
+                          ]
+                        },
+                        "lockedBy": {
+                          "type": "string",
+                          "enum": [
+                            "project",
+                            "instance"
+                          ]
+                        },
+                        "writable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "lockable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "values": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 365
+                            },
+                            "project": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 365
+                            },
+                            "instance": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 365
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "updatedAt": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "project": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "instance": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "running": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 365
+                        },
+                        "deploymentOff": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "effective",
+                        "source",
+                        "writable",
+                        "lockable",
+                        "values",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
                     "instance-integrations.logLevel": {
                       "type": "object",
                       "properties": {
@@ -98471,6 +99038,30 @@
                       }
                     ]
                   },
+                  "instance-integrations.mcpAccessTokenHours": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 720
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "instance-integrations.mcpRefreshTokenDays": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 365
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "instance-integrations.logLevel": {
                     "anyOf": [
                       {
@@ -101364,6 +101955,30 @@
                         ]
                       },
                       "instance-integrations.mcpToolGroups": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "instance-integrations.mcpAccessTokenHours": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "instance-integrations.mcpRefreshTokenDays": {
                         "anyOf": [
                           {
                             "type": "string",
@@ -114741,6 +115356,240 @@
                             }
                           },
                           "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "effective",
+                        "source",
+                        "writable",
+                        "lockable",
+                        "values",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "instance-integrations.mcpAccessTokenHours": {
+                      "type": "object",
+                      "properties": {
+                        "effective": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 720
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "project",
+                            "instance",
+                            "env",
+                            "default"
+                          ]
+                        },
+                        "lockedBy": {
+                          "type": "string",
+                          "enum": [
+                            "project",
+                            "instance"
+                          ]
+                        },
+                        "writable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "lockable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "values": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            },
+                            "project": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            },
+                            "instance": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 720
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "updatedAt": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "project": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "instance": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "running": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 720
+                        },
+                        "deploymentOff": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "effective",
+                        "source",
+                        "writable",
+                        "lockable",
+                        "values",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "instance-integrations.mcpRefreshTokenDays": {
+                      "type": "object",
+                      "properties": {
+                        "effective": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 365
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "project",
+                            "instance",
+                            "env",
+                            "default"
+                          ]
+                        },
+                        "lockedBy": {
+                          "type": "string",
+                          "enum": [
+                            "project",
+                            "instance"
+                          ]
+                        },
+                        "writable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "lockable": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "boolean"
+                            },
+                            "project": {
+                              "type": "boolean"
+                            },
+                            "instance": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "values": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 365
+                            },
+                            "project": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 365
+                            },
+                            "instance": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 365
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "updatedAt": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "project": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            "instance": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "running": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 365
+                        },
+                        "deploymentOff": {
+                          "type": "boolean",
+                          "const": true
                         }
                       },
                       "required": [

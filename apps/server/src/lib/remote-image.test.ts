@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import sharp from "sharp";
-import { fetchRemoteImage, isPrivateIp } from "./remote-image.js";
+import {
+  decodeBase64Image,
+  fetchRemoteImage,
+  isPrivateIp,
+} from "./remote-image.js";
 
 async function makeImageBytes(format: "jpeg" | "png" | "webp" = "jpeg") {
   const img = sharp({
@@ -156,6 +160,31 @@ describe("fetchRemoteImage", () => {
     ).rejects.toThrow(/public address/);
   });
 
+  it("sends User-Agent and Accept headers on requests and redirects", async () => {
+    const jpeg = await makeImageBytes("jpeg");
+    const seenHeaders: Headers[] = [];
+
+    await fetchRemoteImage("https://cdn.example.com/start.jpg", {
+      lookup: publicLookup,
+      fetch: async (_input, init) => {
+        seenHeaders.push(new Headers(init?.headers));
+        if (seenHeaders.length === 1) {
+          return new Response(null, {
+            status: 302,
+            headers: { location: "https://media.example.com/final.jpg" },
+          });
+        }
+        return new Response(Buffer.from(jpeg), { status: 200 });
+      },
+    });
+
+    expect(seenHeaders).toHaveLength(2);
+    for (const headers of seenHeaders) {
+      expect(headers.get("user-agent")).toContain("Projammr/1.0");
+      expect(headers.get("accept")).toContain("image/");
+    }
+  });
+
   it("refuses oversized responses, non-image payloads, and disallowed MIME types", async () => {
     const jpeg = await makeImageBytes("jpeg");
 
@@ -188,5 +217,60 @@ describe("fetchRemoteImage", () => {
           }),
       })
     ).rejects.toThrow(/Unsupported image type/);
+  });
+});
+
+describe("decodeBase64Image", () => {
+  it("decodes raw base64 and data URLs, sanitizes filename, and verifies real format via sharp", async () => {
+    const jpeg = await makeImageBytes("jpeg");
+    const rawResult = await decodeBase64Image(
+      Buffer.from(jpeg).toString("base64"),
+      { filename: "../nested/artwork.jpg" }
+    );
+    expect(rawResult.kind).toBe("bytes");
+    expect(rawResult.type).toBe("image/jpeg");
+    expect(rawResult.name).toBe("artwork.jpg");
+    expect(rawResult.bytes.byteLength).toBe(jpeg.byteLength);
+
+    const png = await makeImageBytes("png");
+    const wrapped = Buffer.from(png)
+      .toString("base64")
+      .replace(/(.{40})/g, "$1\n");
+    // Even if the data URL claims jpeg, sharp detects the actual png bytes.
+    const dataUrlResult = await decodeBase64Image(
+      `data:image/jpeg;base64,${wrapped}`
+    );
+    expect(dataUrlResult.type).toBe("image/png");
+    expect(dataUrlResult.name).toBe("cover.png");
+    expect(dataUrlResult.bytes.byteLength).toBe(png.byteLength);
+  });
+
+  it("rejects empty data, invalid base64, non-image bytes, disallowed MIME types, and oversized payloads", async () => {
+    const jpeg = await makeImageBytes("jpeg");
+    const png = await makeImageBytes("png");
+
+    await expect(decodeBase64Image("   ")).rejects.toThrow(/empty/i);
+    await expect(decodeBase64Image("not!valid@base64")).rejects.toThrow(
+      /valid base64/i
+    );
+    await expect(
+      decodeBase64Image("data:text/plain;base64,aGVsbG8=")
+    ).rejects.toThrow(/valid base64/i);
+    await expect(
+      decodeBase64Image(Buffer.from("not an image").toString("base64"))
+    ).rejects.toThrow(/valid image/i);
+    await expect(
+      decodeBase64Image(Buffer.from(png).toString("base64"), {
+        allowedTypes: ["image/jpeg"],
+      })
+    ).rejects.toThrow(/Unsupported image type/);
+    await expect(
+      decodeBase64Image(Buffer.from(jpeg).toString("base64"), {
+        maxBytes: jpeg.byteLength - 1,
+      })
+    ).rejects.toThrow(/upload limit/);
+    await expect(
+      decodeBase64Image("A".repeat(400), { maxBytes: 16 })
+    ).rejects.toThrow(/upload limit/);
   });
 });

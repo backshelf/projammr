@@ -13,7 +13,7 @@ import {
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
 } from "../../db/queries/pagination.js";
-import { fetchRemoteImage } from "../../lib/remote-image.js";
+import { decodeBase64Image, fetchRemoteImage } from "../../lib/remote-image.js";
 import { spendToken } from "../../middleware/rate-limit.js";
 import { requireEntity, requireProject } from "../authorize.js";
 import { defineTool, type AnyToolSpec } from "../spec.js";
@@ -49,10 +49,13 @@ const setCoverTool = defineTool({
   name: "set_cover",
   title: "Set cover",
   description:
-    "Sets the cover artwork of a project, collection or track. Pass either " +
-    "`url` (a public http(s) image URL that the server fetches, stores in " +
-    "project storage, extracts accent colours from and queues resize variants " +
-    "for) or `imageId` (an existing image already stored in the same project).",
+    "Sets the cover artwork of a project, collection or track. Pass exactly " +
+    "one of `url` (a public http(s) image URL that the server fetches, stores " +
+    "in project storage, extracts accent colours from and queues resize " +
+    "variants for), `data` (a base64-encoded image, optionally prefixed with " +
+    "`data:image/...;base64,`, to upload directly when no public URL is " +
+    "available), or `imageId` (an existing image already stored in the same " +
+    "project).",
   scope: "write",
   input: z.object({
     kind: coverKindSchema,
@@ -68,21 +71,39 @@ const setCoverTool = defineTool({
       .int()
       .optional()
       .describe("ID of an existing image in this project to reuse as cover."),
+    data: z
+      .string()
+      .optional()
+      .describe(
+        "Base64-encoded image bytes (optionally prefixed with `data:image/...;base64,`) to upload into project storage and set as cover."
+      ),
+    filename: z
+      .string()
+      .optional()
+      .describe(
+        "Optional filename (e.g. `cover.jpg`) used when uploading via `data`."
+      ),
   }),
   output: imageUploadResultSchema,
-  run: async (actor, { kind, id, url, imageId }) => {
-    if ((url != null) === (imageId != null)) {
+  run: async (actor, { kind, id, url, imageId, data, filename }) => {
+    const sources = [url, imageId, data].filter(
+      (value) => value != null
+    ).length;
+    if (sources !== 1) {
       throw new HTTPException(400, {
-        message: "Provide either url or imageId, not both",
+        message: "Provide exactly one of url, imageId, or data",
       });
     }
 
     const gate = await requireEntity(actor, kind, id, "editor");
 
-    if (url != null) {
+    if (url != null || data != null) {
       spendToken("image-upload", actor.id);
-      const remote = await fetchRemoteImage(url);
-      const uploaded = await ingestImage(remote, {
+      const source =
+        url != null
+          ? await fetchRemoteImage(url)
+          : await decodeBase64Image(data!, { filename });
+      const uploaded = await ingestImage(source, {
         scope: "project",
         projectId: gate.projectId,
         userId: actor.id,

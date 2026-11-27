@@ -340,20 +340,68 @@ describe("read tools over /api/mcp", () => {
     ).toBe(true);
   });
 
-  it("list_track_sessions lists a track's sessions", async () => {
+  it("list_track_sessions omits structure by default and includes it when includeStructure is true", async () => {
     suite.requireProject();
     const trackId = await suite.mkTrack("MCP Track Sessions");
-    const session = await suite.mkSession({ trackId, main: true });
-    const token = await mintMcpToken(owner, ["read"]);
-    const { body } = await callTool(token, "list_track_sessions", {
-      trackId,
-    });
-    const result = body as {
-      result: { structuredContent: { sessions: { id: number }[] } };
+    const structure = {
+      tracks: [
+        { kind: "audio" as const, name: "Drums", devices: ["EQ Eight"] },
+      ],
+      clips: { audio: 2, midi: 0 },
     };
-    expect(
-      result.result.structuredContent.sessions.some((s) => s.id === session.id)
-    ).toBe(true);
+    const session = await suite.mkSession({
+      trackId,
+      main: true,
+      structure,
+    });
+    const token = await mintMcpToken(owner, ["read"]);
+
+    const lean = await callTool(token, "list_track_sessions", { trackId });
+    const leanSessions = (
+      lean.body as {
+        result: {
+          structuredContent: { sessions: Record<string, unknown>[] };
+        };
+      }
+    ).result.structuredContent.sessions;
+    const leanRow = leanSessions.find((s) => s.id === session.id);
+    expect(leanRow).toBeDefined();
+    expect(leanRow).not.toHaveProperty("structure");
+
+    const full = await callTool(token, "list_track_sessions", {
+      trackId,
+      includeStructure: true,
+    });
+    const fullSessions = (
+      full.body as {
+        result: {
+          structuredContent: { sessions: { id: number; structure: unknown }[] };
+        };
+      }
+    ).result.structuredContent.sessions;
+    const fullRow = fullSessions.find((s) => s.id === session.id);
+    expect(fullRow?.structure).toEqual(structure);
+  });
+
+  it("list_sessions omits structure", async () => {
+    suite.requireProject();
+    const session = await suite.mkSession({
+      name: "MCP Lean Session List",
+      structure: { tracks: [], clips: { audio: 1, midi: 0 } },
+    });
+    const token = await mintMcpToken(owner, ["read"]);
+    const { body } = await callTool(token, "list_sessions", {
+      projectId: suite.projectId,
+      q: "MCP Lean Session List",
+    });
+    const rows = (
+      body as {
+        result: { structuredContent: { rows: Record<string, unknown>[] } };
+      }
+    ).result.structuredContent.rows;
+    const row = rows.find((r) => r.id === session.id);
+    expect(row).toBeDefined();
+    expect(row).not.toHaveProperty("structure");
   });
 
   it("search finds a seeded track for a two-character query", async () => {
@@ -566,5 +614,176 @@ describe("read tools over /api/mcp", () => {
 
     expect(await listedIds({})).toEqual([live]);
     expect(await listedIds({ archived: "only" })).toEqual([archived]);
+  });
+
+  it("list_tracks rejects mistyped filter keys like statusId and collectionId loudly", async () => {
+    suite.requireProject();
+    const token = await mintMcpToken(owner, ["read"]);
+    const { body } = await callTool(token, "list_tracks", {
+      projectId: suite.projectId,
+      statusId: 1,
+      collectionId: 7,
+    });
+    const result = body as {
+      result: { isError: boolean; content: { text: string }[] };
+    };
+    expect(result.result.isError).toBe(true);
+    const text = result.result.content[0]?.text ?? "";
+    expect(text).toContain('"statusId"');
+    expect(text).toContain('"collectionId"');
+    expect(text).toContain("status");
+    expect(text).toContain("collection");
+  });
+
+  it("list_tracks supports audit filters and compact: true slim rows with hasNotes/hasLyrics/audioCount", async () => {
+    suite.requireProject();
+    const rich = await suite.mkTrack("McpAudit Rich");
+    const bare = await suite.mkTrack("McpAudit Bare");
+
+    // Give `rich` notes, lyrics, image, audio, session, label, and collection.
+    const collectionId = await suite.mkCollection("McpAudit Col");
+    await request("owner", `/collections/${collectionId}/tracks`, {
+      method: "POST",
+      body: JSON.stringify({ trackId: rich, trackNumber: 1 }),
+    });
+    await request("owner", `/tracks/${rich}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        notes: [
+          { type: "paragraph", content: [{ type: "text", text: "Mix notes" }] },
+        ],
+      }),
+    });
+    await db
+      .update(tracks)
+      .set({ image: "images/mcp-audit-cover.jpg" })
+      .where(eq(tracks.id, rich));
+    await suite.mkPrimaryAudioWithLoudness(rich, -14);
+    await suite.mkSession({ trackId: rich, main: true });
+    await request("owner", `/tracks/${rich}/labels`, {
+      method: "PUT",
+      body: JSON.stringify({ names: ["ambient"] }),
+    });
+    const writeToken = await mintMcpToken(owner, ["read", "write"]);
+    await callTool(writeToken, "write_lyrics", {
+      trackId: rich,
+      markdown: "[Verse 1]\nLine one",
+    });
+
+    const token = await mintMcpToken(owner, ["read"]);
+    const idsFor = async (filters: Record<string, unknown>) => {
+      const { body } = await callTool(token, "list_tracks", {
+        projectId: suite.projectId,
+        q: "McpAudit",
+        ...filters,
+      });
+      const res = body as {
+        result: {
+          isError?: boolean;
+          structuredContent: { rows: { id: number }[] };
+        };
+      };
+      expect(res.result.isError).toBeUndefined();
+      return res.result.structuredContent.rows.map((r) => r.id);
+    };
+
+    expect(await idsFor({ unlabeled: true })).toEqual([bare]);
+    expect(await idsFor({ unlabeled: false })).toEqual([rich]);
+    expect(await idsFor({ uncollected: true })).toEqual([bare]);
+    expect(await idsFor({ uncollected: false })).toEqual([rich]);
+    expect(await idsFor({ hasNotes: true })).toEqual([rich]);
+    expect(await idsFor({ hasNotes: false })).toEqual([bare]);
+    expect(await idsFor({ hasLyrics: true })).toEqual([rich]);
+    expect(await idsFor({ hasLyrics: false })).toEqual([bare]);
+    expect(await idsFor({ hasImage: true })).toEqual([rich]);
+    expect(await idsFor({ hasImage: false })).toEqual([bare]);
+    expect(await idsFor({ hasAudio: true })).toEqual([rich]);
+    expect(await idsFor({ hasAudio: false })).toEqual([bare]);
+    expect(await idsFor({ hasSessions: true })).toEqual([rich]);
+    expect(await idsFor({ hasSessions: false })).toEqual([bare]);
+
+    // Full rows expose hasNotes, hasLyrics, audioCount.
+    const full = await callTool(token, "list_tracks", {
+      projectId: suite.projectId,
+      q: "McpAudit",
+    });
+    const fullRows = (
+      full.body as {
+        result: {
+          structuredContent: {
+            rows: {
+              id: number;
+              hasNotes: boolean;
+              hasLyrics: boolean;
+              audioCount: number;
+            }[];
+          };
+        };
+      }
+    ).result.structuredContent.rows;
+    expect(fullRows.find((r) => r.id === rich)).toMatchObject({
+      hasNotes: true,
+      hasLyrics: true,
+      audioCount: 1,
+    });
+    expect(fullRows.find((r) => r.id === bare)).toMatchObject({
+      hasNotes: false,
+      hasLyrics: false,
+      audioCount: 0,
+    });
+
+    // Compact rows flatten nested objects while keeping envelope metadata.
+    const compact = await callTool(token, "list_tracks", {
+      projectId: suite.projectId,
+      q: "McpAudit",
+      compact: true,
+    });
+    const compactContent = (
+      compact.body as {
+        result: {
+          structuredContent: {
+            rows: Record<string, unknown>[];
+            rowCount: number;
+            page: number;
+            pageSize: number;
+            facets: Record<string, unknown>;
+          };
+        };
+      }
+    ).result.structuredContent;
+    expect(compactContent.rowCount).toBe(2);
+    expect(compactContent.page).toBe(1);
+    expect(compactContent.pageSize).toBe(50);
+    expect(compactContent.facets).toBeDefined();
+
+    const richCompact = compactContent.rows.find((r) => r.id === rich)!;
+    expect(richCompact).toMatchObject({
+      id: rich,
+      title: "McpAudit Rich",
+      collectionIds: [collectionId],
+      labelNames: ["ambient"],
+      hasNotes: true,
+      hasLyrics: true,
+      hasImage: true,
+      audioCount: 1,
+      sessionCount: 1,
+    });
+    expect(richCompact).not.toHaveProperty("status");
+    expect(richCompact).not.toHaveProperty("labels");
+    expect(richCompact).not.toHaveProperty("collections");
+    expect(richCompact).not.toHaveProperty("sessions");
+    expect(typeof richCompact.statusName).toBe("string");
+
+    const bareCompact = compactContent.rows.find((r) => r.id === bare)!;
+    expect(bareCompact).toMatchObject({
+      id: bare,
+      collectionIds: [],
+      labelNames: [],
+      hasNotes: false,
+      hasLyrics: false,
+      hasImage: false,
+      audioCount: 0,
+      sessionCount: 0,
+    });
   });
 });

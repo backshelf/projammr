@@ -15,7 +15,10 @@ import { collections, collectionTracks } from "../../db/schema/collections.js";
 import { projects } from "../../db/schema/projects.js";
 import { tracks } from "../../db/schema/tracks.js";
 import { seedScale } from "../../test/priority.js";
-import { updateTrackNumberInCollection } from "./queries.js";
+import {
+  setCollectionOrder,
+  updateTrackNumberInCollection,
+} from "./queries.js";
 
 /**
  * One seeded project holds the collection under test; `afterAll` drops the
@@ -191,6 +194,56 @@ describe("updateTrackNumberInCollection", () => {
 
     await expect(
       updateTrackNumberInCollection(collectionId, absent!.id, 1, actorId)
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("setCollectionOrder", () => {
+  it("reorders existing tracks without unique constraint collisions", async () => {
+    const reversed = [...trackIds].reverse();
+    const result = await setCollectionOrder(collectionId, reversed, actorId);
+
+    expect(result.collectionId).toBe(collectionId);
+    expect(result.count).toBe(TRACK_COUNT);
+    expect(result.tracks.map((t) => [t.trackId, t.trackNumber])).toEqual(
+      reversed.map((id, i) => [id, i + 1])
+    );
+  });
+
+  it("adds missing tracks and leaves omitted existing tracks unnumbered", async () => {
+    const [extra] = await db
+      .insert(tracks)
+      .values({ title: "Extra Track", artists: [], projectId, priorityId })
+      .returning({ id: tracks.id });
+
+    const [first, second] = trackIds as [number, number];
+    const result = await setCollectionOrder(
+      collectionId,
+      [extra!.id, second, first],
+      actorId
+    );
+
+    expect(result.count).toBe(TRACK_COUNT + 1);
+    expect(result.tracks.slice(0, 3)).toEqual([
+      { trackId: extra!.id, title: "Extra Track", trackNumber: 1 },
+      { trackId: second, title: "Track 2", trackNumber: 2 },
+      { trackId: first, title: "Track 1", trackNumber: 3 },
+    ]);
+    for (const unnumbered of result.tracks.slice(3)) {
+      expect(unnumbered.trackNumber).toBeNull();
+    }
+  });
+
+  it("400s when trackIds contains duplicates", async () => {
+    const [first] = trackIds as [number];
+    await expect(
+      setCollectionOrder(collectionId, [first, first], actorId)
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("404s for a missing collection", async () => {
+    await expect(
+      setCollectionOrder(999_999_999, [trackIds[0]!], actorId)
     ).rejects.toMatchObject({ status: 404 });
   });
 });

@@ -7,6 +7,14 @@ import { instancePolicy, uploadLimitBytes } from "./instance-policy.js";
 
 const MAX_REDIRECTS = 5;
 const DEFAULT_TIMEOUT_MS = 15_000;
+const REMOTE_IMAGE_HEADERS = {
+  Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8",
+  "User-Agent": "Mozilla/5.0 (compatible; Projammr/1.0)",
+} as const;
+
+const DATA_URL_PREFIX = /^data:image\/[a-z0-9.+-]+(?:;[^;,]*)*;base64,/i;
+const BASE64_PATTERN =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}(?:==)?|[A-Za-z0-9+/]{3}=?)?$/;
 
 const SHARP_FORMAT_MIME: Record<string, string> = {
   jpeg: "image/jpeg",
@@ -225,6 +233,19 @@ function filenameFromDisposition(header: string | null): string | null {
 
 const FILE_WITH_EXT = /\.[a-z0-9]{1,8}$/i;
 
+function defaultFilename(mime: string): string {
+  const ext = MIME_EXTENSION[mime] ?? "bin";
+  return `cover.${ext}`;
+}
+
+function sanitizeFilename(raw: string | undefined, mime: string): string {
+  if (raw) {
+    const clean = basename(raw.trim().replaceAll("\\", "/"));
+    if (clean && clean !== "." && clean !== "..") return clean;
+  }
+  return defaultFilename(mime);
+}
+
 function deriveFilename(
   url: URL,
   disposition: string | null,
@@ -241,8 +262,34 @@ function deriveFilename(
     if (candidate && FILE_WITH_EXT.test(candidate)) return candidate;
   }
 
-  const ext = MIME_EXTENSION[mime] ?? "bin";
-  return `cover.${ext}`;
+  return defaultFilename(mime);
+}
+
+/**
+ * Verifies image bytes through sharp and ensures the detected format maps to
+ * an allowed MIME type.
+ */
+async function verifyImageBytes(
+  bytes: Uint8Array,
+  allowedTypes: readonly string[],
+  invalidMessage: string
+): Promise<string> {
+  let format: string | undefined;
+  try {
+    const metadata = await sharp(bytes).metadata();
+    format = metadata.format;
+  } catch {
+    throw new HTTPException(400, { message: invalidMessage });
+  }
+
+  const mime = format ? SHARP_FORMAT_MIME[format] : undefined;
+  if (!mime || !allowedTypes.includes(mime)) {
+    throw new HTTPException(400, {
+      message: `Unsupported image type "${mime ?? format ?? "unknown"}": expected one of ${allowedTypes.join(", ")}`,
+    });
+  }
+
+  return mime;
 }
 
 async function readBoundedBytes(
@@ -335,7 +382,7 @@ export async function fetchRemoteImage(
         method: "GET",
         redirect: "manual",
         signal,
-        headers: { Accept: "image/*" },
+        headers: REMOTE_IMAGE_HEADERS,
       });
     } catch {
       throw new HTTPException(400, {
@@ -378,23 +425,11 @@ export async function fetchRemoteImage(
   }
 
   const bytes = await readBoundedBytes(response, maxBytes);
-
-  let format: string | undefined;
-  try {
-    const metadata = await sharp(bytes).metadata();
-    format = metadata.format;
-  } catch {
-    throw new HTTPException(400, {
-      message: "URL did not return a valid image",
-    });
-  }
-
-  const mime = format ? SHARP_FORMAT_MIME[format] : undefined;
-  if (!mime || !allowedTypes.includes(mime)) {
-    throw new HTTPException(400, {
-      message: `Unsupported image type "${mime ?? format ?? "unknown"}": expected one of ${allowedTypes.join(", ")}`,
-    });
-  }
+  const mime = await verifyImageBytes(
+    bytes,
+    allowedTypes,
+    "URL did not return a valid image"
+  );
 
   return {
     kind: "bytes",
@@ -404,6 +439,78 @@ export async function fetchRemoteImage(
       response.headers.get("content-disposition"),
       mime
     ),
+    type: mime,
+  };
+}
+
+type DecodeBase64ImageOptions = {
+  filename?: string;
+  maxBytes?: number;
+  allowedTypes?: readonly string[];
+};
+
+/**
+ * Decodes a base64-encoded image (optionally prefixed with a `data:image/...;base64,`
+ * data URL), enforcing the instance upload size limit before and after decode
+ * and verifying the real image format through sharp.
+ */
+export async function decodeBase64Image(
+  raw: string,
+  options: DecodeBase64ImageOptions = {}
+): Promise<FetchedRemoteImage> {
+  const policy = instancePolicy();
+  const maxBytes = options.maxBytes ?? uploadLimitBytes(policy);
+  const allowedTypes = options.allowedTypes ?? policy.limits.imageTypes;
+
+  const payload = raw.trim().replace(DATA_URL_PREFIX, "");
+
+  // Reject massively oversized payloads before allocating a stripped copy.
+  const maxEncodedChars = Math.ceil(maxBytes / 3) * 4;
+  if (payload.length > maxEncodedChars * 2 + 16) {
+    throw new HTTPException(400, {
+      message: `Image exceeds the ${maxBytes}-byte upload limit`,
+    });
+  }
+
+  const clean = payload.replace(/\s+/g, "");
+  if (clean.length === 0) {
+    throw new HTTPException(400, { message: "Image data is empty" });
+  }
+
+  const padding = clean.endsWith("==") ? 2 : clean.endsWith("=") ? 1 : 0;
+  const estimatedBytes = Math.floor((clean.length * 3) / 4) - padding;
+  if (estimatedBytes > maxBytes) {
+    throw new HTTPException(400, {
+      message: `Image exceeds the ${maxBytes}-byte upload limit`,
+    });
+  }
+
+  if (!BASE64_PATTERN.test(clean)) {
+    throw new HTTPException(400, {
+      message: "Image data is not valid base64",
+    });
+  }
+
+  const bytes = Uint8Array.from(Buffer.from(clean, "base64"));
+  if (bytes.byteLength === 0) {
+    throw new HTTPException(400, { message: "Image data is empty" });
+  }
+  if (bytes.byteLength > maxBytes) {
+    throw new HTTPException(400, {
+      message: `Image exceeds the ${maxBytes}-byte upload limit`,
+    });
+  }
+
+  const mime = await verifyImageBytes(
+    bytes,
+    allowedTypes,
+    "Image data is not a valid image"
+  );
+
+  return {
+    kind: "bytes",
+    bytes,
+    name: sanitizeFilename(options.filename, mime),
     type: mime,
   };
 }

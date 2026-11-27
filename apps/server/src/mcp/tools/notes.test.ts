@@ -10,7 +10,7 @@ import {
 import { setupSuite, type Actor as TestActor } from "../../test/fixtures.js";
 import { callTool, listToolNames, mintMcpToken } from "../../test/mcp.js";
 import type { Actor } from "../actor.js";
-import { readNotes, writeLyrics, writeNotes } from "./notes.js";
+import { appendNotes, readNotes, writeLyrics, writeNotes } from "./notes.js";
 
 const suite = setupSuite("MCP notes tools");
 const { owner, editor, viewer, outsider } = suite;
@@ -215,6 +215,94 @@ describe("write_notes", () => {
   });
 });
 
+describe("append_notes", () => {
+  it("appends onto empty notes, existing markdown notes, and a project description", async () => {
+    suite.requireProject();
+    const trackId = await suite.mkTrack("Append track notes");
+    const actor = actorFor(owner.userId);
+
+    const first = await appendNotes(actor, "track", trackId, "First note");
+    expect(first.markdown).toBe("First note");
+
+    const second = await callAsActor(editor, "append_notes", {
+      kind: "track",
+      id: trackId,
+      markdown: "## Follow-up\n\n- Check vocal level",
+    });
+    expect(second.body.result?.isError).toBeUndefined();
+    const content = second.body.result?.structuredContent as {
+      markdown: string;
+    };
+    expect(content.markdown).toBe(
+      "First note\n\n## Follow-up\n\n- Check vocal level"
+    );
+
+    const reread = await readNotes(actor, "track", trackId);
+    expect(reread.markdown).toBe(content.markdown);
+
+    // Project notes map to the `description` column.
+    await writeNotes(actor, "project", suite.projectId, "Initial description");
+    const appendedProject = await appendNotes(
+      actor,
+      "project",
+      suite.projectId,
+      "Appended project note"
+    );
+    expect(appendedProject.markdown).toBe(
+      "Initial description\n\nAppended project note"
+    );
+  });
+
+  it("preserves non-markdown blocks cleanly without needing keep placeholders", async () => {
+    suite.requireProject();
+    const trackId = await suite.mkTrack("Append keeps table");
+    const tableBlock = {
+      id: "table-keep-append",
+      type: "table",
+      props: {},
+      content: { type: "tableContent", rows: [] },
+      children: [],
+    };
+    const module = await import("../../entities/index.js");
+    await module.ENTITIES.track.update(trackId, { notes: [tableBlock] });
+
+    const res = await callAsActor(owner, "append_notes", {
+      kind: "track",
+      id: trackId,
+      markdown: "Added after the table",
+    });
+    expect(res.body.result?.isError).toBeUndefined();
+    const content = res.body.result?.structuredContent as { markdown: string };
+    expect(content.markdown).toContain("keep:table-keep-append");
+    expect(content.markdown).toContain("Added after the table");
+
+    const row = await module.ENTITIES.track.row(trackId);
+    const savedBlocks = (row as unknown as { notes: { id: string }[] }).notes;
+    expect(savedBlocks[0]?.id).toBe("table-keep-append");
+    expect(savedBlocks.length).toBeGreaterThan(1);
+  });
+
+  it("refuses viewers and blank markdown", async () => {
+    suite.requireProject();
+    const trackId = await suite.mkTrack("Append guarded");
+
+    const asViewer = await callAsActor(viewer, "append_notes", {
+      kind: "track",
+      id: trackId,
+      markdown: "Should fail",
+    });
+    expect(asViewer.body.result?.isError).toBe(true);
+    expect(asViewer.body.result?.content?.[0]?.text ?? "").toContain("403");
+
+    const blank = await callAsActor(editor, "append_notes", {
+      kind: "track",
+      id: trackId,
+      markdown: "   \n  ",
+    });
+    expect(blank.body.result?.isError || blank.body.error != null).toBe(true);
+  });
+});
+
 describe("read_notes and write_notes MCP tools", () => {
   it("refuses an outsider on a foreign track's lyrics through the tool call", async () => {
     suite.requireProject();
@@ -373,6 +461,7 @@ describe("tools/list", () => {
     ]);
     const writeNames = await listToolNames(writeToken);
     for (const name of [
+      "append_notes",
       "list_notes",
       "read_note",
       "write_note",
@@ -388,6 +477,7 @@ describe("tools/list", () => {
     const readNames = await listToolNames(readToken);
     expect(readNames).toContain("list_notes");
     expect(readNames).toContain("read_note");
+    expect(readNames).not.toContain("append_notes");
     expect(readNames).not.toContain("write_note");
     expect(readNames).not.toContain("create_note");
   });

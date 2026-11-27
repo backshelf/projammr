@@ -18,18 +18,44 @@ import {
 } from "../authorize.js";
 import { defineTool } from "../spec.js";
 
+/**
+ * A repo as `list_repos` answers it: always carries `setCount`, and omits the
+ * potentially large `sets` array unless `includeSets: true` is passed.
+ */
+const mcpRepoSchema = repoWithSetsSchema.omit({ sets: true }).extend({
+  setCount: z.number(),
+  sets: repoWithSetsSchema.shape.sets.optional(),
+});
+
 const listReposTool = defineTool({
   name: "list_repos",
   title: "List repos",
   description:
-    "Every dit repo of a project, oldest first, each with the sets it has adopted: the session holding each and every branch with its tip commit.",
+    "Every dit repo of a project, oldest first, each with its storage, last " +
+    "push machine and adopted set count (`setCount`). Pass `includeSets: true` " +
+    "to also include every adopted set and its branches with tip commits.",
   scope: "read",
   idempotent: true,
-  input: z.object({ projectId: z.number().int() }),
-  output: z.object({ repos: z.array(repoWithSetsSchema) }),
-  run: async (actor, { projectId }) => {
+  input: z.object({
+    projectId: z.number().int(),
+    includeSets: z
+      .boolean()
+      .optional()
+      .describe(
+        "Include each repo's adopted sets and branch tips. Omitted by default to keep responses lean."
+      ),
+  }),
+  output: z.object({ repos: z.array(mcpRepoSchema) }),
+  run: async (actor, { projectId, includeSets }) => {
     await requireProject(actor, projectId, "viewer");
-    return { repos: await listRepos(projectId) };
+    const repos = await listRepos(projectId);
+    return {
+      repos: repos.map(({ sets, ...repo }) => ({
+        ...repo,
+        setCount: sets.length,
+        ...(includeSets ? { sets } : {}),
+      })),
+    };
   },
 });
 

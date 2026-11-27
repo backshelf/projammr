@@ -345,7 +345,7 @@ and `POLICY_SETTINGS` is the one table tying a policy value to its setting key, 
 | `access`       | `closeAfterFirst`, `invitesBypass`, `requireVerifiedEmail`, `sessionLifetimeDays`, `passwordMin`/`passwordMax` (8–128, min ≤ max), `lockoutFreeFailures`, `lockoutBaseMinutes`/`lockoutMaxMinutes` (base ≤ max), `linkLifetimeMinutes`, `guestAccess`, `selfDeletion` (`instance-access`)                                                                                                                                      |
 | `limits`       | `pushSamplesEverywhere` (boolean, default off: dit repos push their samples whatever their switch says, and the switch reads locked on), `maxUploadMb` (≤ `MAX_UPLOAD_CEILING_MB`), `projectCapGb`/`userCapGb` (null = unlimited), `audioTypes` (⊆ `AUDIO_EXTENSIONS`), `imageTypes` (⊆ `IMAGE_TYPES`), `auditIntervalHours`, `orphanMode` (`delete`\|`report`), `guestRetentionDays`, `longestAudioHours` (`instance-limits`) |
 | `jobs`         | `analysisWorkers`, `jobRetentionDays`, `activityRetentionDays` (null keeps history forever), `saveContentRetentionDays` (days an uncommitted save's content is kept, 1–36500, default 90, never null; seeded by `SAVE_CONTENT_RETENTION_DAYS`) (`instance-jobs`)                                                                                                                                                               |
-| `integrations` | `mcpEnabled`, `mcpToolGroups` (⊆ `MCP_SCOPES`), `logLevel` (`instance-integrations`), `updateCheck` (`instance-branding`)                                                                                                                                                                                                                                                                                                      |
+| `integrations` | `mcpEnabled`, `mcpToolGroups` (⊆ `MCP_SCOPES`), `mcpAccessTokenHours` (1–720, default 24, `restartRequired`), `mcpRefreshTokenDays` (1–365, default 90, `restartRequired`), `logLevel` (`instance-integrations`), `updateCheck` (`instance-branding`) |
 | `rateLimits`   | one `{burst, perMinute}` per bucket, `instance-rate-limits.<bucket>.burst` and `.perMinute`, each with a floor                                                                                                                                                                                                                                                                                                                 |
 
 `instancePolicySchema` is built from those settings' own schemas, so a floor, a ceiling or an enum is declared once
@@ -668,7 +668,8 @@ resources = RESOURCES)` makes one `McpServer` per request, holding the actor by 
   `wireSchema(schema, io)` hands the SDK each input and output as the JSON the client actually exchanges:
   zod cannot turn a `Date` into JSON Schema, so a `z.date()` is advertised as a `date-time` string (a field
   whose metadata already names its wire type, such as `epochDate`, keeps it), inputs are still validated by
-  the tool's own zod schema, and one row schema with a timestamp no longer fails the whole `tools/list`. A resource registers as a plain URI string or, when its
+  the tool's own zod schema (strictly rejecting unrecognized top-level keys while allowing `/^cf_\d+$/`
+  custom-field filter keys on `.loose()` listing schemas), and one row schema with a timestamp no longer fails the whole `tools/list`. `buildServer` also passes server-level `MCP_INSTRUCTIONS` to `McpServer` (`server/discover` / `initialize`). A resource registers as a plain URI string or, when its
   template carries a `{variable}`, as the SDK's `ResourceTemplate`; either way `read` throwing (an actor
   outside the project, say) becomes a JSON-RPC error, never a resource's contents. `toolScope(name, tools)`
   is the lookup `route.ts` uses ahead of dispatch. `createMcpHandlerFor(tools, resources)` wraps
@@ -794,6 +795,9 @@ true`, gated at `module.deleteRole ?? "editor"` — `project` sets `"owner"`, th
   | `add_tracks_to_collection` (idempotent)      | `{collectionId, trackIds}`                                      | `bulkAddTracksToCollection` → `{added}`                                                                      | every `trackIds` entry in the collection's project, else 404                                                                                                                                                                                       |
   | `remove_track_from_collection` (destructive) | `{collectionId, trackId}`                                       | `removeTrackFromCollection` → the membership row                                                             | 404 when the track is not in the collection                                                                                                                                                                                                        |
   | `set_track_number` (idempotent)              | `{collectionId, trackId, trackNumber}`                          | `updateTrackNumberInCollection`, swapping with a track that holds the number → `{tracks}` in their new order |                                                                                                                                                                                                                                                    |
+  | `set_collection_order` (idempotent)          | `{collectionId, trackIds}`                                      | `setCollectionOrder` → `{collectionId, count, tracks}`                                                       | atomic add + `1..N` numbering in one transaction; rejects duplicate ids (400) and cross-project tracks (404); leaves omitted existing members unnumbered                                                                                            |
+  | `batch_update_tracks`                        | `{projectId, updates: [{id, ...patch, labels?, addLabels?, removeLabels?, notes?, lyrics?}]}` (`1..100`) | pre-validated heterogeneous per-track patches + labels + `writeNotes` + `writeLyrics` → `{updated, trackIds}` | gates `projectId` at editor; rejects duplicate/cross-project ids and `image` upfront                                                                                                                                                               |
+  | `create_label` / `update_label`              | `{projectId, name, colourHex?}` / `{projectId, labelId, name?, colourHex?}` | `createLabel` / `updateLabel` → `labelSchema`                                                     | editor-gated; `update_label` requires `name` or `colourHex`                                                                                                                                                                                        |
   | `link_sessions` (idempotent)                 | `{moves: [{sessionId, trackId \| null, main}]}`                 | `bulkMoveSessions` → `{moved}`                                                                               | gated on the first session's project; `bulkMoveSessions` (`entities/session/queries.ts`, called by this tool alone) 404s any session or track outside it; spends the `session-moves` bucket; an empty `moves` returns `{moved: 0}` before any gate |
   | `add_track_relation`                         | `{fromTrackId, toTrackId, relation}` (`relation` a type's name) | `resolveRelationTypeName` + `addTrackRelation` → the relation row                                            | `toTrackId` in the from-track's project, else 404; `relation` naming no type of that project, else 404                                                                                                                                             |
   | `remove_track_relation` (destructive)        | `{trackId, relationId}`                                         | `deleteTrackRelation` → the relation row                                                                     |                                                                                                                                                                                                                                                    |
@@ -801,12 +805,20 @@ true`, gated at `module.deleteRole ?? "editor"` — `project` sets `"owner"`, th
 
 - `tools/images.ts` (`IMAGE_TOOLS`) exposes cover management over `entityModules().filter((m) => m.image)`:
   `list_images` (`{projectId, page?, pageSize?}`, viewer-gated, wraps `getImagesInProject`), `set_cover`
-  (`{kind, id, url? | imageId?}`, editor-gated — when given `url`, spends `image-upload`, fetches through
-  `fetchRemoteImage` with SSRF checks, ingests via `ingestImage` so palette and resize variants are populated,
-  and pins via `setImageOnParent`; when given `imageId`, pins an existing project image directly), and
-  `remove_cover` (`{kind, id}`, editor-gated, `destructive`, `idempotent`, wraps `removeImageFromParent`).
-  Entity create/edit schemas omit `image` (`imageIgnores` in `db/schema/base.ts`) so neither REST nor MCP
-  entity writes can bypass image ingestion with raw external URLs.
+  (`{kind, id, url? | imageId? | data?, filename?}`, editor-gated — exactly one source; `url` spends `image-upload`,
+  fetches through `fetchRemoteImage` with SSRF checks and `User-Agent`/`Accept` headers; `data` decodes base64 or a
+  `data:image/...;base64,` URL through `decodeBase64Image` against upload/MIME limits; both ingest via `ingestImage`
+  so palette and resize variants are populated, then pin via `setImageOnParent`; `imageId` pins an existing project
+  image directly), and `remove_cover` (`{kind, id}`, editor-gated, `destructive`, `idempotent`, wraps
+  `removeImageFromParent`). Entity create/edit/bulk/batch MCP schemas omit and reject `image` outright so callers use
+  `set_cover`/`remove_cover`. `tools/notes.ts` also exposes `append_notes` (`{kind, id, markdown}`, `write` scope),
+  which appends converted markdown blocks onto an entity's existing `BlockDocument` without disturbing existing or
+  non-markdown blocks. `list_tracks` accepts boolean audit filters (`unlabeled`, `uncollected`, `hasNotes`, `hasLyrics`,
+  `hasImage`, `hasAudio`, `hasSessions` via `trackAuditFilterSchema`) and `compact: true` for slim rows, plus
+  `hasNotes`/`hasLyrics`/`audioCount` on `listTrackSchema`; `list_track_sessions` omits `structure` unless
+  `includeStructure: true`; `list_repos` includes `setCount` and omits `sets` unless `includeSets: true`.
+  `create_*`, `update_*`, and `bulk_update` accept inline `labels` / `addLabels` / `removeLabels` for label-capable
+  kinds.
 
 - `tools/audio.ts` (`AUDIO_TOOLS`) wraps the audio audit read (`db/queries/track-audios.ts`): `audit_audio`
   (`{projectId, trackIds?}`, viewer-gated) runs `auditProjectAudio` + `audioFindings` over a project, paged

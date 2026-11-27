@@ -62,16 +62,52 @@ const datedTool = defineTool({
   run: async () => ({ createdAt }),
 });
 
+const strictFilterTool = defineTool({
+  name: "strict_filter_thing",
+  title: "Strict filter thing",
+  description: "Takes fixed filter keys, without custom fields.",
+  scope: "read",
+  input: z.object({
+    projectId: z.number().int(),
+    status: z.number().int().optional(),
+  }),
+  output: z.object({ ok: z.boolean() }),
+  run: async () => ({ ok: true }),
+});
+
+const looseFilterTool = defineTool({
+  name: "loose_filter_thing",
+  title: "Loose filter thing",
+  description:
+    "Intersects a base object with a loose custom-field query schema.",
+  scope: "read",
+  input: z.object({ projectId: z.number().int() }).and(
+    z
+      .object({
+        status: z.number().int().optional(),
+        collection: z.number().int().optional(),
+      })
+      .loose()
+  ),
+  output: z.object({ received: z.record(z.string(), z.unknown()) }),
+  run: async (_actor, input) => ({
+    received: input as Record<string, unknown>,
+  }),
+});
+
 const FIXTURE_TOOLS: AnyToolSpec[] = [
   readTool,
   writeTool,
   missingTool,
   datedTool,
+  strictFilterTool,
+  looseFilterTool,
 ];
 const handler = createMcpHandlerFor(FIXTURE_TOOLS, []);
 
 type JsonRpcResponse = {
   result?: {
+    instructions?: string;
     tools?: { name: string; inputSchema?: unknown; outputSchema?: unknown }[];
     isError?: boolean;
     content?: { text: string }[];
@@ -81,7 +117,7 @@ type JsonRpcResponse = {
 
 async function send(
   actor: Actor,
-  method: "tools/list" | "tools/call",
+  method: "tools/list" | "tools/call" | "server/discover",
   params: Record<string, unknown> = {}
 ): Promise<{ status: number; body: JsonRpcResponse }> {
   const name = typeof params.name === "string" ? params.name : undefined;
@@ -129,7 +165,13 @@ describe("buildServer", () => {
   it("omits every write tool from a read-only actor's list", async () => {
     const { body } = await listTools(actorFor(["read"]));
     const names = body.result?.tools?.map((tool) => tool.name);
-    expect(names).toEqual(["read_thing", "missing_thing", "dated_thing"]);
+    expect(names).toEqual([
+      "read_thing",
+      "missing_thing",
+      "dated_thing",
+      "strict_filter_thing",
+      "loose_filter_thing",
+    ]);
   });
 
   it("offers no tool of a scope the instance does not allow, whatever the token holds", async () => {
@@ -137,7 +179,13 @@ describe("buildServer", () => {
     try {
       const { body } = await listTools(actorFor(["read", "write"]));
       const names = body.result?.tools?.map((tool) => tool.name);
-      expect(names).toEqual(["read_thing", "missing_thing", "dated_thing"]);
+      expect(names).toEqual([
+        "read_thing",
+        "missing_thing",
+        "dated_thing",
+        "strict_filter_thing",
+        "loose_filter_thing",
+      ]);
     } finally {
       restoreInstancePolicy();
     }
@@ -183,5 +231,79 @@ describe("buildServer", () => {
     expect(body.result?.structuredContent).toEqual({
       createdAt: createdAt.toISOString(),
     });
+  });
+
+  it("exposes server-level instructions on server/discover", async () => {
+    const { body } = await send(actorFor(["read"]), "server/discover");
+    const instructions = body.result?.instructions;
+    expect(typeof instructions).toBe("string");
+    expect(instructions).toContain("get_project");
+    expect(instructions).toContain("set_cover");
+    expect(instructions).toContain("compact: true");
+    expect(instructions).toContain("includeStructure: true");
+    expect(instructions).toContain("batch_update_tracks");
+    expect(instructions).toContain("dit");
+  });
+
+  it("rejects unrecognized arguments loudly on strict object tools, naming valid keys", async () => {
+    const actor = actorFor(["read"]);
+
+    const typo = await callTool(actor, "strict_filter_thing", {
+      projectId: 1,
+      statusId: 2,
+    });
+    expect(typo.body.result?.isError).toBe(true);
+    const typoText = typo.body.result?.content?.[0]?.text ?? "";
+    expect(typoText).toContain('"statusId"');
+    expect(typoText).toContain("Valid keys: projectId, status.");
+
+    // Non-loose tools also reject cf_<id> keys.
+    const cfOnStrict = await callTool(actor, "strict_filter_thing", {
+      projectId: 1,
+      cf_12: "high",
+    });
+    expect(cfOnStrict.body.result?.isError).toBe(true);
+    expect(cfOnStrict.body.result?.content?.[0]?.text).toContain('"cf_12"');
+
+    // Zero-argument tools state they take no arguments.
+    const extraOnEmpty = await callTool(actor, "read_thing", { nope: 1 });
+    expect(extraOnEmpty.body.result?.isError).toBe(true);
+    expect(extraOnEmpty.body.result?.content?.[0]?.text).toContain(
+      "This tool takes no arguments."
+    );
+  });
+
+  it("accepts cf_<id> custom-field keys on loose intersection tools while rejecting other unknown keys", async () => {
+    const actor = actorFor(["read"]);
+
+    const ok = await callTool(actor, "loose_filter_thing", {
+      projectId: 1,
+      status: 2,
+      cf_42: "high",
+    });
+    expect(ok.body.result?.isError).toBeUndefined();
+    expect(ok.body.result?.structuredContent).toEqual({
+      received: { projectId: 1, status: 2, cf_42: "high" },
+    });
+
+    const bad = await callTool(actor, "loose_filter_thing", {
+      projectId: 1,
+      statusId: 2,
+      collectionId: 7,
+    });
+    expect(bad.body.result?.isError).toBe(true);
+    const badText = bad.body.result?.content?.[0]?.text ?? "";
+    expect(badText).toContain('"statusId"');
+    expect(badText).toContain('"collectionId"');
+    expect(badText).toContain("collection");
+    expect(badText).toContain("status");
+    expect(badText).toContain("cf_<id>");
+
+    const malformedCf = await callTool(actor, "loose_filter_thing", {
+      projectId: 1,
+      cf_abc: "nope",
+    });
+    expect(malformedCf.body.result?.isError).toBe(true);
+    expect(malformedCf.body.result?.content?.[0]?.text).toContain('"cf_abc"');
   });
 });

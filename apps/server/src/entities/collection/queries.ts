@@ -698,6 +698,110 @@ export async function updateTrackNumberInCollection(
   return rows;
 }
 
+/** Body of `set_collection_order`: ordered list of track ids to number `1..N`. */
+export const setCollectionOrderSchema = z.object({
+  trackIds: z.array(z.number().int()),
+});
+
+const collectionOrderTrackSchema = z.object({
+  trackId: z.number(),
+  title: z.string(),
+  trackNumber: z.number().nullable(),
+});
+
+export const collectionOrderResultSchema = z.object({
+  collectionId: z.number(),
+  count: z.number(),
+  tracks: z.array(collectionOrderTrackSchema),
+});
+
+/**
+ * Atomically adds any missing tracks to a collection and assigns
+ * `trackNumber = 1..N` in exact `trackIds` order. Any other tracks already in
+ * the collection remain members with `trackNumber = null`. Rejects duplicate
+ * track ids with 400.
+ */
+export async function setCollectionOrder(
+  collectionId: number,
+  trackIds: number[],
+  actorId: string
+): Promise<z.infer<typeof collectionOrderResultSchema>> {
+  if (new Set(trackIds).size !== trackIds.length) {
+    throw new HTTPException(400, {
+      message: "Duplicate track IDs in trackIds",
+    });
+  }
+
+  const { projectId, before, after, addedAny, ordered } = await db.transaction(
+    async (tx) => {
+      const [col] = await tx
+        .select({ projectId: collections.projectId })
+        .from(collections)
+        .where(eq(collections.id, collectionId))
+        .for("update");
+      if (!col) {
+        throw new HTTPException(404, { message: "Collection not found" });
+      }
+
+      const current = await lockTrackNumbers(tx, collectionId);
+      const before = await orderedTitles(tx, current);
+
+      const existingIds = new Set(current.map((r) => r.trackId));
+      const missing = trackIds.filter((id) => !existingIds.has(id));
+      if (missing.length > 0) {
+        await tx
+          .insert(collectionTracks)
+          .values(missing.map((trackId) => ({ collectionId, trackId })))
+          .onConflictDoNothing();
+      }
+
+      const numbers = new Map<number, number | null>(
+        trackIds.map((trackId, index) => [trackId, index + 1])
+      );
+      await applyTrackNumbers(tx, collectionId, numbers);
+
+      const ordered = await tx
+        .select({
+          trackId: tracks.id,
+          title: tracks.title,
+          trackNumber: collectionTracks.trackNumber,
+        })
+        .from(collectionTracks)
+        .innerJoin(tracks, eq(tracks.id, collectionTracks.trackId))
+        .where(eq(collectionTracks.collectionId, collectionId))
+        .orderBy(sql`${collectionTracks.trackNumber} NULLS LAST`, tracks.id);
+
+      return {
+        projectId: col.projectId,
+        before,
+        after: ordered.map((r) => r.title),
+        addedAny: missing.length > 0,
+        ordered,
+      };
+    }
+  );
+
+  await recordActivity({
+    projectId,
+    entityType: "collection",
+    entityId: collectionId,
+    userId: actorId,
+    action: "updated",
+    before: addedAny
+      ? { tracks: before, trackOrder: before }
+      : { trackOrder: before },
+    after: addedAny
+      ? { tracks: after, trackOrder: after }
+      : { trackOrder: after },
+  });
+
+  return {
+    collectionId,
+    count: ordered.length,
+    tracks: ordered,
+  };
+}
+
 export const collectionTrackSummarySchema = z.array(
   z.object({
     id: z.number(),

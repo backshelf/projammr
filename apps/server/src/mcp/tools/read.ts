@@ -53,7 +53,11 @@ import {
   projectDetailSchema as fullProjectDetailSchema,
   type ProjectDetail,
 } from "../../entities/project/queries.js";
-import { getTrackSessions } from "../../entities/track/queries.js";
+import {
+  getTrackSessions,
+  listTrackSchema,
+  type ListTrack,
+} from "../../entities/track/queries.js";
 import { sessionSchema } from "../../db/schema/sessions.js";
 import type { EntityList, EntityModule } from "../../entities/types.js";
 import type { Actor } from "../actor.js";
@@ -209,6 +213,55 @@ async function assertListKeys(
 }
 
 /**
+ * Slim track row returned by `list_tracks` when `compact: true`: flattens
+ * nested status, collections, labels, and sessions into scalar ids, names,
+ * flags, and counts so scanning a catalogue does not repeat nested objects.
+ */
+const compactTrackSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  artists: z.array(z.string()),
+  statusId: z.number().nullable(),
+  statusName: z.string().nullable(),
+  priorityId: z.number(),
+  collectionIds: z.array(z.number()),
+  labelNames: z.array(z.string()),
+  explicit: z.boolean(),
+  hasNotes: z.boolean(),
+  hasLyrics: z.boolean(),
+  hasImage: z.boolean(),
+  audioCount: z.number(),
+  sessionCount: z.number(),
+  archivedAt: z.date().nullable(),
+  updatedAt: z.date(),
+  trackNumber: z.number().nullable().optional(),
+});
+
+type CompactTrack = z.infer<typeof compactTrackSchema>;
+
+function toCompactTrack(row: ListTrack): CompactTrack {
+  return {
+    id: row.id,
+    title: row.title,
+    artists: row.artists,
+    statusId: row.statusId,
+    statusName: row.status?.name ?? null,
+    priorityId: row.priorityId,
+    collectionIds: row.collections.map((c) => c.id),
+    labelNames: row.labels.map((l) => l.name),
+    explicit: row.explicit,
+    hasNotes: row.hasNotes,
+    hasLyrics: row.hasLyrics,
+    hasImage: row.image != null,
+    audioCount: row.audioCount,
+    sessionCount: row.sessions.length,
+    archivedAt: row.archivedAt,
+    updatedAt: row.updatedAt,
+    ...(row.trackNumber !== undefined ? { trackNumber: row.trackNumber } : {}),
+  };
+}
+
+/**
  * `list_<kind>s` over any entity that declares a listing: the paginated page
  * its own `EntityList` already implements, gated at viewer, with a
  * description that enumerates the sort whitelist's own keys.
@@ -216,11 +269,25 @@ async function assertListKeys(
 function listTool(module: EntityModule & { list: EntityList }) {
   const { list } = module;
   const one = module.label.toLowerCase();
+  const isTrack = module.kind === "track";
 
-  const input = z
-    .object({ projectId: z.number().int() })
-    .and(withRelationFilterName(module, list.querySchema));
-  const output = paginatedResponseSchema(list.rowSchema);
+  const baseInput = z.object({
+    projectId: z.number().int(),
+    ...(isTrack
+      ? {
+          compact: z
+            .boolean()
+            .optional()
+            .describe(
+              "Return slim track rows (ids, names, flags, counts) instead of full nested status/labels/collections/sessions objects."
+            ),
+        }
+      : {}),
+  });
+  const input = baseInput.and(withRelationFilterName(module, list.querySchema));
+  const output = isTrack
+    ? paginatedResponseSchema(z.union([listTrackSchema, compactTrackSchema]))
+    : paginatedResponseSchema(list.rowSchema);
 
   const fieldKeys = module.customFields
     ? ", or cf_<id> for one of the project's custom fields (get_project lists them)"
@@ -239,6 +306,10 @@ function listTool(module: EntityModule & { list: EntityList }) {
       'a checkbox "true", "false" or "unset", a url "set" or "unset", and ' +
       "text by a substring."
     : "";
+  const trackExtras = isTrack
+    ? " Audit boolean filters: unlabeled, uncollected, hasNotes, hasLyrics, " +
+      "hasImage, hasAudio, hasSessions. Pass compact: true for slim rows."
+    : "";
 
   return defineTool({
     name: `list_${module.kind}s`,
@@ -247,18 +318,30 @@ function listTool(module: EntityModule & { list: EntityList }) {
       `A filtered, sorted, paginated page of ${one}s in a project. ` +
       `Sort as "<key>.asc" or "<key>.desc"; keys: ${list.sortColumns.join(", ")}${fieldKeys}.` +
       grouping +
-      filtering,
+      filtering +
+      trackExtras,
     scope: "read",
     idempotent: true,
     input,
     output,
-    run: async (actor, { projectId, ...query }) => {
+    run: async (actor, rawInput) => {
+      const { projectId, compact, ...query } = rawInput as {
+        projectId: number;
+        compact?: boolean;
+      } & Record<string, unknown>;
       await requireProject(actor, projectId, "viewer");
       await assertListKeys(module, projectId, query);
-      return list.page(projectId, {
+      const page = await list.page(projectId, {
         projectId,
         ...(await resolveRelationFilterName(module, query, projectId)),
       });
+      if (isTrack && compact) {
+        return {
+          ...page,
+          rows: (page.rows as ListTrack[]).map(toCompactTrack),
+        };
+      }
+      return page;
     },
   });
 }
@@ -319,18 +402,47 @@ const listCollectionTracksTool = defineTool({
   },
 });
 
+/**
+ * A track's session as `list_track_sessions` answers it: `structure` is
+ * omitted unless `includeStructure: true` is passed so checking linked
+ * sessions does not dump large DAW device trees into context.
+ */
+const trackSessionListItemSchema = sessionSchema.extend({
+  structure: sessionSchema.shape.structure.optional(),
+});
+
 const listTrackSessionsTool = defineTool({
   name: "list_track_sessions",
   title: "List track sessions",
   description:
-    "Every session belonging to a track, main session first, then most recently updated.",
+    "Every session belonging to a track, main session first, then most " +
+    "recently updated. Omits DAW `structure` by default; pass " +
+    "`includeStructure: true` or call `get_session` when you need it.",
   scope: "read",
   idempotent: true,
-  input: z.object({ trackId: z.number().int() }),
-  output: z.object({ sessions: z.array(sessionSchema) }),
-  run: async (actor, { trackId }) => {
+  input: z.object({
+    trackId: z.number().int(),
+    includeStructure: z
+      .boolean()
+      .optional()
+      .describe(
+        "Include each session's full DAW track/device tree (`structure`). Omitted by default."
+      ),
+  }),
+  output: z.object({ sessions: z.array(trackSessionListItemSchema) }),
+  run: async (actor, { trackId, includeStructure }) => {
     await requireEntity(actor, "track", trackId, "viewer");
-    return { sessions: await getTrackSessions(trackId) };
+    const rows = await getTrackSessions(trackId);
+    if (includeStructure) return { sessions: rows };
+    return {
+      sessions: rows.map((row) => {
+        const copy: Omit<typeof row, "structure"> & {
+          structure?: typeof row.structure;
+        } = { ...row };
+        delete copy.structure;
+        return copy;
+      }),
+    };
   },
 });
 

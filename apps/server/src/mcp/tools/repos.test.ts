@@ -90,18 +90,29 @@ async function seedHistory(label: string) {
 describe("repo tools over /api/mcp", () => {
   beforeAll(ensureMcpServerListening);
 
-  it("list_repos answers a project's repos with their sets", async () => {
+  it("list_repos omits sets by default (carrying setCount) and includes sets when includeSets is true", async () => {
     suite.requireProject();
     const { set } = await seedHistory("List repos");
     const token = await mintMcpToken(owner, ["read"]);
-    const { body } = await callTool(token, "list_repos", {
+
+    const lean = await callTool(token, "list_repos", {
       projectId: suite.projectId,
     });
-    const { repos } = contentOf<{
-      repos: { id: number; sets: unknown[] }[];
-    }>(body);
-    const repo = repos.find((r) => r.id === set.repoId);
-    expect(repo!.sets).toMatchObject([
+    const leanRepo = contentOf<{
+      repos: { id: number; setCount: number; sets?: unknown[] }[];
+    }>(lean.body).repos.find((r) => r.id === set.repoId);
+    expect(leanRepo?.setCount).toBe(1);
+    expect(leanRepo).not.toHaveProperty("sets");
+
+    const full = await callTool(token, "list_repos", {
+      projectId: suite.projectId,
+      includeSets: true,
+    });
+    const fullRepo = contentOf<{
+      repos: { id: number; setCount: number; sets?: unknown[] }[];
+    }>(full.body).repos.find((r) => r.id === set.repoId);
+    expect(fullRepo?.setCount).toBe(1);
+    expect(fullRepo?.sets).toMatchObject([
       {
         ditSetId: set.ditSetId,
         sessionId: set.sessionId,

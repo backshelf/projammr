@@ -103,7 +103,7 @@ import {
   collectionTracks,
 } from "../../db/schema/collections.js";
 import { entityLabels, labels, labelSchema } from "../../db/schema/labels.js";
-import { noteSchema } from "../../db/schema/notes.js";
+import { notes, noteSchema } from "../../db/schema/notes.js";
 import {
   priorityLevels,
   priorityLevelSchema,
@@ -131,6 +131,7 @@ import { nullsToUndefined } from "../../lib/utils.js";
 import {
   type RelationFilter,
   relationFilterSchema,
+  trackAuditFilterSchema,
   trackFilterSchema,
 } from "./filters.js";
 
@@ -224,6 +225,12 @@ export const listTrackSchema = withFieldValues(
     lastSaveAt: z.date().nullable(),
     /** How many saves the track's sessions have recorded. */
     saveCount: z.number(),
+    /** Whether the track has a non-empty notes document. */
+    hasNotes: z.boolean(),
+    /** Whether the track has a linked lyrics note. */
+    hasLyrics: z.boolean(),
+    /** How many audio versions are linked to the track. */
+    audioCount: z.number(),
   })
 );
 
@@ -643,6 +650,13 @@ type TrackFilters = {
   label?: number;
   artist?: string;
   explicit?: boolean;
+  unlabeled?: boolean;
+  uncollected?: boolean;
+  hasNotes?: boolean;
+  hasLyrics?: boolean;
+  hasImage?: boolean;
+  hasAudio?: boolean;
+  hasSessions?: boolean;
   archived?: ArchivedScope;
 };
 
@@ -653,6 +667,7 @@ type TrackFilters = {
 export const trackQuerySchema = paginationQuerySchema
   .extend({
     ...trackFilterSchema.shape,
+    ...trackAuditFilterSchema.shape,
     archived: archivedScopeSchema.optional(),
   })
   .loose();
@@ -738,6 +753,42 @@ function relationFilterSql(
   return sql`exists (select 1 from ${trackRelations} where (${trackRelations.fromTrackId} = ${tracks.id} or ${trackRelations.toTrackId} = ${tracks.id})${typePredicate})`;
 }
 
+/** True when `tracks.notes` holds a non-empty JSON block array. */
+const trackHasNotesSql = sql<boolean>`coalesce(jsonb_typeof(${tracks.notes}) = 'array' and jsonb_array_length(${tracks.notes}) > 0, false)`;
+
+const trackHasLabelsSql = sql<boolean>`exists (select 1 from ${entityLabels} where ${entityLabels.entityType} = 'track' and ${entityLabels.entityId} = ${tracks.id})`;
+const trackHasCollectionSql = sql<boolean>`exists (select 1 from ${collectionTracks} where ${collectionTracks.trackId} = ${tracks.id})`;
+const trackHasLyricsSql = sql<boolean>`exists (select 1 from ${notes} where ${notes.trackId} = ${tracks.id})`;
+const trackHasAudioSql = sql<boolean>`exists (select 1 from ${trackAudios} where ${trackAudios.trackId} = ${tracks.id})`;
+const trackHasSessionsSql = sql<boolean>`exists (select 1 from ${sessions} where ${sessions.trackId} = ${tracks.id})`;
+
+function booleanPredicateSql(
+  flag: boolean | undefined,
+  whenTrue: SQL
+): SQL | undefined {
+  if (flag == null) return undefined;
+  return flag ? whenTrue : sql`not (${whenTrue})`;
+}
+
+function unlabeledFilterSql(unlabeled: boolean | undefined): SQL | undefined {
+  if (unlabeled == null) return undefined;
+  return unlabeled ? sql`not (${trackHasLabelsSql})` : trackHasLabelsSql;
+}
+
+function uncollectedFilterSql(
+  uncollected: boolean | undefined
+): SQL | undefined {
+  if (uncollected == null) return undefined;
+  return uncollected
+    ? sql`not (${trackHasCollectionSql})`
+    : trackHasCollectionSql;
+}
+
+function hasImageFilterSql(hasImage: boolean | undefined): SQL | undefined {
+  if (hasImage == null) return undefined;
+  return hasImage ? isNotNull(tracks.image) : isNull(tracks.image);
+}
+
 /** The `where` predicate shared by the tracks page query and the bulk writes. */
 function tracksWhere(projectId: number, f: TrackFilters): SQL | undefined {
   return and(
@@ -750,7 +801,14 @@ function tracksWhere(projectId: number, f: TrackFilters): SQL | undefined {
     relationFilterSql(f.relation),
     labelFilterSql(f.label),
     artistFilterSql(f.artist),
-    explicitFilterSql(f.explicit)
+    explicitFilterSql(f.explicit),
+    unlabeledFilterSql(f.unlabeled),
+    uncollectedFilterSql(f.uncollected),
+    booleanPredicateSql(f.hasNotes, trackHasNotesSql),
+    booleanPredicateSql(f.hasLyrics, trackHasLyricsSql),
+    hasImageFilterSql(f.hasImage),
+    booleanPredicateSql(f.hasAudio, trackHasAudioSql),
+    booleanPredicateSql(f.hasSessions, trackHasSessionsSql)
   );
 }
 
@@ -789,6 +847,28 @@ export async function getTracksPage(
     { dimension: "label", where: labelFilterSql(query.label) },
     { dimension: "artist", where: artistFilterSql(query.artist) },
     { dimension: "explicit", where: explicitFilterSql(query.explicit) },
+    { dimension: "unlabeled", where: unlabeledFilterSql(query.unlabeled) },
+    {
+      dimension: "uncollected",
+      where: uncollectedFilterSql(query.uncollected),
+    },
+    {
+      dimension: "hasNotes",
+      where: booleanPredicateSql(query.hasNotes, trackHasNotesSql),
+    },
+    {
+      dimension: "hasLyrics",
+      where: booleanPredicateSql(query.hasLyrics, trackHasLyricsSql),
+    },
+    { dimension: "hasImage", where: hasImageFilterSql(query.hasImage) },
+    {
+      dimension: "hasAudio",
+      where: booleanPredicateSql(query.hasAudio, trackHasAudioSql),
+    },
+    {
+      dimension: "hasSessions",
+      where: booleanPredicateSql(query.hasSessions, trackHasSessionsSql),
+    },
     { dimension: "fields", where: fields.where() },
   ];
   const whereExcept = (dimension?: string) =>
@@ -930,6 +1010,29 @@ export async function getTracksPage(
           )
       : Promise.resolve([]);
 
+  const hasNotesRowsQuery =
+    hydratedIds.length > 0
+      ? db
+          .select({ id: tracks.id })
+          .from(tracks)
+          .where(and(inArray(tracks.id, hydratedIds), trackHasNotesSql))
+      : Promise.resolve([]);
+  const lyricsRowsQuery =
+    hydratedIds.length > 0
+      ? db
+          .select({ trackId: notes.trackId })
+          .from(notes)
+          .where(inArray(notes.trackId, hydratedIds))
+      : Promise.resolve([]);
+  const audioCountRowsQuery =
+    hydratedIds.length > 0
+      ? db
+          .select({ trackId: trackAudios.trackId, audioCount: count() })
+          .from(trackAudios)
+          .where(inArray(trackAudios.trackId, hydratedIds))
+          .groupBy(trackAudios.trackId)
+      : Promise.resolve([]);
+
   const [
     labelsByTrack,
     numberRows,
@@ -937,6 +1040,9 @@ export async function getTracksPage(
     duplicateVersionRows,
     saveStats,
     fieldValues,
+    hasNotesRows,
+    lyricsRows,
+    audioCountRows,
   ] = await Promise.all([
     getEntityLabelsBatch("track", hydratedIds),
     numberRowsQuery,
@@ -944,6 +1050,9 @@ export async function getTracksPage(
     duplicateVersionsQuery,
     trackSaveStats(hydratedIds),
     valuesFor("track", hydratedIds),
+    hasNotesRowsQuery,
+    lyricsRowsQuery,
+    audioCountRowsQuery,
   ]);
 
   const trackNumbers = new Map<number, number | null>(
@@ -951,6 +1060,13 @@ export async function getTracksPage(
   );
   const duplicateVersions = new Map<number, number>(
     duplicateVersionRows.map((r) => [r.id, r.version])
+  );
+  const tracksWithNotes = new Set<number>(hasNotesRows.map((r) => r.id));
+  const tracksWithLyrics = new Set<number>(
+    lyricsRows.flatMap((r) => (r.trackId != null ? [r.trackId] : []))
+  );
+  const audioCounts = new Map<number, number>(
+    audioCountRows.map((r) => [r.trackId, r.audioCount])
   );
   const rows = hydrated.map(({ primaryAudio, ...row }) => ({
     ...row,
@@ -961,6 +1077,9 @@ export async function getTracksPage(
         : null,
     lastSaveAt: saveStats.get(row.id)?.lastSaveAt ?? null,
     saveCount: saveStats.get(row.id)?.saveCount ?? 0,
+    hasNotes: tracksWithNotes.has(row.id),
+    hasLyrics: tracksWithLyrics.has(row.id),
+    audioCount: audioCounts.get(row.id) ?? 0,
     ...deriveTrackMusicMeta(row.sessions),
     relations: relationsByTrack.get(row.id) ?? [],
     labels: labelsByTrack.get(row.id) ?? [],
@@ -1069,8 +1188,8 @@ function relationFilterValue(
   return relationFilterSchema.safeParse(selectionString(raw)).data;
 }
 
-/** A selection's `explicit` filter, ignored unless it is `true` or `false`. */
-function explicitFilterValue(
+/** A selection's boolean filter, ignored unless it is `true` or `false`. */
+function booleanFilterValue(
   raw: string | number | undefined
 ): boolean | undefined {
   const value = selectionString(raw);
@@ -1094,7 +1213,14 @@ function trackSelectionFilters(selection: BulkSelection): TrackFilters {
     relation: relationFilterValue(f.relation),
     label: selectionNumber(f.label),
     artist: selectionString(f.artist),
-    explicit: explicitFilterValue(f.explicit),
+    explicit: booleanFilterValue(f.explicit),
+    unlabeled: booleanFilterValue(f.unlabeled),
+    uncollected: booleanFilterValue(f.uncollected),
+    hasNotes: booleanFilterValue(f.hasNotes),
+    hasLyrics: booleanFilterValue(f.hasLyrics),
+    hasImage: booleanFilterValue(f.hasImage),
+    hasAudio: booleanFilterValue(f.hasAudio),
+    hasSessions: booleanFilterValue(f.hasSessions),
   };
 }
 

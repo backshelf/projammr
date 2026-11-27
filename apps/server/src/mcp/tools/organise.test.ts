@@ -8,6 +8,7 @@ import {
   callTool,
   ensureMcpServerListening,
   listToolNames,
+  listTools,
   mintMcpToken,
 } from "../../test/mcp.js";
 
@@ -673,11 +674,15 @@ describe("archive_track / unarchive_track", () => {
 
 describe("organising tools in tools/list", () => {
   const organiseToolNames = [
+    "batch_update_tracks",
+    "create_label",
+    "update_label",
     "archive_track",
     "unarchive_track",
     "add_tracks_to_collection",
     "remove_track_from_collection",
     "set_track_number",
+    "set_collection_order",
     "link_sessions",
     "add_track_relation",
     "remove_track_relation",
@@ -1054,5 +1059,432 @@ describe("move_to_project", () => {
     }
     expect(errorText(results[9]!)).toContain("403");
     expect(errorText(results[10]!)).toContain("429");
+  });
+});
+
+/** Reads a track or collection's label names through its HTTP detail route. */
+async function labelNamesOf(
+  kind: "track" | "collection",
+  id: number
+): Promise<string[]> {
+  const path = kind === "track" ? `/tracks/${id}` : `/collections/${id}`;
+  const res = await suite.request("owner", path);
+  const body = (await res.json()) as { labels: { name: string }[] };
+  return body.labels.map((l) => l.name).sort();
+}
+
+/** Whether a tool call failed via JSON-RPC error or MCP `isError`. */
+function expectToolRejected(res: ToolResult): string {
+  const body = res.body as ToolResultBody & {
+    error?: { code: number; message: string };
+  };
+  if (body.error) return body.error.message;
+  expect(body.result?.isError).toBe(true);
+  return body.result?.content?.[0]?.text ?? "";
+}
+
+describe("image rejection on entity writes", () => {
+  it("omits image from create/update schemas and documents set_cover/remove_cover", async () => {
+    suite.requireProject();
+    const token = await mintMcpToken(owner, ["read", "write"]);
+    const tools = await listTools(token);
+    const byName = new Map(tools.map((t) => [t.name, t]));
+
+    for (const name of [
+      "create_track",
+      "create_collection",
+      "update_track",
+      "update_collection",
+      "update_project",
+    ]) {
+      const tool = byName.get(name);
+      expect(tool).toBeDefined();
+      const props = (tool!.inputSchema.properties ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect("image" in props).toBe(false);
+      expect(tool!.description).toContain("set_cover");
+      expect(tool!.description).toContain("remove_cover");
+    }
+  });
+
+  it("rejects passing image to update_track, update_collection, update_project, create_track and bulk_update", async () => {
+    suite.requireProject();
+    const trackId = await suite.mkTrack("No direct image");
+    const collectionId = await suite.mkCollection("No direct image col");
+    const token = await mintMcpToken(owner, ["read", "write"]);
+
+    for (const [tool, args] of [
+      ["update_track", { id: trackId, image: "https://example.com/a.png" }],
+      [
+        "update_collection",
+        { id: collectionId, image: "https://example.com/b.png" },
+      ],
+      [
+        "update_project",
+        { id: suite.projectId, image: "https://example.com/c.png" },
+      ],
+      [
+        "create_track",
+        {
+          title: "With Image",
+          projectId: suite.projectId,
+          image: "https://example.com/d.png",
+        },
+      ],
+      [
+        "bulk_update",
+        {
+          kind: "track",
+          projectId: suite.projectId,
+          selection: { ids: [trackId] },
+          patch: { image: "https://example.com/e.png" },
+        },
+      ],
+    ] as const) {
+      const res = await callTool(token, tool, { ...args });
+      const msg = expectToolRejected(res);
+      expect(msg.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("set_collection_order", () => {
+  it("adds missing tracks and sequences 1..N atomically without colliding on existing numbers", async () => {
+    suite.requireProject();
+    const collectionId = await suite.mkCollection("Atomic Order");
+    const a = await suite.mkTrack("Seq A");
+    const b = await suite.mkTrack("Seq B");
+    const c = await suite.mkTrack("Seq C");
+    const d = await suite.mkTrack("Seq D");
+    const token = await mintMcpToken(owner, ["read", "write"]);
+
+    const first = await callTool(token, "set_collection_order", {
+      collectionId,
+      trackIds: [a, b, c],
+    });
+    expect(rowFrom(first)).toEqual({
+      collectionId,
+      count: 3,
+      tracks: [
+        { trackId: a, title: "Seq A", trackNumber: 1 },
+        { trackId: b, title: "Seq B", trackNumber: 2 },
+        { trackId: c, title: "Seq C", trackNumber: 3 },
+      ],
+    });
+
+    // Reverse existing tracks + add missing track `d` + omit `b` (left unnumbered).
+    const second = await callTool(token, "set_collection_order", {
+      collectionId,
+      trackIds: [c, d, a],
+    });
+    expect(rowFrom(second)).toEqual({
+      collectionId,
+      count: 4,
+      tracks: [
+        { trackId: c, title: "Seq C", trackNumber: 1 },
+        { trackId: d, title: "Seq D", trackNumber: 2 },
+        { trackId: a, title: "Seq A", trackNumber: 3 },
+        { trackId: b, title: "Seq B", trackNumber: null },
+      ],
+    });
+
+    const activity = await latestActivity("collection", collectionId);
+    expect(activity?.action).toBe("updated");
+    expect(activity?.changes?.trackOrder?.to).toEqual([
+      "Seq C",
+      "Seq D",
+      "Seq A",
+      "Seq B",
+    ]);
+  });
+
+  it("rejects duplicate trackIds with 400 and foreign trackIds with 404", async () => {
+    suite.requireProject();
+    const collectionId = await suite.mkCollection("Order validation");
+    const a = await suite.mkTrack("Order Valid A");
+    const other = await suite.throwawayProject();
+    const foreignId = await foreignTrack(other);
+    const token = await mintMcpToken(owner, ["read", "write"]);
+
+    const dup = await callTool(token, "set_collection_order", {
+      collectionId,
+      trackIds: [a, a],
+    });
+    expect(errorText(dup)).toContain("400");
+
+    const foreign = await callTool(token, "set_collection_order", {
+      collectionId,
+      trackIds: [a, foreignId],
+    });
+    expect(errorText(foreign)).toContain("404");
+  });
+});
+
+describe("inline labels on create, update and bulk_update", () => {
+  it("sets initial labels on create_track and create_collection", async () => {
+    suite.requireProject();
+    const token = await mintMcpToken(owner, ["read", "write"]);
+
+    const track = rowFrom(
+      await callTool(token, "create_track", {
+        title: "Inline Label Track",
+        projectId: suite.projectId,
+        labels: ["Inline Alpha", "Inline Beta"],
+      })
+    );
+    expect(await labelNamesOf("track", track.id as number)).toEqual([
+      "Inline Alpha",
+      "Inline Beta",
+    ]);
+
+    const col = rowFrom(
+      await callTool(token, "create_collection", {
+        title: "Inline Label Collection",
+        projectId: suite.projectId,
+        labels: ["Inline Beta", "Inline Gamma"],
+      })
+    );
+    expect(await labelNamesOf("collection", col.id as number)).toEqual([
+      "Inline Beta",
+      "Inline Gamma",
+    ]);
+  });
+
+  it("supports addLabels, removeLabels and labels replacement on update_track and update_collection", async () => {
+    suite.requireProject();
+    const trackId = await suite.mkTrack("Patch Labels Track");
+    const colId = await suite.mkCollection("Patch Labels Collection");
+    const token = await mintMcpToken(owner, ["read", "write"]);
+
+    await callTool(token, "update_track", {
+      id: trackId,
+      title: "Patch Labels Track v2",
+      addLabels: ["Synth", "Vocals"],
+    });
+    expect(await labelNamesOf("track", trackId)).toEqual(["Synth", "Vocals"]);
+
+    // Label-only update with addLabels + removeLabels.
+    await callTool(token, "update_track", {
+      id: trackId,
+      addLabels: ["Mastered"],
+      removeLabels: ["Synth"],
+    });
+    expect(await labelNamesOf("track", trackId)).toEqual([
+      "Mastered",
+      "Vocals",
+    ]);
+
+    // Full replace with `labels`.
+    await callTool(token, "update_track", {
+      id: trackId,
+      labels: ["Final"],
+    });
+    expect(await labelNamesOf("track", trackId)).toEqual(["Final"]);
+
+    // Collection inline label update.
+    await callTool(token, "update_collection", {
+      id: colId,
+      addLabels: ["LP"],
+    });
+    expect(await labelNamesOf("collection", colId)).toEqual(["LP"]);
+
+    // Combining `labels` with `addLabels` or `removeLabels` fails with 400.
+    const conflict = await callTool(token, "update_track", {
+      id: trackId,
+      labels: ["Final"],
+      addLabels: ["Extra"],
+    });
+    expect(errorText(conflict)).toContain("400");
+  });
+
+  it("supports labels, addLabels and removeLabels on bulk_update", async () => {
+    suite.requireProject();
+    const a = await suite.mkTrack("Bulk Label A");
+    const b = await suite.mkTrack("Bulk Label B");
+    const token = await mintMcpToken(owner, ["read", "write"]);
+
+    const added = await callTool(token, "bulk_update", {
+      kind: "track",
+      projectId: suite.projectId,
+      selection: { ids: [a, b] },
+      patch: { priority: "Medium" },
+      addLabels: ["Bulk Tag 1", "Bulk Tag 2"],
+    });
+    expect(rowFrom(added).updated).toBe(2);
+    expect(await priorityNameOf(a)).toBe("Medium");
+    expect(await labelNamesOf("track", a)).toEqual([
+      "Bulk Tag 1",
+      "Bulk Tag 2",
+    ]);
+    expect(await labelNamesOf("track", b)).toEqual([
+      "Bulk Tag 1",
+      "Bulk Tag 2",
+    ]);
+
+    // Label-only bulk_update (removing one, adding a new one).
+    const adjusted = await callTool(token, "bulk_update", {
+      kind: "track",
+      projectId: suite.projectId,
+      selection: { ids: [a, b] },
+      addLabels: ["Bulk Tag 3"],
+      removeLabels: ["Bulk Tag 1"],
+    });
+    expect(rowFrom(adjusted).updated).toBe(2);
+    expect(await labelNamesOf("track", a)).toEqual([
+      "Bulk Tag 2",
+      "Bulk Tag 3",
+    ]);
+
+    // Replace via `patch.labels`.
+    const replaced = await callTool(token, "bulk_update", {
+      kind: "track",
+      projectId: suite.projectId,
+      selection: { ids: [a] },
+      patch: { labels: ["Bulk Only"] },
+    });
+    expect(rowFrom(replaced).updated).toBe(1);
+    expect(await labelNamesOf("track", a)).toEqual(["Bulk Only"]);
+    expect(await labelNamesOf("track", b)).toEqual([
+      "Bulk Tag 2",
+      "Bulk Tag 3",
+    ]);
+  });
+});
+
+describe("batch_update_tracks", () => {
+  it("applies heterogeneous patches, labels, notes and lyrics in one call", async () => {
+    suite.requireProject();
+    const a = await suite.mkTrack("Batch A");
+    const b = await suite.mkTrack("Batch B");
+    const token = await mintMcpToken(owner, ["read", "write"]);
+
+    const res = await callTool(token, "batch_update_tracks", {
+      projectId: suite.projectId,
+      updates: [
+        {
+          id: a,
+          title: "Batch A Updated",
+          priority: "Urgent",
+          labels: ["Batch One"],
+          notes: "Kick needs more punch",
+          lyrics: "[Verse 1]\nNeon skyline fading",
+        },
+        {
+          id: b,
+          explicit: true,
+          addLabels: ["Batch Two"],
+          notes: "Check outro fade",
+        },
+      ],
+    });
+    expect(rowFrom(res)).toEqual({ updated: 2, trackIds: [a, b] });
+
+    const detailA = await suite.request("owner", `/tracks/${a}`);
+    const bodyA = (await detailA.json()) as {
+      title: string;
+      priority: { name: string };
+      labels: { name: string }[];
+    };
+    expect(bodyA.title).toBe("Batch A Updated");
+    expect(bodyA.priority.name).toBe("Urgent");
+    expect(bodyA.labels.map((l) => l.name)).toEqual(["Batch One"]);
+
+    const notesA = rowFrom(
+      await callTool(token, "read_notes", { kind: "track", id: a })
+    );
+    expect(notesA.markdown).toContain("Kick needs more punch");
+    const lyricsA = rowFrom(
+      await callTool(token, "read_lyrics", { trackId: a })
+    );
+    expect(lyricsA.markdown).toContain("Neon skyline fading");
+
+    expect(await explicitOf(b)).toBe(true);
+    expect(await labelNamesOf("track", b)).toEqual(["Batch Two"]);
+    const notesB = rowFrom(
+      await callTool(token, "read_notes", { kind: "track", id: b })
+    );
+    expect(notesB.markdown).toContain("Check outro fade");
+  });
+
+  it("rejects duplicate ids, cross-project tracks, image fields and conflicting label flags", async () => {
+    suite.requireProject();
+    const a = await suite.mkTrack("Batch Guard A");
+    const other = await suite.throwawayProject();
+    const foreignId = await foreignTrack(other);
+    const token = await mintMcpToken(owner, ["read", "write"]);
+
+    const dup = await callTool(token, "batch_update_tracks", {
+      projectId: suite.projectId,
+      updates: [
+        { id: a, title: "One" },
+        { id: a, title: "Two" },
+      ],
+    });
+    expect(errorText(dup)).toContain("400");
+
+    const foreign = await callTool(token, "batch_update_tracks", {
+      projectId: suite.projectId,
+      updates: [
+        { id: a, title: "Should not apply" },
+        { id: foreignId, title: "Foreign" },
+      ],
+    });
+    expect(errorText(foreign)).toContain("404");
+
+    const withImage = await callTool(token, "batch_update_tracks", {
+      projectId: suite.projectId,
+      updates: [{ id: a, image: "https://example.com/nope.png" }],
+    });
+    expect(expectToolRejected(withImage).length).toBeGreaterThan(0);
+
+    const conflictLabels = await callTool(token, "batch_update_tracks", {
+      projectId: suite.projectId,
+      updates: [{ id: a, labels: ["X"], addLabels: ["Y"] }],
+    });
+    expect(errorText(conflictLabels)).toContain("400");
+  });
+});
+
+describe("create_label and update_label", () => {
+  it("creates a label with colourHex, updates it, and enforces uniqueness and required fields", async () => {
+    suite.requireProject();
+    const token = await mintMcpToken(owner, ["read", "write"]);
+
+    const created = rowFrom(
+      await callTool(token, "create_label", {
+        projectId: suite.projectId,
+        name: "Coloured Label",
+        colourHex: "#ff5500",
+      })
+    );
+    expect(created.name).toBe("Coloured Label");
+    expect(created.colourHex).toBe("#ff5500");
+
+    // Duplicate name fails with 409.
+    const dup = await callTool(token, "create_label", {
+      projectId: suite.projectId,
+      name: "Coloured Label",
+    });
+    expect(errorText(dup)).toContain("409");
+
+    const updated = rowFrom(
+      await callTool(token, "update_label", {
+        projectId: suite.projectId,
+        labelId: created.id as number,
+        name: "Renamed Label",
+        colourHex: "#00aa88",
+      })
+    );
+    expect(updated.name).toBe("Renamed Label");
+    expect(updated.colourHex).toBe("#00aa88");
+
+    // Neither name nor colourHex fails validation.
+    const empty = await callTool(token, "update_label", {
+      projectId: suite.projectId,
+      labelId: created.id as number,
+    });
+    expect(expectToolRejected(empty).length).toBeGreaterThan(0);
   });
 });

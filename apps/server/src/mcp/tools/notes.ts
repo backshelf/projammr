@@ -61,6 +61,25 @@ export async function readNotes(
   };
 }
 
+async function updateEntityNotes(
+  actor: Actor,
+  kind: EntityKind,
+  id: number,
+  build: (existing: BlockDocument) => BlockDocument
+): Promise<{ markdown: string }> {
+  const gate = await requireEntity(actor, kind, id, "editor");
+  const module = ENTITIES[kind];
+  const existing = await module.row(id);
+  if (!existing)
+    throw new HTTPException(404, { message: `${module.label} not found` });
+  const field = notesField(kind);
+  const blocks = build(docOf(existing, field));
+  const after = await patchEntityAs(actor, module, gate.projectId, id, {
+    [field]: blocks,
+  });
+  return { markdown: blocksToMarkdown(docOf(after, field), "document") };
+}
+
 /**
  * Replaces one entity's notes from markdown, keeping whatever the markdown
  * cannot express through the `keep` placeholder against the stored document.
@@ -72,17 +91,26 @@ export async function writeNotes(
   id: number,
   markdown: string
 ): Promise<{ markdown: string }> {
-  const gate = await requireEntity(actor, kind, id, "editor");
-  const module = ENTITIES[kind];
-  const existing = await module.row(id);
-  if (!existing)
-    throw new HTTPException(404, { message: `${module.label} not found` });
-  const field = notesField(kind);
-  const blocks = markdownToBlocks(markdown, "document", docOf(existing, field));
-  const after = await patchEntityAs(actor, module, gate.projectId, id, {
-    [field]: blocks,
-  });
-  return { markdown: blocksToMarkdown(docOf(after, field), "document") };
+  return updateEntityNotes(actor, kind, id, (existing) =>
+    markdownToBlocks(markdown, "document", existing)
+  );
+}
+
+/**
+ * Appends markdown blocks onto the end of one entity's stored notes document,
+ * leaving every existing block (including non-markdown blocks) intact.
+ * Gated at editor, the same as any other patch.
+ */
+export async function appendNotes(
+  actor: Actor,
+  kind: EntityKind,
+  id: number,
+  markdown: string
+): Promise<{ markdown: string }> {
+  return updateEntityNotes(actor, kind, id, (existing) => [
+    ...existing,
+    ...markdownToBlocks(markdown, "document"),
+  ]);
 }
 
 export type LyricsRead = {
@@ -324,6 +352,9 @@ const readNotesInput = z.object({
 });
 const notesOutput = z.object({ markdown: z.string() });
 const writeNotesInput = readNotesInput.extend({ markdown: z.string() });
+const appendNotesInput = readNotesInput.extend({
+  markdown: z.string().trim().min(1),
+});
 
 const readLyricsInput = z.object({ trackId: z.number().int() });
 const readLyricsOutput = z.object({
@@ -389,6 +420,19 @@ export const NOTES_TOOLS = [
     output: notesOutput,
     run: (actor, { kind, id, markdown }) =>
       writeNotes(actor, kind, id, markdown),
+  }),
+  defineTool({
+    name: "append_notes",
+    title: "Append notes",
+    description:
+      "Appends markdown blocks onto the end of an entity's own notes (a " +
+      "project's description, or a track's, collection's or session's notes) " +
+      "without disturbing existing blocks, including non-markdown blocks.",
+    scope: "write",
+    input: appendNotesInput,
+    output: notesOutput,
+    run: (actor, { kind, id, markdown }) =>
+      appendNotes(actor, kind, id, markdown),
   }),
   defineTool({
     name: "read_lyrics",

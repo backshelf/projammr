@@ -1,6 +1,7 @@
 import { stubGlobal, unstubAllGlobals } from "@workspace/test/globals";
-import { beforeAll, describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it, spyOn } from "bun:test";
 import sharp from "sharp";
+import * as instancePolicyModule from "../../lib/instance-policy.js";
 import { setupSuite } from "../../test/fixtures.js";
 import {
   callTool,
@@ -43,6 +44,20 @@ async function vividJpeg(): Promise<Uint8Array<ArrayBuffer>> {
     },
   })
     .jpeg()
+    .toBuffer();
+  return Uint8Array.from(buf);
+}
+
+async function vividPng(): Promise<Uint8Array<ArrayBuffer>> {
+  const buf = await sharp({
+    create: {
+      width: 64,
+      height: 64,
+      channels: 3,
+      background: { r: 40, g: 120, b: 230 },
+    },
+  })
+    .png()
     .toBuffer();
   return Uint8Array.from(buf);
 }
@@ -157,11 +172,66 @@ describe("MCP cover tools", () => {
     }
   });
 
-  it("refuses invalid set_cover inputs and private URLs, and ignores raw image on update_collection", async () => {
+  it("uploads a cover from raw base64 and data-URL base64", async () => {
+    suite.requireProject();
+    const collectionId = await suite.mkCollection("MCP Base64 Album");
+    const trackId = await suite.mkTrack("MCP Base64 Track");
+    const token = await mintMcpToken(editor, ["read", "write"]);
+    const jpeg = await vividJpeg();
+    const png = await vividPng();
+
+    const rawRes = await callTool(token, "set_cover", {
+      kind: "collection",
+      id: collectionId,
+      data: Buffer.from(jpeg).toString("base64"),
+      filename: "vinyl-sleeve.jpg",
+    });
+    const uploaded = contentOf(rawRes) as {
+      id: number;
+      name: string;
+      type: string;
+      assetPath: string;
+      accentHue: number | null;
+      variantsJobId: number | null;
+    };
+    expect(uploaded.name).toBe("vinyl-sleeve.jpg");
+    expect(uploaded.type).toBe("image/jpeg");
+    expect(uploaded.accentHue).not.toBeNull();
+    expect(uploaded.variantsJobId).not.toBeNull();
+
+    const collection = (await (
+      await suite.request("editor", `/collections/${collectionId}`)
+    ).json()) as { image: string | null };
+    expect(collection.image).toBe(uploaded.assetPath);
+
+    const dataUrlRes = await callTool(token, "set_cover", {
+      kind: "track",
+      id: trackId,
+      data: `data:image/png;base64,${Buffer.from(png).toString("base64")}`,
+    });
+    const fromDataUrl = contentOf(dataUrlRes) as {
+      name: string;
+      type: string;
+      assetPath: string;
+      variantsJobId: number | null;
+    };
+    expect(fromDataUrl.name).toBe("cover.png");
+    expect(fromDataUrl.type).toBe("image/png");
+    expect(fromDataUrl.variantsJobId).not.toBeNull();
+
+    const track = (await (
+      await suite.request("editor", `/tracks/${trackId}`)
+    ).json()) as { image: string | null };
+    expect(track.image).toBe(fromDataUrl.assetPath);
+  });
+
+  it("refuses invalid set_cover inputs, base64 errors, size limits, and private URLs, and ignores raw image on update_collection", async () => {
     suite.requireProject();
     const collectionId = await suite.mkCollection("MCP Guarded Album");
     const token = await mintMcpToken(editor, ["read", "write"]);
     const viewerToken = await mintMcpToken(viewer, ["read", "write"]);
+    const jpeg = await vividJpeg();
+    const jpegBase64 = Buffer.from(jpeg).toString("base64");
 
     // Raw image passed to update_collection is stripped, not persisted.
     await callTool(token, "update_collection", {
@@ -175,13 +245,75 @@ describe("MCP cover tools", () => {
     expect(reread.title).toBe("MCP Guarded Album Renamed");
     expect(reread.image).toBeNull();
 
-    // Neither url nor imageId -> 400.
-    const neither = await callTool(token, "set_cover", {
+    // Zero or multiple cover sources -> 400.
+    for (const args of [
+      { kind: "collection", id: collectionId },
+      {
+        kind: "collection",
+        id: collectionId,
+        url: "https://1.1.1.1/a.jpg",
+        imageId: 1,
+      },
+      {
+        kind: "collection",
+        id: collectionId,
+        url: "https://1.1.1.1/a.jpg",
+        data: jpegBase64,
+      },
+      {
+        kind: "collection",
+        id: collectionId,
+        imageId: 1,
+        data: jpegBase64,
+      },
+      {
+        kind: "collection",
+        id: collectionId,
+        url: "https://1.1.1.1/a.jpg",
+        imageId: 1,
+        data: jpegBase64,
+      },
+    ]) {
+      const bad = await callTool(token, "set_cover", args);
+      expect(resultOf(bad)?.isError).toBe(true);
+      expect(resultOf(bad)?.content?.[0]?.text).toContain("400");
+    }
+
+    // Invalid base64 -> 400.
+    const invalidBase64 = await callTool(token, "set_cover", {
       kind: "collection",
       id: collectionId,
+      data: "not!valid@base64",
     });
-    expect(resultOf(neither)?.isError).toBe(true);
-    expect(resultOf(neither)?.content?.[0]?.text).toContain("400");
+    expect(resultOf(invalidBase64)?.isError).toBe(true);
+    expect(resultOf(invalidBase64)?.content?.[0]?.text).toContain("400");
+
+    // Valid base64 of non-image bytes -> 400.
+    const nonImage = await callTool(token, "set_cover", {
+      kind: "collection",
+      id: collectionId,
+      data: Buffer.from("<html>not an image</html>").toString("base64"),
+    });
+    expect(resultOf(nonImage)?.isError).toBe(true);
+    expect(resultOf(nonImage)?.content?.[0]?.text).toContain("400");
+
+    // Base64 exceeding instance upload limit -> 400.
+    const limitSpy = spyOn(
+      instancePolicyModule,
+      "uploadLimitBytes"
+    ).mockReturnValueOnce(jpeg.byteLength - 1);
+    try {
+      const oversized = await callTool(token, "set_cover", {
+        kind: "collection",
+        id: collectionId,
+        data: jpegBase64,
+      });
+      expect(resultOf(oversized)?.isError).toBe(true);
+      expect(resultOf(oversized)?.content?.[0]?.text).toContain("400");
+      expect(resultOf(oversized)?.content?.[0]?.text).toContain("upload limit");
+    } finally {
+      limitSpy.mockRestore();
+    }
 
     // Private URL -> 400.
     const privateUrl = await callTool(token, "set_cover", {
