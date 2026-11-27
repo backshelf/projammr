@@ -14,14 +14,23 @@ import {
   useTrackAudioMeasure,
 } from "@/components/track-audio/measures";
 import { useProgressFrames } from "@/components/music-player/player-hooks";
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { SegmentedPill } from "@workspace/ui/components/segmented-pill";
 import { TogglePill } from "@workspace/ui/components/toggle-pill";
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
 import { cn } from "@workspace/ui/lib/utils";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip";
+
+/** Compact labels for the phone single-strip switcher so all three fit on one line. */
+const PHONE_STRIP_LABELS: Readonly<Record<StripId, string>> = {
+  loudness: "Loudness",
+  spectrogram: "Spectrum",
+  change: "Changes",
+};
 
 /** A chart legend rather than a row of switches: a pressed pill stays quiet
  *  and says it is on with a filled swatch of the colour the strips draw in,
@@ -104,6 +113,27 @@ export function MeasureStack({
   onSeek: (seconds: number) => void;
 }) {
   const has = (id: StripId) => selectedIds.includes(id);
+  const isPhone = useIsMobile();
+  const [phoneStrip, setPhoneStrip] = useState<StripId | null>(null);
+
+  const availableStrips = STRIP_IDS.filter((id) => {
+    if (id === "spectrogram") return spectrogramKey !== null;
+    if (id === "change") return previousAudioId !== null;
+    return true;
+  });
+
+  // On phones, keep vertical stack compact: Waveform + 1 active analysis strip
+  // chosen via a local segmented switcher, without overwriting the viewer's
+  // desktop multi-strip preference.
+  const phoneSingleStrip = isPhone && selectedIds.length > 0;
+  const activePhoneStrip: StripId | null = !phoneSingleStrip
+    ? null
+    : phoneStrip !== null && availableStrips.includes(phoneStrip)
+      ? phoneStrip
+      : (availableStrips.find((id) => has(id)) ?? availableStrips[0] ?? null);
+
+  const show = (id: StripId) =>
+    phoneSingleStrip ? activePhoneStrip === id : has(id);
 
   // One playhead through every strip: the position is written to the stack
   // as a fraction, and each strip's line reads it, so a frame costs one
@@ -121,12 +151,12 @@ export function MeasureStack({
   });
 
   const loudnessCurve = useTrackAudioMeasure<(number | null)[]>(
-    has("loudness") ? trackAudioId : null,
+    show("loudness") ? trackAudioId : null,
     "loudnessCurve"
   );
   const diff = useTrackAudioDiff(
-    has("change") ? previousAudioId : null,
-    has("change") ? trackAudioId : null
+    show("change") ? previousAudioId : null,
+    show("change") ? trackAudioId : null
   );
 
   return (
@@ -135,21 +165,37 @@ export function MeasureStack({
       data-live={live ? "" : undefined}
       className="group/strips col-span-2 mt-2 grid grid-cols-subgrid"
     >
-      <div
-        className="col-span-2 flex flex-wrap gap-1.5 pb-2"
-        role="group"
-        aria-label="Strips"
-      >
-        {STRIP_IDS.map((id) => (
-          <StripPill
-            key={id}
-            id={id}
-            pressed={has(id)}
-            onPressedChange={() => onToggle(id)}
-          />
-        ))}
-      </div>
-      {has("loudness") && loudnessCurve && (
+      {phoneSingleStrip ? (
+        availableStrips.length > 1 && activePhoneStrip !== null ? (
+          <div className="col-span-2 pb-2">
+            <SegmentedPill
+              aria-label="Analysis strip"
+              options={availableStrips.map((id) => ({
+                value: id,
+                label: PHONE_STRIP_LABELS[id],
+              }))}
+              value={activePhoneStrip}
+              onValueChange={setPhoneStrip}
+            />
+          </div>
+        ) : null
+      ) : (
+        <div
+          className="col-span-2 flex flex-wrap gap-1.5 pb-2"
+          role="group"
+          aria-label="Strips"
+        >
+          {STRIP_IDS.map((id) => (
+            <StripPill
+              key={id}
+              id={id}
+              pressed={has(id)}
+              onPressedChange={() => onToggle(id)}
+            />
+          ))}
+        </div>
+      )}
+      {show("loudness") && loudnessCurve && (
         <LoudnessStrip
           curve={loudnessCurve}
           durationSeconds={durationSeconds}
@@ -157,7 +203,7 @@ export function MeasureStack({
           onSeek={onSeek}
         />
       )}
-      {has("spectrogram") && spectrogramKey && (
+      {show("spectrogram") && spectrogramKey && (
         <SpectrogramStrip
           spectrogramKey={spectrogramKey}
           durationSeconds={durationSeconds}
@@ -165,7 +211,7 @@ export function MeasureStack({
           onSeek={onSeek}
         />
       )}
-      {has("change") && diff && (
+      {show("change") && diff && (
         <ChangeStrip
           change={diff.change}
           summary={diff.summary}

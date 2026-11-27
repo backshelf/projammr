@@ -19,6 +19,7 @@ import {
   type SettingResult,
 } from "@/components/command-palette/settings-results";
 import { shouldRenderPalette } from "@/components/command-palette/should-render-palette";
+import { tabQuickJumps } from "@/components/command-palette/tab-shortcuts";
 import {
   prefixCandidates,
   usePrefixCommandResults,
@@ -58,6 +59,7 @@ import {
   CommandShortcut,
 } from "@workspace/ui/components/command";
 import { useIsApplePlatform } from "@workspace/ui/hooks/use-apple-platform";
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
 import { IconFolderPlus, IconSettings } from "@tabler/icons-react";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { useRouter } from "next/navigation";
@@ -129,7 +131,8 @@ export function CommandPalette({
   const mutate = useMutate();
   const current = useCurrentRoute();
   const apple = useIsApplePlatform();
-  const { paletteAliases, paletteEmptyGroups } = useShellPolicy();
+  const isMobile = useIsMobile();
+  const { dockTabs, paletteAliases, paletteEmptyGroups } = useShellPolicy();
 
   const actionContext = useActionContext();
   const commands = useCommands();
@@ -225,7 +228,24 @@ export function CommandPalette({
   const matchedActions = matchActions(paletteCommands, query);
   const matchedSettings = matchSettingResults(settings, query);
 
+  const quickJumps = isMobile
+    ? tabQuickJumps(dockTabs, {
+        projectId: actionContext.projectId,
+        route: current?.route ?? null,
+        pathname: actionContext.pathname,
+      })
+    : [];
+  const quickJumpByCommandId = new Map(
+    quickJumps.flatMap((jump) =>
+      jump.commandId ? [[jump.commandId, jump] as const] : []
+    )
+  );
+
   function commandShortcut(command: ListedCommand) {
+    if (isMobile) {
+      const jump = quickJumpByCommandId.get(command.id);
+      return jump ? <CommandShortcut>{jump.hint}</CommandShortcut> : null;
+    }
     const combo = command.keys[0];
     return combo ? (
       <CommandShortcut>{comboLabel(combo, apple)}</CommandShortcut>
@@ -426,8 +446,23 @@ export function CommandPalette({
             </>
           ) : query.trim().length === 0 ? (
             <>
-              {emptyQuery.none && (
+              {emptyQuery.none && quickJumps.length === 0 && (
                 <CommandEmpty>Type to search this project</CommandEmpty>
+              )}
+              {quickJumps.length > 0 && (
+                <CommandGroup heading="Quick jump">
+                  {quickJumps.map((jump) => (
+                    <CommandItem
+                      key={`quick-jump-${jump.id}`}
+                      value={`quick-jump-${jump.id}`}
+                      onSelect={() => go(jump.href)}
+                    >
+                      <jump.icon />
+                      <span className="truncate">{jump.label}</span>
+                      <CommandShortcut>{jump.hint}</CommandShortcut>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
               )}
               {emptyQuery.groups.map((group) => (
                 <Fragment key={group}>{emptyGroup[group]}</Fragment>

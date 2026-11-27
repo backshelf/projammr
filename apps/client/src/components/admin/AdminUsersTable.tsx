@@ -105,10 +105,12 @@ export function AdminUsersTable({ data }: { data: InstanceUsersPage }) {
                 <TableCell>
                   {user.lastSeenAt ? format.relative(user.lastSeenAt) : "Never"}
                 </TableCell>
-                <TableCell className="num">
+                <TableCell className="num tabular-nums">
                   {format.bytes(user.storageBytes, 1)}
                 </TableCell>
-                <TableCell className="num">{user.projectCount}</TableCell>
+                <TableCell className="num tabular-nums">
+                  {user.projectCount}
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
                     <span title={roleReason}>

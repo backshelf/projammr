@@ -212,7 +212,7 @@ export function TrackAudioDialog({
                       <span className="min-w-0 flex-1 truncate text-body">
                         {candidate.name}
                       </span>
-                      <span className="shrink-0 font-mono text-small text-ink-soft">
+                      <span className="shrink-0 font-mono text-small text-ink-soft tabular-nums">
                         {format.bytes(candidate.size)} ·{" "}
                         {format.date(audioDate(candidate))}
                       </span>

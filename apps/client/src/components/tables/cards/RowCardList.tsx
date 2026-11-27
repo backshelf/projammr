@@ -61,7 +61,7 @@ const OVERSCAN = 10;
 
 /** A first-paint guess for a card's height; `measureElement` corrects it once
  *  it is in the DOM, so this only has to be roughly right. */
-const ESTIMATED_ITEM_HEIGHT = 72;
+const ESTIMATED_ITEM_HEIGHT = 76;
 
 /** One slot of the flattened list the virtualiser indexes: a section's
  *  heading, or a card. */

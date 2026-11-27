@@ -50,7 +50,7 @@ function TabItem({ tab, context }: { tab: Tab; context: TabContext }) {
   const followShortcut = useCallback(() => {
     if (shortcut !== null) router.push(shortcut);
   }, [router, shortcut]);
-  const { handlers: longPress } = useLongPress(followShortcut);
+  const { handlers: longPress, pressing } = useLongPress(followShortcut);
 
   const body = (
     <>
@@ -64,9 +64,20 @@ function TabItem({ tab, context }: { tab: Tab; context: TabContext }) {
           className={"absolute inset-x-0 top-0 h-0.5 bg-art"}
         />
       )}
-      <tab.icon
-        className={"size-5 motion-press group-active/tab:scale-[0.98]"}
-      />
+      <span className={"relative inline-flex"}>
+        <tab.icon
+          className={"size-5 motion-press group-active/tab:scale-[0.98]"}
+        />
+        {shortcut !== null && (
+          <span
+            aria-hidden
+            data-slot={"tab-shortcut-hint"}
+            className={
+              "absolute -top-0.5 -right-1 size-1 rounded-full bg-ink-faint"
+            }
+          />
+        )}
+      </span>
       <span className={LABEL}>{tab.label}</span>
     </>
   );
@@ -76,7 +87,8 @@ function TabItem({ tab, context }: { tab: Tab; context: TabContext }) {
     active ? "text-ink" : "text-ink-soft",
     // iOS answers a held link with its own preview and callout menu, which
     // would rise over the shortcut this tab holds for the same gesture.
-    shortcut !== null && "select-none [-webkit-touch-callout:none]"
+    shortcut !== null &&
+      "motion-settle select-none [-webkit-touch-callout:none] data-pressing:scale-[0.95]"
   );
 
   if (tab.kind === "palette") {
@@ -103,6 +115,8 @@ function TabItem({ tab, context }: { tab: Tab; context: TabContext }) {
     <AppLink
       href={href}
       className={className}
+      data-pressing={shortcut !== null && pressing ? true : undefined}
+      aria-description={shortcut !== null ? "Hold for quick jump" : undefined}
       {...(shortcut !== null ? longPress : {})}
       // A tab that is already the page is not a move between options, so it
       // stays silent — the same rule the Tabs primitive follows.

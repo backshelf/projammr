@@ -79,4 +79,16 @@ describe("TabBar", () => {
     renderBar(["tracks"]);
     expect(tabNames()).toEqual(["Tracks"]);
   });
+
+  it("marks only tabs with a long-press shortcut with a quiet visual and accessible hint", () => {
+    renderBar();
+
+    const notes = screen.getByRole("link", { name: "Notes" });
+    const tracks = screen.getByRole("link", { name: "Tracks" });
+
+    expect(notes.querySelector('[data-slot="tab-shortcut-hint"]')).toBeTruthy();
+    expect(notes.getAttribute("aria-description")).toBe("Hold for quick jump");
+    expect(tracks.querySelector('[data-slot="tab-shortcut-hint"]')).toBeNull();
+    expect(tracks.getAttribute("aria-description")).toBeNull();
+  });
 });

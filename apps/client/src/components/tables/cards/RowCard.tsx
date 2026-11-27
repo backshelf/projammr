@@ -16,7 +16,7 @@ import { CardPlayButton } from "./CardPlay";
 import { useLongPress } from "@/hooks/use-long-press";
 import type { RowCardChild, RowCardModel } from "./row-card-model";
 
-/** The subtitle and key fields as one run of text. */
+/** The subtitle and key fields as one full-width, single-line run of text. */
 function MetaText({ row }: { row: RowCardModel }) {
   // Keyed by what each part is: the subtitle, or a field by its label.
   const parts: { key: string; value: ReactNode }[] = [];
@@ -26,32 +26,24 @@ function MetaText({ row }: { row: RowCardModel }) {
   if (parts.length === 0) return null;
 
   return (
-    <span className="min-w-0 flex-1 truncate text-small text-ink-soft phone:line-clamp-2 phone:whitespace-normal">
+    <div className="mt-0.5 min-w-0 truncate text-small text-ink-soft">
       {parts.map((part, index) => (
         <span key={part.key}>
           {index > 0 ? <span className="px-1 text-ink-faint">·</span> : null}
           {part.value}
         </span>
       ))}
-    </span>
+    </div>
   );
 }
 
 /**
- * What the row is beyond its name: its status and priority, then the text the
- * card carries. All of it sits under the title rather than at the row's
- * trailing edge, where a chip and a badge would leave the title a sliver of
- * the width on a phone.
+ * Compact status and priority pills on their own row beneath the subtitle and
+ * fields, so metadata text keeps the full card width and cards hold a uniform
+ * rhythm on narrow screens.
  */
-function MetaLine({ row }: { row: RowCardModel }) {
-  if (
-    !row.status &&
-    !row.priority &&
-    !row.subtitle &&
-    row.fields.length === 0
-  ) {
-    return null;
-  }
+function ChipRow({ row }: { row: RowCardModel }) {
+  if (!row.status && !row.priority) return null;
 
   return (
     <div className="mt-1 flex min-w-0 items-center gap-1.5">
@@ -63,12 +55,11 @@ function MetaLine({ row }: { row: RowCardModel }) {
         />
       ) : null}
       {row.priority ? <PriorityBadge level={row.priority} /> : null}
-      <MetaText row={row} />
     </div>
   );
 }
 
-/** Title, its flag and the meta line — everything a tap on the row acts on. */
+/** Title, metadata text, and status/priority chips — everything a tap on the row acts on. */
 function Identity({ row }: { row: RowCardModel }) {
   return (
     <div className="min-w-0">
@@ -82,7 +73,8 @@ function Identity({ row }: { row: RowCardModel }) {
           </StatusChip>
         ) : null}
       </div>
-      <MetaLine row={row} />
+      <MetaText row={row} />
+      <ChipRow row={row} />
     </div>
   );
 }
@@ -160,7 +152,8 @@ export const RowCard = memo(function RowCard({
       role="listitem"
       className={cn(
         "border-b border-rule",
-        "select-none [-webkit-touch-callout:none]"
+        "select-none [-webkit-touch-callout:none]",
+        "[contain-intrinsic-size:auto_76px] [content-visibility:auto]"
       )}
     >
       <div

@@ -14,7 +14,7 @@ export function VersionBadge({
     <span
       className={cn(
         "inline-flex h-4 shrink-0 items-center rounded-sm border border-rule-strong px-1",
-        "font-mono text-micro/none text-ink-soft",
+        "font-mono text-micro/none text-ink-soft tabular-nums",
         active && "border-transparent bg-art text-paper",
         className
       )}

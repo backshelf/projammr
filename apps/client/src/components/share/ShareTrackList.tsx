@@ -102,9 +102,24 @@ export function ShareTrackList() {
                   <VersionBadge version={entry.version} />
                 )}
                 {entry.durationMs != null && (
-                  <RowMeta className={cn("shrink-0", artwork && "on-art-soft")}>
+                  <RowMeta
+                    className={cn(
+                      "shrink-0 tabular-nums",
+                      artwork && "on-art-soft"
+                    )}
+                  >
                     {format.duration(entry.durationMs)}
                   </RowMeta>
+                )}
+                {!playing && (
+                  <IconPlayerPlayFilled
+                    aria-hidden
+                    data-slot="coarse-play"
+                    className={cn(
+                      "hidden size-3 shrink-0 text-ink-soft coarse:inline-block",
+                      artwork && "on-art-soft"
+                    )}
+                  />
                 )}
               </Row>
             );

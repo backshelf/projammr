@@ -116,7 +116,7 @@ export function AudioCompareControls({
           />
 
           {comparing.unmatched ? (
-            <span className="text-micro text-ink-soft">
+            <span className="text-micro text-ink-soft tabular-nums">
               {unmatchedCompareLine(
                 selected.lufs,
                 comparing.b.trackAudio?.lufs
@@ -178,7 +178,7 @@ export function ComparePhase({
   return (
     <div className={cn("flex min-w-32 flex-col gap-1", className)}>
       <Meter aria-label={view.label} value={view.percent} />
-      <p className="text-micro text-ink-soft">{view.line}</p>
+      <p className="text-micro text-ink-soft tabular-nums">{view.line}</p>
     </div>
   );
 }

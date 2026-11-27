@@ -1905,8 +1905,9 @@ writing/removing `?view=board`; the module page picks the surface server-side.
 (`RowCardSection[]`; an ungrouped list is one label-less section; `selection`/`expansion` are optional capability
 objects whose presence _is_ the mode; one shared `RowActionSheet`). `row-card-model.ts` `RowCardModel`
 (`fields` ≤ 2 via `card-fields.ts` `cardFieldsFrom(peekRow, keyFields)`, `children` from `cards.childCard`,
-`play`). `RowCard` (`TrackCell` thumb / checkbox in select mode / `CardPlayButton`, flag + status + priority +
-meta line, expand chevron, `⋯` or long-press via `hooks/use-long-press.ts` — 450 ms / 8 px / touch only, swallows
+`play`). `RowCard` (`TrackCell` thumb / checkbox in select mode / `CardPlayButton`, three-tier identity: title + flag,
+full-width single-line `MetaText`, separate `ChipRow` of status + priority, `[content-visibility:auto]` with `76px`
+intrinsic size, expand chevron, `⋯` or long-press via `hooks/use-long-press.ts` — 450 ms / 8 px / touch only, swallows
 the trailing click). `RowActionSheet` renders `ActionItems` through `sheetPrimitives` (collapsibles instead of
 submenus) and runs the chosen action from `SheetContent onClosed` so a follow-up dialog never fights the sheet's modal
 layer. `FilterSheet` (`next/dynamic` ssr:false, opened from the phone toolbar's Filter button with
@@ -2901,7 +2902,9 @@ read through `use-selected-strips.ts`'s `useSelectedStrips()` — the visuals po
 `knownStrips`), until the legend is toggled this session, a module-level `useSyncExternalStore` choice shared by
 every track page and kept nowhere — then one `StripRow`
 (the shared 24px caption + click/keyboard seek surface, over `music-player/scrub-math.ts`'s
-`clampPosition`/`keyboardSeek`) per chosen strip. `MeasureStack` takes `live` (the player is on this version) and
+`clampPosition`/`keyboardSeek`) per chosen strip. On phones (`useIsMobile()`), `MeasureStack` replaces the multi-strip
+stack with a local `SegmentedPill` switcher (`Loudness | Spectrum | Changes`, filtered to available strips and hidden
+when only one is available) showing Waveform + 1 active strip without mutating `visuals.strips`. `MeasureStack` takes `live` (the player is on this version) and
 writes the playhead fraction to its own `--playhead` from `useProgressFrames`; each `StripRow` translates a 1px
 line by it, shown through `group-data-live/strips`. Each strip is a thin render layer over a pure value-to-geometry
 module tested standalone: `loudness-strip.ts`, `change-strip.ts`. `strip-curve.ts`'s `curveSegments`/`areaSegments`

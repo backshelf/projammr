@@ -31,7 +31,7 @@ export function ValueChange({
   to: unknown;
 }) {
   return (
-    <span className="text-ink-soft">
+    <span className="text-ink-soft tabular-nums">
       <SettingValueText definition={definition} value={from} />
       <span aria-hidden> →</span>
       <span className="sr-only"> to</span>{" "}

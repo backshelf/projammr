@@ -59,7 +59,7 @@ export function ChangeStrip({
           ))}
         </div>
       </StripRow>
-      <p className="col-start-2 text-micro text-ink-faint">
+      <p className="col-start-2 text-micro text-ink-faint tabular-nums">
         {loudest ? (
           <button
             type="button"

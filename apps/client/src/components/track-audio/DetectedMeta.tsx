@@ -23,6 +23,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip";
+import { cn } from "@workspace/ui/lib/utils";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -71,6 +72,7 @@ function DetectedField({
   detectedValue,
   confidence,
   patches,
+  tabular,
 }: {
   label: string;
   ownValue: string | null;
@@ -79,6 +81,7 @@ function DetectedField({
   /** The patches `Adopt` sends, or null when there is nowhere to write them
    *  (no main session) or nothing valid to adopt. */
   patches: AdoptPatch[] | null;
+  tabular?: boolean;
 }) {
   const mutate = useMutate();
   const [adopting, setAdopting] = useState(false);
@@ -87,7 +90,13 @@ function DetectedField({
     return (
       <div>
         <RailLabel>{label}</RailLabel>
-        <MetadataItem>{ownValue}</MetadataItem>
+        <MetadataItem>
+          {tabular ? (
+            <span className="tabular-nums">{ownValue}</span>
+          ) : (
+            ownValue
+          )}
+        </MetadataItem>
       </div>
     );
   }
@@ -132,7 +141,12 @@ function DetectedField({
         data-adopting={adopting ? "" : undefined}
         className="group/adopt flex items-baseline gap-1.5 text-small"
       >
-        <span className="text-ink-faint motion-settle group-data-adopting/adopt:text-ink">
+        <span
+          className={cn(
+            "text-ink-faint motion-settle group-data-adopting/adopt:text-ink",
+            tabular && "tabular-nums"
+          )}
+        >
           {detectedValue}
         </span>
         <span className="flex items-baseline gap-1.5 motion-settle group-data-adopting/adopt:opacity-0">
@@ -203,6 +217,7 @@ export function DetectedMeta({
         ownValue={ownBpm && format.tempo(ownBpm)}
         detectedValue={detectedBpm != null ? format.tempo(detectedBpm) : null}
         confidence={bpmConfidence}
+        tabular
         patches={
           mainSessionId != null && detectedBpm != null
             ? [adoptTempoPatch(mainSessionId, detectedBpm)]

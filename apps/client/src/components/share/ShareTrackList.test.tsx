@@ -95,4 +95,29 @@ describe("ShareTrackList", () => {
     expect(current?.textContent).not.toContain("1");
     expect(other?.textContent).toContain("2");
   });
+
+  it("shows a coarse-pointer play glyph on idle rows while keeping track numbers and fine hover swap", () => {
+    isPlaying = true;
+    renderList([entry(1, "First"), entry(2, "Second")], { loaded: true });
+
+    const [playingRow, idleRow] = screen.getAllByRole("button");
+    expect(playingRow?.querySelector('[data-slot="coarse-play"]')).toBeNull();
+
+    const coarsePlay = idleRow?.querySelector('[data-slot="coarse-play"]');
+    expect(coarsePlay).toBeTruthy();
+    expect(coarsePlay?.getAttribute("class")).toContain("coarse:inline-block");
+    expect(coarsePlay?.getAttribute("class")).toContain("hidden");
+    expect(idleRow?.textContent).toContain("2");
+    expect(
+      idleRow?.querySelector(".fine\\:group-hover\\/row\\:block")
+    ).toBeTruthy();
+  });
+
+  it("renders durations with tabular numerals", () => {
+    renderList([entry(1, "First"), entry(2, "Second")]);
+
+    for (const duration of screen.getAllByText("2:05")) {
+      expect(duration.className).toContain("tabular-nums");
+    }
+  });
 });
