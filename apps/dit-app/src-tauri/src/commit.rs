@@ -87,7 +87,7 @@ mod tests {
             for name in ["Empty Set.als", "Arranged Set.als"] {
                 fs::copy(Path::new(FIXTURES).join(name), project.join(name)).unwrap();
             }
-            let remote = AppRemote::new(dir.path().join("config.toml"));
+            let remote = AppRemote::for_app(dir.path().join("config.toml"), false);
             let registry = dit_daws::registry();
             let run = Run {
                 cwd: project,

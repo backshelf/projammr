@@ -26,10 +26,6 @@ pub struct AppRemote {
 }
 
 impl AppRemote {
-    pub fn new(config: PathBuf) -> Self {
-        Self::for_app(config, false)
-    }
-
     pub fn for_app(config: PathBuf, dev: bool) -> Self {
         AppRemote {
             config,
