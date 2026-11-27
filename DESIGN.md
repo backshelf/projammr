@@ -1036,8 +1036,9 @@ moves. Under reduced motion the camera moves at once. Without WebGL the web is o
   `GrMeter` draws on `RulerScale`: −24..0 dB with an `art/70` bar hanging from 0, an ink hold tick and the
   figure above, the loudness meters' ballistics reused. HEAR IT AS is four labelled rows (Stereo, Monitor,
   Bands, Device) in the same label column. BOUNCE prints the version's own waveform: it waits in faint ink, the
-  render draws it in `--art` left to right as far as it has really got, and a finished bounce keeps the print and
-  links the attachment by name. HEAR IT AS and the compare pills build on `TogglePill` and `SegmentedPill`.
+  render draws it in `--art` left to right as far as it has really got, downloads the FLAC locally with an opt-in
+  Upload button beside Bounce, and an uploaded bounce keeps the print and links the attachment by name. HEAR IT AS
+  and the compare pills build on `TogglePill` and `SegmentedPill`.
 
 ### Notes, comments, activity and diffs
 

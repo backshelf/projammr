@@ -1,9 +1,10 @@
 /**
  * Prints what the Lab plays: an `OfflineAudioContext` render of the current
  * source through the same `dsp-processor.js` module and the listener's
- * settings, encoded to 24-bit FLAC and uploaded as a track attachment. The
- * FLAC's size is estimated against the server's upload cap before the render
- * starts, so a song too long to upload stops at once rather than after it.
+ * settings, encoded to 24-bit FLAC and downloaded directly to the listener's
+ * device. Uploading the rendered file as a track attachment is a separate,
+ * opt-in step ({@link uploadBounce}) so listeners can audition or keep local
+ * prints without cluttering the project's files or hitting server upload caps.
  *
  * Independent of whether the Lab is engaged for live playback — a bounce at
  * every setting left default is still a valid print of the plain file, and
@@ -26,7 +27,7 @@ import {
   uploadAsset,
   uploadLimit,
 } from "@/components/uploads/upload-client";
-import { estimateFlacBytes } from "@/lib/dsp/flac-size";
+import { downloadBlob } from "@/lib/download";
 import type {
   FlacEncodeRequest,
   FlacEncodeResponse,
@@ -60,9 +61,7 @@ const CHECKPOINT_SECONDS = 5;
 const CHANNELS = 2;
 
 export type BounceRenderProgress =
-  | { phase: "rendering"; fraction: number }
-  | { phase: "encoding" }
-  | { phase: "uploading"; fraction: number };
+  { phase: "rendering"; fraction: number } | { phase: "encoding" };
 
 export type BounceInput = {
   source: PlaybackSource;
@@ -71,10 +70,14 @@ export type BounceInput = {
   loudness: LabLoudness;
   /** The match-EQ curve currently applied, from the engine. */
   curve: number[] | null;
+  /** The downloaded file's name, already composed. */
+  name: string;
+};
+
+export type BounceUploadInput = {
+  file: File;
   projectId: number;
   trackId: number;
-  /** The attachment's file name, already composed. */
-  name: string;
 };
 
 export type BounceDeps = LabEngineDeps & {
@@ -89,6 +92,8 @@ export type BounceDeps = LabEngineDeps & {
     channels: Float32Array[],
     sampleRate: number
   ) => Promise<ArrayBuffer>;
+  /** Saves the encoded bounce to the listener's device. */
+  download: (blob: Blob, fileName: string) => void;
   /** The largest file, in bytes, the server accepts as an upload. */
   uploadLimit: () => Promise<number | ActionError>;
   upload: (
@@ -103,25 +108,30 @@ export type BounceDeps = LabEngineDeps & {
   ) => Promise<Asset | ActionError>;
 };
 
-/** The failure a bounce reports when its file is, or would be, over the upload
- *  cap. A size in whole units has no decimal sign for a locale to change, so
- *  the default formatter set writes it as any viewer's would. */
-function overCap(size: number, maxBytes: number, estimated: boolean) {
+export type BounceUploadDeps = Pick<
+  BounceDeps,
+  "uploadLimit" | "upload" | "attach"
+>;
+
+/** The failure an upload reports when the rendered file is over the server's
+ *  upload cap. A size in whole units has no decimal sign for a locale to
+ *  change, so the default formatter set writes it as any viewer's would. */
+function overCap(size: number, maxBytes: number) {
   const mb = (bytes: number) => defaultFormatters().bytes(bytes, 0);
   return {
-    error: `This bounce ${estimated ? "would be about" : "is"} ${mb(size)}; uploads are limited to ${mb(maxBytes)}.`,
+    error: `This bounce is ${mb(size)}; uploads are limited to ${mb(maxBytes)}.`,
   };
 }
 
-/** Raises the abort reason once the caller has moved on, so a render already in
- *  flight stops short of encoding, uploading or attaching for a track nobody
- *  is bouncing anymore. */
+/** Raises the abort reason once the caller has moved on, so a render or upload
+ *  already in flight stops short of downloading, uploading or attaching for a
+ *  track nobody is bouncing anymore. */
 function assertNotAborted(signal: AbortSignal): void {
   if (signal.aborted)
     throw signal.reason ?? new DOMException("Aborted", "AbortError");
 }
 
-/** The chain's output frames per source frame it reads, and its latency at `settings`. */
+/** The chain's latency at `settings`, in samples at {@link BOUNCE_SAMPLE_RATE}. */
 async function probeChain(
   settings: LabSettings,
   loudness: LabLoudness,
@@ -237,26 +247,18 @@ async function renderChannels(
 }
 
 /**
- * Renders `input.source` through the current chain, encodes it and uploads
- * it as a track attachment. `onProgress` reports the rendering fraction,
- * a bare `encoding` phase (the worker gives no progress of its own) and the
- * uploading fraction; the resolved value is the attached asset, or the
- * upload-limit, upload or attach call's error — including a bounce whose
- * estimated FLAC is over the cap, which stops before rendering, and one the
- * upload refused as too big after all, which reports the same way. Rejects once `signal` aborts, checked
- * between every phase, so a bounce nobody is waiting on anymore never
- * uploads or attaches for a track the listener has moved past.
+ * Renders `input.source` through the current chain, encodes it to 24-bit FLAC,
+ * triggers a local download on the current device, and resolves with the
+ * encoded `File` so the listener can optionally upload it afterwards. Rejects
+ * once `signal` aborts, checked between every phase, so a bounce nobody is
+ * waiting on anymore never encodes or saves a file for an old track.
  */
 export async function bounce(
   input: BounceInput,
   deps: BounceDeps,
   onProgress: (status: BounceRenderProgress) => void,
   signal: AbortSignal
-): Promise<Asset | ActionError> {
-  const maxBytes = await deps.uploadLimit();
-  if (typeof maxBytes !== "number") return maxBytes;
-  assertNotAborted(signal);
-
+): Promise<File> {
   const decodeCtx = deps.createOfflineContext(CHANNELS, 1, BOUNCE_SAMPLE_RATE);
   const { buffer } = await loadSourceBytes(
     input.source,
@@ -271,8 +273,6 @@ export async function bounce(
   const speed = playbackSpeed(input.settings);
   const latency = await probeChain(input.settings, input.loudness, input.curve);
   const length = Math.ceil(decoded.length / speed) + latency;
-  const estimate = estimateFlacBytes(length, CHANNELS);
-  if (estimate > maxBytes) return overCap(estimate, maxBytes, true);
 
   const channels = Array.from(
     { length: Math.min(CHANNELS, decoded.numberOfChannels) },
@@ -298,16 +298,37 @@ export async function bounce(
   );
   const flac = await deps.encode(renderedChannels, BOUNCE_SAMPLE_RATE);
   assertNotAborted(signal);
-  const file = new File([flac], input.name, { type: "audio/flac" });
 
-  onProgress({ phase: "uploading", fraction: 0 });
-  const uploaded = await deps.upload(file, input.projectId, (fraction) =>
-    onProgress({ phase: "uploading", fraction })
-  );
+  const file = new File([flac], input.name, { type: "audio/flac" });
+  deps.download(file, file.name);
+  return file;
+}
+
+/**
+ * Uploads an already-rendered bounce file and attaches it to the track. Checks
+ * the server's upload cap against the file's exact size before sending bytes,
+ * reports upload progress through `onProgress`, and maps a server `too_big`
+ * refusal to the same message. Rejects once `signal` aborts so a settled upload
+ * never attaches for a track the listener has moved past.
+ */
+export async function uploadBounce(
+  input: BounceUploadInput,
+  deps: BounceUploadDeps,
+  onProgress: (fraction: number) => void,
+  signal: AbortSignal
+): Promise<Asset | ActionError> {
+  const maxBytes = await deps.uploadLimit();
+  if (typeof maxBytes !== "number") return maxBytes;
+  assertNotAborted(signal);
+
+  if (input.file.size > maxBytes) return overCap(input.file.size, maxBytes);
+
+  onProgress(0);
+  const uploaded = await deps.upload(input.file, input.projectId, onProgress);
   assertNotAborted(signal);
   if (isActionError(uploaded)) {
     const maximum = tooBigMaximum(uploaded);
-    return maximum == null ? uploaded : overCap(file.size, maximum, false);
+    return maximum == null ? uploaded : overCap(input.file.size, maximum);
   }
 
   return deps.attach(uploaded.id, "track", input.trackId);
@@ -354,8 +375,8 @@ const attach: BounceDeps["attach"] = (assetId, parentKind, parentId) =>
   );
 
 /** The browser's bounce dependencies: the Lab's own download and copy
- *  fallback, a real offline context, a worker encode, the server's upload
- *  cap, and the existing upload and attach calls. */
+ *  fallback, a real offline context, a worker encode, a browser file save,
+ *  the server's upload cap, and the existing upload and attach calls. */
 export function defaultBounceDeps(): BounceDeps {
   return {
     fetch: (input, init) => fetch(input, init),
@@ -364,6 +385,7 @@ export function defaultBounceDeps(): BounceDeps {
     createOfflineContext: (channels, length, sampleRate) =>
       new OfflineAudioContext(channels, length, sampleRate),
     encode: encodeInWorker,
+    download: downloadBlob,
     uploadLimit,
     upload: uploadAsset,
     attach,

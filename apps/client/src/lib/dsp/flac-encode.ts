@@ -13,7 +13,8 @@
  */
 
 import type { Flac, StreamMetadata } from "libflacjs";
-import { FLAC_BITS_PER_SAMPLE } from "./flac-size";
+
+const FLAC_BITS_PER_SAMPLE = 24;
 
 /** libFLAC's default preset: most of level 8's size for a fraction of its time. */
 const COMPRESSION_LEVEL = 5;

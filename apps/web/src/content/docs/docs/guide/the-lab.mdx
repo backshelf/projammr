@@ -23,7 +23,10 @@ Play something, then:
 
 The [command palette](/docs/guide/search-and-shortcuts/) has **Open the Lab** while something is playing.
 
-<Screenshot id="player-lab" alt="The Lab open beside the player: time and pitch, the EQ curve over the live spectrum, and the auditions" />
+<Screenshot
+  id="player-lab"
+  alt="The Lab open beside the player: time and pitch, the EQ curve over the live spectrum, and the auditions"
+/>
 
 ## Time and pitch
 
@@ -51,17 +54,19 @@ Three effects, each with its own on and off switch:
 
 Auditions let you check a mix the way an engineer would, without touching it.
 
-| Row     | Choices                                                                                                           |
-| ------- | ----------------------------------------------------------------------------------------------------------------- |
-| Stereo  | **Mono**, **Mid**, **Side**, **L**, **R**, and **Ø R**, which flips the right channel's polarity                  |
+| Row     | Choices                                                                                                                         |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Stereo  | **Mono**, **Mid**, **Side**, **L**, **R**, and **Ø R**, which flips the right channel's polarity                                |
 | Monitor | **Crossfeed**; **Dim −20**, which turns everything down 20 dB; and **−14 LUFS**, which plays the version at the streaming level |
-| Bands   | **Low**, **Low-mid**, **Mid**, **High-mid** and **Air**: solo one or more parts of the frequency range             |
-| Device  | **Phone**, **Laptop**, **Earbuds**, **Car**, **Club** and **Radio**: an impression of hearing it on that kind of speaker |
+| Bands   | **Low**, **Low-mid**, **Mid**, **High-mid** and **Air**: solo one or more parts of the frequency range                          |
+| Device  | **Phone**, **Laptop**, **Earbuds**, **Car**, **Club** and **Radio**: an impression of hearing it on that kind of speaker        |
 
 **−14 LUFS** needs the version to have been measured first.
 
 Two auditions have their own keys: press <kbd>H</kbd> then <kbd>M</kbd> for mono, and <kbd>H</kbd> then
-<kbd>D</kbd> for dim. In the command palette, `lab` and a space toggles any audition by name.
+
+<kbd>D</kbd> for dim. In the command palette, `lab` and a space toggles any
+audition by name.
 
 ### Match EQ
 
@@ -71,13 +76,14 @@ has been measured.
 
 ## Bounce
 
-**Bounce** records exactly what the Lab is playing, with every setting, and attaches it to the track as a 24-bit
-FLAC file. The version's waveform fills in as it renders, the caption counts through "Rendering" and "Uploading"
-to "Bounced", and the finished file is linked by name.
+**Bounce** records exactly what the Lab is playing, with every setting, and downloads it to your device as a 24-bit
+FLAC file. The version's waveform fills in as it renders, and once the download completes, an **Upload** button lets
+you optionally attach that file to the track.
 
-Anyone in the project can use the Lab. Bouncing adds a file to the track, so it needs an editor, admin or owner.
+Anyone can use the Lab and download a bounce locally. Uploading a bounce as a track attachment needs an editor, admin
+or owner.
 
 <Aside type="caution" title="On a phone">
-  While the Lab is shaping the sound, playback stops when the screen locks. The now-playing sheet warns you:
-  "Lab on · playback stops when the screen locks".
+  While the Lab is shaping the sound, playback stops when the screen locks. The
+  now-playing sheet warns you: "Lab on · playback stops when the screen locks".
 </Aside>

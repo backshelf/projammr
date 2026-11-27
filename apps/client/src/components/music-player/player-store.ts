@@ -34,7 +34,9 @@ import { bounceName } from "@/lib/dsp/bounce-name";
 import {
   bounce as runBounceRender,
   defaultBounceDeps,
+  uploadBounce as runBounceUpload,
   type BounceDeps,
+  type BounceUploadInput,
 } from "@/lib/dsp/bounce";
 import { createBrowserEngine } from "@/lib/dsp/browser-engine";
 import { LabUnavailable } from "@/lib/dsp/lab-engine";
@@ -117,18 +119,19 @@ export type LabState = {
 };
 
 /**
- * A bounce's lifecycle, from the render through the upload to the finished
- * attachment. Kept outside {@link LabState} rather than nested in it: every
- * checkpoint replaces this on its own, so a reader of the Lab's settings and
- * phase (`useLab`) never re-renders over a bounce in progress, and only
- * `useBounce` does.
+ * A bounce's lifecycle, from local render and download through optional upload
+ * as a track attachment. Kept outside {@link LabState} rather than nested in
+ * it: every checkpoint replaces this on its own, so a reader of the Lab's
+ * settings and phase (`useLab`) never re-renders over a bounce in progress,
+ * and only `useBounce` does.
  */
 export type BounceState =
   | { phase: "rendering"; fraction: number }
   | { phase: "encoding" }
+  | { phase: "downloaded"; name: string; canUpload: boolean }
   | { phase: "uploading"; fraction: number }
   | { phase: "done"; assetId: number; name: string }
-  | { phase: "failed"; reason: string };
+  | { phase: "failed"; reason: string; canUpload?: boolean };
 
 /** Why the current asset's audio would not load; `message` is for logs and tests. */
 type LoadError = { assetId: number; message: string };
@@ -267,11 +270,17 @@ export type PlayerActions = {
   swapCompare: () => void;
   /**
    * Renders the current source through the Lab's chain at the listener's
-   * settings, encodes it to 24-bit FLAC and attaches it to the track,
+   * settings, encodes it to 24-bit FLAC and downloads it to this device,
    * reporting each phase through the snapshot's `bounce`. A no-op without a
    * track loaded.
    */
   bounce: () => void;
+  /**
+   * Uploads the last downloaded bounce and attaches it to the current track.
+   * A no-op without a downloaded bounce for a track in a project, or while a
+   * bounce or upload is already running.
+   */
+  uploadBounce: () => void;
   /** Toggles loudness matching between the two compared tracks. */
   setCompareMatched: (on: boolean) => void;
   /**
@@ -372,6 +381,8 @@ export type PlayerStoreOptions = {
   createEngine?: (events: AudioEngineEvents) => AudioEngine;
   /** Runs a bounce; tests pass a fake, a browser gets the real render pipeline. */
   runBounce?: typeof runBounceRender;
+  /** Uploads a rendered bounce; tests pass a fake, a browser gets the real upload pipeline. */
+  runUploadBounce?: typeof runBounceUpload;
   /** Builds the real dependencies a bounce runs against; tests pass fakes. */
   bounceDeps?: () => BounceDeps;
   /** Reads the diff between two versions, null without one; tests pass fakes. */
@@ -417,6 +428,7 @@ function compareOffsetSeconds(diff: TrackAudioDiff | null): number {
 export function createPlayerStore({
   createEngine = createBrowserEngine,
   runBounce = runBounceRender,
+  runUploadBounce = runBounceUpload,
   bounceDeps = defaultBounceDeps,
   fetchDiff = fetchTrackAudioDiff,
   initial = DEFAULT_PLAYER_INITIAL,
@@ -453,7 +465,9 @@ export function createPlayerStore({
   /** Bumped per comparison, so a diff read for an ended one is dropped. */
   let compareSeq = 0;
   let bounce: BounceState | null = null;
-  /** Cancels a bounce in flight when a new one starts or the track changes. */
+  /** The last downloaded bounce held in memory for opt-in upload on this track. */
+  let bounced: BounceUploadInput | null = null;
+  /** Cancels a bounce or upload in flight when a new one starts or the track changes. */
   let bounceAbort: AbortController | null = null;
   /**
    * Whether `restoreQueue` has read what a previous load kept. Until it has,
@@ -919,6 +933,7 @@ export function createPlayerStore({
   function adoptTrack(track: MusicPlayerTrack | null, src: string | null) {
     bounceAbort?.abort();
     bounceAbort = null;
+    bounced = null;
     bounce = null;
     if (matchEqStale(track, lab.settings.auditions.matchEq)) {
       const settings = {
@@ -1296,13 +1311,14 @@ export function createPlayerStore({
     bounce() {
       const current = Q.current(queue);
       if (!current) return;
-      if (current.ownerType !== "track" || current.projectId == null) {
-        updateBounce({ phase: "failed", reason: "Nothing to bounce yet" });
-        return;
-      }
       bounceAbort?.abort();
+      bounced = null;
       const controller = new AbortController();
       bounceAbort = controller;
+      const uploadTarget =
+        current.ownerType === "track" && current.projectId != null
+          ? { projectId: current.projectId, trackId: current.ownerId }
+          : null;
       const name = bounceName(
         trackLabel(current),
         current.trackAudio?.version,
@@ -1319,8 +1335,6 @@ export function createPlayerStore({
           settings: lab.settings,
           loudness: loudnessOf(current),
           curve: engine.lab.curve,
-          projectId: current.projectId,
-          trackId: current.ownerId,
           name,
         },
         bounceDeps(),
@@ -1329,12 +1343,56 @@ export function createPlayerStore({
         },
         controller.signal
       ).then(
+        (file) => {
+          if (controller.signal.aborted) return;
+          bounced = uploadTarget ? { file, ...uploadTarget } : null;
+          updateBounce({
+            phase: "downloaded",
+            name: file.name,
+            canUpload: bounced !== null,
+          });
+        },
+        (error: unknown) => {
+          if (controller.signal.aborted) return;
+          updateBounce({ phase: "failed", reason: bounceFailureReason(error) });
+        }
+      );
+    },
+    uploadBounce() {
+      if (!bounced) return;
+      if (
+        bounce?.phase === "rendering" ||
+        bounce?.phase === "encoding" ||
+        bounce?.phase === "uploading"
+      ) {
+        return;
+      }
+      const target = bounced;
+      bounceAbort?.abort();
+      const controller = new AbortController();
+      bounceAbort = controller;
+      updateBounce({ phase: "uploading", fraction: 0 });
+      void runUploadBounce(
+        target,
+        bounceDeps(),
+        (fraction) => {
+          if (!controller.signal.aborted) {
+            updateBounce({ phase: "uploading", fraction });
+          }
+        },
+        controller.signal
+      ).then(
         (result) => {
           if (controller.signal.aborted) return;
           if (isActionError(result)) {
-            updateBounce({ phase: "failed", reason: result.error });
+            updateBounce({
+              phase: "failed",
+              reason: result.error,
+              canUpload: true,
+            });
             return;
           }
+          bounced = null;
           updateBounce({
             phase: "done",
             assetId: result.id,
@@ -1343,7 +1401,11 @@ export function createPlayerStore({
         },
         (error: unknown) => {
           if (controller.signal.aborted) return;
-          updateBounce({ phase: "failed", reason: bounceFailureReason(error) });
+          updateBounce({
+            phase: "failed",
+            reason: bounceFailureReason(error),
+            canUpload: true,
+          });
         }
       );
     },
@@ -1458,6 +1520,7 @@ export function createPlayerStore({
       stopProgressLoop();
       metadata.cancel();
       bounceAbort?.abort();
+      bounced = null;
       engine.destroy();
       listeners.clear();
       progressListeners.clear();

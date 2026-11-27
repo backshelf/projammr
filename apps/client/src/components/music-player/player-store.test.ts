@@ -1984,7 +1984,7 @@ describe("bounce action", () => {
     trackAudio: { id: 11, version: 2, isPrimary: true, lufs: -12 },
   };
 
-  /** An engine and store whose render pipeline is a mock the test drives by hand. */
+  /** An engine and store whose render and upload pipelines are mocks the test drives by hand. */
   function setup() {
     const lab = {
       engage: mock(),
@@ -1996,23 +1996,27 @@ describe("bounce action", () => {
     };
     const engine: AudioEngine = { ...silentEngine, lab };
     const runBounce = mock();
+    const runUploadBounce = mock();
     const store = createPlayerStore({
       createEngine: () => engine,
       runBounce:
         runBounce as unknown as typeof import("@/lib/dsp/bounce").bounce,
+      runUploadBounce:
+        runUploadBounce as unknown as typeof import("@/lib/dsp/bounce").uploadBounce,
       bounceDeps: () => ({}) as unknown as BounceDeps,
     });
-    return { store, lab, runBounce };
+    return { store, lab, runBounce, runUploadBounce };
   }
 
-  it("renders the current source at its settings and curve, named from the version", () => {
-    const { store, runBounce } = setup();
+  it("renders the current source at its settings and curve, named from the version, without uploading", () => {
+    const { store, runBounce, runUploadBounce } = setup();
     store.actions.playNow([trackWithProject]);
     runBounce.mockReturnValue(new Promise(() => {}));
 
     store.actions.bounce();
 
     expect(runBounce).toHaveBeenCalledTimes(1);
+    expect(runUploadBounce).not.toHaveBeenCalled();
     const [input] = runBounce.mock.calls[0]!;
     expect(input.source).toEqual({
       src: mediaProxyUrl(trackWithProject.asset.assetPath),
@@ -2021,8 +2025,6 @@ describe("bounce action", () => {
     expect(input.settings).toEqual(DEFAULT_LAB);
     expect(input.loudness).toEqual(loudness(-12));
     expect(input.curve).toEqual([1, 2, 3]);
-    expect(input.projectId).toBe(5);
-    expect(input.trackId).toBe(trackWithProject.ownerId);
     expect(input.name).toBe("take.wav — Lab bounce (v2).flac");
   });
 
@@ -2080,16 +2082,107 @@ describe("bounce action", () => {
     // The render still in flight for the old track reports on; the store
     // must not resurrect a `bounce` snapshot for a track nobody is bouncing
     // anymore.
-    reportProgress({ phase: "uploading", fraction: 1 });
+    reportProgress({ phase: "encoding" });
     expect(store.getSnapshot().bounce).toBeNull();
   });
 
-  it("resolves to done with the attached asset", async () => {
-    const { store, runBounce } = setup();
+  it("resolves to downloaded with opt-in upload available for a project track", async () => {
+    const { store, runBounce, runUploadBounce } = setup();
     store.actions.playNow([trackWithProject]);
-    runBounce.mockResolvedValue({ id: 99, name: "attached.wav" });
+    const file = new File(
+      [new Uint8Array(4)],
+      "take.wav — Lab bounce (v2).flac",
+      {
+        type: "audio/flac",
+      }
+    );
+    runBounce.mockResolvedValue(file);
 
     store.actions.bounce();
+    await waitFor(() => {
+      if (store.getSnapshot().bounce?.phase !== "downloaded")
+        throw new Error("waiting");
+    });
+
+    expect(store.getSnapshot().bounce).toEqual({
+      phase: "downloaded",
+      name: "take.wav — Lab bounce (v2).flac",
+      canUpload: true,
+    });
+    expect(runUploadBounce).not.toHaveBeenCalled();
+  });
+
+  it("downloads without offering upload when the track has no project", async () => {
+    const { store, runBounce, runUploadBounce } = setup();
+    store.actions.playNow([track]);
+    const file = new File([new Uint8Array(4)], "take.wav — Lab bounce.flac", {
+      type: "audio/flac",
+    });
+    runBounce.mockResolvedValue(file);
+
+    store.actions.bounce();
+    await waitFor(() => {
+      if (store.getSnapshot().bounce?.phase !== "downloaded")
+        throw new Error("waiting");
+    });
+
+    expect(store.getSnapshot().bounce).toEqual({
+      phase: "downloaded",
+      name: "take.wav — Lab bounce.flac",
+      canUpload: false,
+    });
+    store.actions.uploadBounce();
+    expect(runUploadBounce).not.toHaveBeenCalled();
+  });
+
+  it("uploads the downloaded bounce on demand, reporting progress and resolving to done", async () => {
+    const { store, runBounce, runUploadBounce } = setup();
+    store.actions.playNow([trackWithProject]);
+    const file = new File(
+      [new Uint8Array(4)],
+      "take.wav — Lab bounce (v2).flac",
+      {
+        type: "audio/flac",
+      }
+    );
+    runBounce.mockResolvedValue(file);
+
+    store.actions.bounce();
+    await waitFor(() => {
+      if (store.getSnapshot().bounce?.phase !== "downloaded")
+        throw new Error("waiting");
+    });
+
+    let reportUpload!: (fraction: number) => void;
+    let resolveUpload!: (result: { id: number; name: string }) => void;
+    runUploadBounce.mockImplementation(
+      (_input, _deps, onProgress) =>
+        new Promise((resolve) => {
+          reportUpload = onProgress;
+          resolveUpload = resolve;
+        })
+    );
+
+    store.actions.uploadBounce();
+    expect(store.getSnapshot().bounce).toEqual({
+      phase: "uploading",
+      fraction: 0,
+    });
+    expect(runUploadBounce).toHaveBeenCalledTimes(1);
+    const [uploadInput] = runUploadBounce.mock.calls[0]!;
+    expect(uploadInput).toEqual({
+      file,
+      projectId: 5,
+      trackId: trackWithProject.ownerId,
+    });
+
+    reportUpload(0.5);
+    expect(store.getSnapshot().bounce).toEqual({
+      phase: "uploading",
+      fraction: 0.5,
+    });
+
+    resolveUpload({ id: 99, name: "attached.flac" });
     await waitFor(() => {
       if (store.getSnapshot().bounce?.phase !== "done")
         throw new Error("waiting");
@@ -2098,14 +2191,58 @@ describe("bounce action", () => {
     expect(store.getSnapshot().bounce).toEqual({
       phase: "done",
       assetId: 99,
-      name: "attached.wav",
+      name: "attached.flac",
     });
+
+    // Once attached, the downloaded file is released so a second upload call is a no-op.
+    store.actions.uploadBounce();
+    expect(runUploadBounce).toHaveBeenCalledTimes(1);
   });
 
-  it("resolves to failed with the upload or attach error", async () => {
+  it("keeps the downloaded bounce retryable when upload fails", async () => {
+    const { store, runBounce, runUploadBounce } = setup();
+    store.actions.playNow([trackWithProject]);
+    const file = new File(
+      [new Uint8Array(4)],
+      "take.wav — Lab bounce (v2).flac",
+      {
+        type: "audio/flac",
+      }
+    );
+    runBounce.mockResolvedValue(file);
+    runUploadBounce.mockResolvedValueOnce({ error: "Too large" });
+    runUploadBounce.mockResolvedValueOnce({ id: 99, name: "attached.flac" });
+
+    store.actions.bounce();
+    await waitFor(() => {
+      if (store.getSnapshot().bounce?.phase !== "downloaded")
+        throw new Error("waiting");
+    });
+
+    store.actions.uploadBounce();
+    await waitFor(() => {
+      if (store.getSnapshot().bounce?.phase !== "failed")
+        throw new Error("waiting");
+    });
+
+    expect(store.getSnapshot().bounce).toEqual({
+      phase: "failed",
+      reason: "Too large",
+      canUpload: true,
+    });
+
+    store.actions.uploadBounce();
+    await waitFor(() => {
+      if (store.getSnapshot().bounce?.phase !== "done")
+        throw new Error("waiting");
+    });
+    expect(runUploadBounce).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves to failed with the render error", async () => {
     const { store, runBounce } = setup();
     store.actions.playNow([trackWithProject]);
-    runBounce.mockResolvedValue({ error: "Too large" });
+    runBounce.mockRejectedValue(new Error("Not enough memory"));
 
     store.actions.bounce();
     await waitFor(() => {
@@ -2115,8 +2252,37 @@ describe("bounce action", () => {
 
     expect(store.getSnapshot().bounce).toEqual({
       phase: "failed",
-      reason: "Too large",
+      reason: "Not enough memory",
     });
+  });
+
+  it("drops the downloaded bounce when the track changes", async () => {
+    const { store, runBounce, runUploadBounce } = setup();
+    const other: MusicPlayerTrack = {
+      ...trackWithProject,
+      asset: {
+        ...trackWithProject.asset,
+        id: 21,
+        assetPath: "./static/assets/other.wav",
+      },
+    };
+    store.actions.playNow([trackWithProject, other]);
+    runBounce.mockResolvedValue(
+      new File([new Uint8Array(4)], "take.wav — Lab bounce (v2).flac", {
+        type: "audio/flac",
+      })
+    );
+
+    store.actions.bounce();
+    await waitFor(() => {
+      if (store.getSnapshot().bounce?.phase !== "downloaded")
+        throw new Error("waiting");
+    });
+
+    store.actions.next();
+    expect(store.getSnapshot().bounce).toBeNull();
+    store.actions.uploadBounce();
+    expect(runUploadBounce).not.toHaveBeenCalled();
   });
 
   it("fails without a track loaded, and never calls the render pipeline", () => {

@@ -5,7 +5,6 @@ import { stubGlobal, unstubAllGlobals } from "@workspace/test/globals";
 import type { Flac } from "libflacjs";
 import { Decoder } from "libflacjs/lib/decoder";
 import { encodeFlac24, whenFlacReady } from "./flac-encode";
-import { estimateFlacBytes, FLAC_SIZE_RATIO } from "./flac-size";
 
 /**
  * The same WebAssembly build the worker loads, read from disk. Under Bun the
@@ -112,26 +111,6 @@ describe("encodeFlac24", () => {
     const bytes = encodeFlac24(flac, [tone, tone.slice()], 48000);
 
     expect(bytes.byteLength).toBeLessThan(frames * 2 * 3 * 0.5);
-  });
-});
-
-describe("estimateFlacBytes", () => {
-  it("is 24-bit PCM scaled by the assumed ratio, plus room for the headers", () => {
-    const frames = 48000 * 60;
-    const pcm = frames * 2 * 3;
-
-    const estimate = estimateFlacBytes(frames, 2);
-
-    expect(estimate).toBeGreaterThanOrEqual(pcm * FLAC_SIZE_RATIO);
-    expect(estimate).toBeLessThan(pcm * FLAC_SIZE_RATIO + 16384);
-  });
-
-  it("puts a normal-length song under a 40 MB cap that its 24-bit WAV is over", () => {
-    const cap = 40 * 1024 * 1024;
-    const frames = 48000 * 150; // 2:30, whose WAV is about 41 MB
-
-    expect(frames * 2 * 3).toBeGreaterThan(cap);
-    expect(estimateFlacBytes(frames, 2)).toBeLessThan(cap);
   });
 });
 

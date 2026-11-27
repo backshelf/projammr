@@ -4,7 +4,13 @@ import { waitFor } from "@workspace/test/wait-for";
 import type { ActionError, Asset } from "@workspace/api/api";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { DEFAULT_LAB } from "./lab-settings";
-import { bounce, type BounceDeps, type BounceInput } from "./bounce";
+import {
+  bounce,
+  uploadBounce,
+  type BounceDeps,
+  type BounceInput,
+  type BounceUploadInput,
+} from "./bounce";
 import type { PlayerCommand, PlayerMessage } from "./processor-protocol";
 
 /**
@@ -106,6 +112,7 @@ function setup({
   // typed tuple; inferring from a no-argument implementation makes every
   // recorded call `[]`.
   const encode = mock<BounceDeps["encode"]>(async () => new ArrayBuffer(8));
+  const download = mock<BounceDeps["download"]>(() => {});
   const upload = mock(
     async (
       file: File,
@@ -137,6 +144,7 @@ function setup({
       () => offline.ctx as unknown as OfflineAudioContext
     ),
     encode,
+    download,
     uploadLimit,
     upload,
     attach,
@@ -147,8 +155,6 @@ function setup({
     settings: DEFAULT_LAB,
     loudness: { lufs: null, targetLufs: -14 },
     curve: null,
-    projectId: 3,
-    trackId: 9,
     name: "Take — Lab bounce.flac",
   };
 
@@ -158,6 +164,7 @@ function setup({
     offline,
     rendered,
     encode,
+    download,
     uploadLimit,
     upload,
     attach,
@@ -167,8 +174,18 @@ function setup({
 afterEach(() => unstubAllGlobals());
 
 describe("bounce", () => {
-  it("renders through checkpoints that post climbing fractions, then encodes, uploads and attaches", async () => {
-    const { deps, input, offline, rendered, encode, upload, attach } = setup();
+  it("renders through checkpoints that post climbing fractions, encodes, and downloads locally without uploading", async () => {
+    const {
+      deps,
+      input,
+      offline,
+      rendered,
+      encode,
+      download,
+      uploadLimit,
+      upload,
+      attach,
+    } = setup();
     const statuses: { phase: string; fraction?: number }[] = [];
 
     const running = bounce(
@@ -203,55 +220,29 @@ describe("bounce", () => {
 
     offline.resolveRendering(rendered);
 
-    const result = await running;
+    const file = await running;
 
     expect(statuses.some((s) => s.phase === "encoding")).toBe(true);
-    expect(
-      statuses.filter((s) => s.phase === "uploading").map((s) => s.fraction)
-    ).toEqual([0, 0.5, 1]);
 
     expect(encode).toHaveBeenCalledTimes(1);
     const [encodedChannels, encodedRate] = encode.mock.calls[0]!;
     expect(encodedChannels).toHaveLength(2); // the rendered buffer's own channel count
     expect(encodedRate).toBe(48000);
 
-    expect(upload).toHaveBeenCalledTimes(1);
-    const [uploadedFile, uploadedProjectId] = upload.mock.calls[0]!;
-    expect(uploadedFile.name).toBe(input.name);
-    expect(uploadedFile.type).toBe("audio/flac");
-    expect(uploadedProjectId).toBe(input.projectId);
+    expect(file).toBeInstanceOf(File);
+    expect(file.name).toBe(input.name);
+    expect(file.type).toBe("audio/flac");
 
-    expect(attach).toHaveBeenCalledWith(42, "track", input.trackId);
-    expect(isActionError(result)).toBe(false);
-  });
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(download).toHaveBeenCalledWith(file, input.name);
 
-  it("stops at the upload's error without attaching", async () => {
-    const { deps, input, offline, rendered, attach } = setup({
-      decodedFrames: 1000,
-    });
-    const failingUpload = mock(async (): Promise<Asset | ActionError> => ({
-      error: "Too large",
-    }));
-    const failing = { ...deps, upload: failingUpload };
-
-    const running = bounce(
-      input,
-      failing,
-      () => {},
-      new AbortController().signal
-    );
-    await offline.started;
-    offline.suspends.forEach((checkpoint) => checkpoint.resolve());
-    offline.resolveRendering(rendered);
-
-    const result = await running;
-
-    expect(result).toEqual({ error: "Too large" });
+    expect(uploadLimit).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
     expect(attach).not.toHaveBeenCalled();
   });
 
-  it("rejects without rendering, encoding or uploading when the player could not hold the source", async () => {
-    const { deps, input, offline, rendered, encode, upload, attach } = setup({
+  it("rejects without rendering, encoding or downloading when the player could not hold the source", async () => {
+    const { deps, input, offline, rendered, encode, download } = setup({
       loadOutcome: "failed",
     });
 
@@ -274,12 +265,11 @@ describe("bounce", () => {
 
     await expect(running).rejects.toThrow(/memory/i);
     expect(encode).not.toHaveBeenCalled();
-    expect(upload).not.toHaveBeenCalled();
-    expect(attach).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
   });
 
-  it("stops short of encoding, uploading or attaching once the caller aborts mid-render", async () => {
-    const { deps, input, offline, rendered, encode, upload, attach } = setup();
+  it("stops short of encoding or downloading once the caller aborts mid-render", async () => {
+    const { deps, input, offline, rendered, encode, download } = setup();
     const controller = new AbortController();
 
     const running = bounce(input, deps, () => {}, controller.signal);
@@ -291,95 +281,101 @@ describe("bounce", () => {
 
     await expect(running).rejects.toThrow();
     expect(encode).not.toHaveBeenCalled();
-    expect(upload).not.toHaveBeenCalled();
-    expect(attach).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
   });
+});
 
-  it("does not attach an upload that settles after the caller aborts", async () => {
-    const { deps, input, offline, rendered, attach } = setup();
-    let resolveUpload!: (asset: Asset) => void;
-    const upload = mock(
-      () =>
-        new Promise<Asset | ActionError>((resolve) => {
-          resolveUpload = resolve;
-        })
-    );
-    const aborting: BounceDeps = { ...deps, upload };
-    const controller = new AbortController();
-
-    const running = bounce(input, aborting, () => {}, controller.signal);
-
-    await offline.started;
-    offline.suspends.forEach((checkpoint) => checkpoint.resolve());
-    offline.resolveRendering(rendered);
-    await waitFor(() => {
-      if (upload.mock.calls.length === 0) throw new Error("waiting for upload");
-    });
-
-    controller.abort();
-    resolveUpload({ id: 42, name: "bounced.flac" } as Asset);
-
-    await expect(running).rejects.toThrow();
-    expect(attach).not.toHaveBeenCalled();
-  });
-
-  it("stops before rendering, naming both sizes, when the estimated FLAC is over the upload cap", async () => {
-    const { deps, input, encode, upload, attach } = setup({
-      decodedFrames: 48000 * 150,
-    });
-    const statuses: { phase: string }[] = [];
-    const capped: BounceDeps = {
-      ...deps,
-      uploadLimit: async () => 10 * 1024 * 1024,
+describe("uploadBounce", () => {
+  function uploadTarget(size = 8): BounceUploadInput {
+    return {
+      file: new File([new ArrayBuffer(size)], "Take — Lab bounce.flac", {
+        type: "audio/flac",
+      }),
+      projectId: 3,
+      trackId: 9,
     };
+  }
 
-    const result = await bounce(
-      input,
-      capped,
-      (status) => statuses.push(status),
+  it("checks the upload cap, uploads with progress and attaches to the track", async () => {
+    const { deps, uploadLimit, upload, attach } = setup();
+    const target = uploadTarget();
+    const fractions: number[] = [];
+
+    const result = await uploadBounce(
+      target,
+      deps,
+      (fraction) => fractions.push(fraction),
       new AbortController().signal
     );
 
-    expect(result).toEqual({
-      error: "This bounce would be about 31 MB; uploads are limited to 10 MB.",
-    });
-    expect(statuses).toEqual([]);
-    // Only the decode probe: no render context was ever built.
-    expect(deps.createOfflineContext).toHaveBeenCalledTimes(1);
-    expect(encode).not.toHaveBeenCalled();
-    expect(upload).not.toHaveBeenCalled();
-    expect(attach).not.toHaveBeenCalled();
+    expect(uploadLimit).toHaveBeenCalledTimes(1);
+    expect(fractions).toEqual([0, 0.5, 1]);
+    expect(upload).toHaveBeenCalledTimes(1);
+    const [uploadedFile, uploadedProjectId] = upload.mock.calls[0]!;
+    expect(uploadedFile).toBe(target.file);
+    expect(uploadedProjectId).toBe(3);
+    expect(attach).toHaveBeenCalledWith(42, "track", 9);
+    expect(isActionError(result)).toBe(false);
   });
 
-  it("stops at the upload limit's own error without downloading anything", async () => {
-    const { deps, input, upload } = setup();
-    const fetchSource = mock(deps.fetch);
-    const failing: BounceDeps = {
-      ...deps,
-      fetch: fetchSource as unknown as typeof fetch,
-      uploadLimit: async () => ({ error: "You are not signed in" }),
-    };
-
-    const result = await bounce(
-      input,
-      failing,
+  it("stops at the upload limit's own error without uploading", async () => {
+    const { deps, upload, attach } = setup();
+    const result = await uploadBounce(
+      uploadTarget(),
+      {
+        ...deps,
+        uploadLimit: async () => ({ error: "You are not signed in" }),
+      },
       () => {},
       new AbortController().signal
     );
 
     expect(result).toEqual({ error: "You are not signed in" });
-    expect(fetchSource).not.toHaveBeenCalled();
     expect(upload).not.toHaveBeenCalled();
+    expect(attach).not.toHaveBeenCalled();
+  });
+
+  it("stops before uploading, naming both sizes, when the bounce file is over the upload cap", async () => {
+    const { deps, upload, attach } = setup();
+    const fractions: number[] = [];
+
+    const result = await uploadBounce(
+      uploadTarget(31 * 1024 * 1024),
+      { ...deps, uploadLimit: async () => 10 * 1024 * 1024 },
+      (fraction) => fractions.push(fraction),
+      new AbortController().signal
+    );
+
+    expect(result).toEqual({
+      error: "This bounce is 31 MB; uploads are limited to 10 MB.",
+    });
+    expect(fractions).toEqual([]);
+    expect(upload).not.toHaveBeenCalled();
+    expect(attach).not.toHaveBeenCalled();
+  });
+
+  it("stops at the upload's error without attaching", async () => {
+    const { deps, attach } = setup();
+    const failingUpload = mock(async (): Promise<Asset | ActionError> => ({
+      error: "Too large",
+    }));
+
+    const result = await uploadBounce(
+      uploadTarget(),
+      { ...deps, upload: failingUpload },
+      () => {},
+      new AbortController().signal
+    );
+
+    expect(result).toEqual({ error: "Too large" });
+    expect(attach).not.toHaveBeenCalled();
   });
 
   it("reports an upload the server refused as too big with both sizes, without attaching", async () => {
-    const { deps, input, offline, rendered, attach } = setup({
-      decodedFrames: 1000,
-    });
-    const tooBig: BounceDeps = {
+    const { deps, attach } = setup();
+    const tooBig = {
       ...deps,
-      encode: async () => new ArrayBuffer(3 * 1024 * 1024),
-      upload: async () => ({
+      upload: async (): Promise<Asset | ActionError> => ({
         error: "Invalid request",
         status: 400,
         code: "invalid_request",
@@ -396,19 +392,45 @@ describe("bounce", () => {
       }),
     };
 
-    const running = bounce(
-      input,
+    const result = await uploadBounce(
+      uploadTarget(3 * 1024 * 1024),
       tooBig,
       () => {},
       new AbortController().signal
     );
-    await offline.started;
-    offline.suspends.forEach((checkpoint) => checkpoint.resolve());
-    offline.resolveRendering(rendered);
 
-    expect(await running).toEqual({
+    expect(result).toEqual({
       error: "This bounce is 3 MB; uploads are limited to 2 MB.",
     });
+    expect(attach).not.toHaveBeenCalled();
+  });
+
+  it("does not attach an upload that settles after the caller aborts", async () => {
+    const { deps, attach } = setup();
+    let resolveUpload!: (asset: Asset) => void;
+    const upload = mock(
+      () =>
+        new Promise<Asset | ActionError>((resolve) => {
+          resolveUpload = resolve;
+        })
+    );
+    const controller = new AbortController();
+
+    const running = uploadBounce(
+      uploadTarget(),
+      { ...deps, upload },
+      () => {},
+      controller.signal
+    );
+
+    await waitFor(() => {
+      if (upload.mock.calls.length === 0) throw new Error("waiting for upload");
+    });
+
+    controller.abort();
+    resolveUpload({ id: 42, name: "bounced.flac" } as Asset);
+
+    await expect(running).rejects.toThrow();
     expect(attach).not.toHaveBeenCalled();
   });
 });

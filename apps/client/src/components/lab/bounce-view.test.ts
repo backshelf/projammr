@@ -5,9 +5,12 @@ import { bounceView } from "@/components/lab/bounce-view";
 describe("bounceView", () => {
   test("invites a bounce with nothing printed before one has run", () => {
     expect(bounceView(null)).toMatchObject({
-      caption: "Print what you hear as an attachment",
+      caption: "Print what you hear",
       printed: 0,
-      running: false,
+      running: null,
+      downloadedName: null,
+      uploadedName: null,
+      canUpload: false,
     });
   });
 
@@ -15,38 +18,88 @@ describe("bounceView", () => {
     expect(bounceView({ phase: "rendering", fraction: 0.42 })).toMatchObject({
       caption: "Rendering 42%",
       printed: 0.42,
-      running: true,
+      running: "bounce",
+      canUpload: false,
     });
   });
 
-  test("holds the whole print through the encode and the upload", () => {
-    expect(bounceView({ phase: "encoding" }).printed).toBe(1);
+  test("holds the whole print through encoding and local download", () => {
+    expect(bounceView({ phase: "encoding" })).toMatchObject({
+      caption: "Encoding",
+      printed: 1,
+      running: "bounce",
+      canUpload: false,
+    });
+    expect(
+      bounceView({
+        phase: "downloaded",
+        name: "nightdrive lab.flac",
+        canUpload: true,
+      })
+    ).toMatchObject({
+      caption: "Downloaded",
+      printed: 1,
+      running: null,
+      downloadedName: "nightdrive lab.flac",
+      uploadedName: null,
+      canUpload: true,
+    });
+    expect(
+      bounceView({
+        phase: "downloaded",
+        name: "nightdrive lab.flac",
+        canUpload: false,
+      })
+    ).toMatchObject({
+      caption: "Downloaded",
+      printed: 1,
+      running: null,
+      downloadedName: "nightdrive lab.flac",
+      canUpload: false,
+    });
+  });
+
+  test("holds the print during opt-in upload and links the attachment once uploaded", () => {
     expect(bounceView({ phase: "uploading", fraction: 0.5 })).toMatchObject({
       caption: "Uploading 50%",
       printed: 1,
-      running: true,
+      running: "upload",
+      canUpload: true,
     });
-  });
-
-  test("names the finished attachment and keeps the print", () => {
     expect(
       bounceView({ phase: "done", assetId: 9, name: "nightdrive lab.flac" })
     ).toMatchObject({
-      caption: "Bounced",
+      caption: "Uploaded",
       printed: 1,
-      running: false,
-      doneName: "nightdrive lab.flac",
+      running: null,
+      downloadedName: null,
+      uploadedName: "nightdrive lab.flac",
+      canUpload: false,
     });
   });
 
-  test("clears the print and reads as an error when the bounce fails", () => {
+  test("clears the print on render failure and keeps print + Upload on upload failure", () => {
     expect(
-      bounceView({ phase: "failed", reason: "Too long to upload" })
+      bounceView({ phase: "failed", reason: "Not enough memory" })
     ).toMatchObject({
-      caption: "Too long to upload",
+      caption: "Not enough memory",
       printed: 0,
       failed: true,
-      running: false,
+      running: null,
+      canUpload: false,
+    });
+    expect(
+      bounceView({
+        phase: "failed",
+        reason: "Too long to upload",
+        canUpload: true,
+      })
+    ).toMatchObject({
+      caption: "Too long to upload",
+      printed: 1,
+      failed: true,
+      running: null,
+      canUpload: true,
     });
   });
 });

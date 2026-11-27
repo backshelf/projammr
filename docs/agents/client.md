@@ -2487,10 +2487,11 @@ settings alone, steady while the Lab prepares). `PlayerActions`: `playNow(items,
 `play`, `pause`, `togglePlay`, `retry()` (a no-op without a `loadError`; otherwise drops `loadedSrc` so
 `loadCurrent` reloads the same source, and plays it from the start), `toggleShuffle`, `cycleRepeat`, `setVolume`, `toggleMute`, the Lab's `setLabMode`,
 `setSpeed`, `setPitch`, `setEqBand(i, patch)`, `setEqOn`, `setEqCurve(gains|null)` (engine only, not persisted),
-`setComp`, `setReverb`, `setAudition`, `pinLab`, `resetLab`, `bounce()` (renders, encodes and uploads the
-current source as a track attachment, reporting through the snapshot's `bounce: BounceState | null` — kept as
+`setComp`, `setReverb`, `setAudition`, `pinLab`, `resetLab`, `bounce()` (renders, encodes and downloads the
+current source locally as a 24-bit FLAC, reporting through the snapshot's `bounce: BounceState | null` — kept as
 a sibling of `lab` rather than nested in it, so a checkpoint's `publish()` leaves the `lab` object's reference
-unchanged and only `useBounce()` re-renders),
+unchanged and only `useBounce()` re-renders), `uploadBounce()` (opt-in upload and attach of the last downloaded
+bounce to the current project track),
 `startCompare(b)`, `swapCompare`, `setCompareMatched`, `endCompare`, `requestAnalysis()`; `matchGains(lufsA,
 lufsB)` for loudness-matched A/B. **Comparison** (on the Lab): `startCompare(b)` engages the Lab, calls
 `engine.lab.compare.start(b's source)` and routes the matched gains, and reads the pair's diff once through the
@@ -2729,27 +2730,27 @@ without `meter-ballistics.ts`'s easing, via `meterStep`), `RackReverb`; every ra
 `@workspace/dsp/match-eq`, recomputed in a `useEffect` keyed on the reference and this version's own spectrum, so
 a `matchEq` restored from storage gets a curve on mount; the store itself clears a stale `matchEq` — the
 reference audio is the one now playing, or the queue moved to a different track — in `loadCurrent`, so a Lab
-left engaged with an old curve is never stuck once the view isn't mounted to catch it); `Bounce` (the store's
-`bounce` action and `useBounce()` — selected on its own, not through `useLab`, so a checkpoint re-renders only
-this section — through `bounceView` (`bounce-view.ts`, pure) to a caption and a print: the version's stored
-peaks as `.wave` bars whose `--played` follows the render fraction, held whole through encode and upload; `done`
-links the attachment by name to the track page with `hrefFromParsedRoute(ownerRoute(current), projectId)`,
-`failed` clears the print, shows the reason and re-enables the button). `lib/dsp/bounce.ts`'s `bounce(input, deps, onProgress, signal)` first reads the server's upload cap
-(`uploadLimit()` → `GET /api/uploads/limits`), then downloads and decodes its own copy of
-the source (independent of whether the Lab is engaged for live playback) straight into a throwaway
-`OfflineAudioContext` at a fixed 48 kHz, probes a main-thread `Chain` (`@workspace/dsp/chain` +
-`@workspace/dsp/host/browser`'s `loadDsp()`) for the current settings' latency to size the real render
-context (`ceil(frames / speed) + latency`), and stops with "This bounce would be about N MB; uploads are
-limited to M MB." before rendering when `flac-encode.ts`'s `estimateFlacBytes` (24-bit PCM × `FLAC_SIZE_RATIO`
-0.75 + headers) passes the cap. Otherwise it runs the same `dsp-processor.js` `"player"` role there with
-`suspend()` checkpoints every five seconds of output, encodes the result to 24-bit FLAC in
-`flac-encode.worker.ts` (wrapping the pure `flac-encode.ts` `encodeFlac24`, which takes a loaded libFLAC
-instance from the `libflacjs` package), then uploads with `uploadAsset` — mapping the route's `too_big`
-validation answer (`tooBigMaximum` in `upload-client.ts`) to the same kind of message — and attaches with
-`attachAssetTo` — the latter imported dynamically inside `bounce.ts` since it is a server action
-whose module reaches `server-only`, which a plain top-level import would drag into every test that imports the
-store. `lab-engine.ts` exports `loadSourceBytes` (the download-with-cap-and-copy-fallback half of `load`) so
-the bounce shares it rather than re-implementing the cap logic. `lib/dsp/bounce-name.ts`'s `bounceName(title,
+left engaged with an old curve is never stuck once the view isn't mounted to catch it); `Bounce` (the store's `bounce` and `uploadBounce` actions and `useBounce()` — selected on its own, not through
+`useLab`, so a checkpoint re-renders only this section — through `bounceView` (`bounce-view.ts`, pure) to a caption,
+buttons and a print: the version's stored peaks as `.wave` bars whose `--played` follows the render fraction, held
+whole through encode, local download and optional upload; `downloaded` names the saved file and exposes an opt-in
+`Upload` button when the current item belongs to a project track, `done` links the uploaded attachment by name to the
+track page with `hrefFromParsedRoute(ownerRoute(current), projectId)`, a render `failed` clears the print while an
+upload `failed` keeps the print and `Upload` button for retry). `lib/dsp/bounce.ts` splits the pipeline into two
+functions: `bounce(input, deps, onProgress, signal)` downloads and decodes its own copy of the source (independent of
+whether the Lab is engaged for live playback) straight into a throwaway `OfflineAudioContext` at a fixed 48 kHz,
+probes a main-thread `Chain` (`@workspace/dsp/chain` + `@workspace/dsp/host/browser`'s `loadDsp()`) for the current
+settings' latency to size the real render context (`ceil(frames / speed) + latency`), runs the same
+`dsp-processor.js` `"player"` role there with `suspend()` checkpoints every five seconds of output, encodes the result
+to 24-bit FLAC in `flac-encode.worker.ts` (wrapping the pure `flac-encode.ts` `encodeFlac24`, which takes a loaded
+libFLAC instance from the `libflacjs` package), saves it locally via `downloadBlob` (`lib/download.ts`), and returns
+the encoded `File` for optional upload; `uploadBounce(input, deps, onProgress, signal)` then reads the server's upload
+cap (`uploadLimit()` → `GET /api/uploads/limits`), stops with "This bounce is N MB; uploads are limited to M MB." when
+the encoded file's exact size passes the cap, uploads with `uploadAsset` — mapping the route's `too_big` validation
+answer (`tooBigMaximum` in `upload-client.ts`) to the same message — and attaches with `attachAssetTo` — the latter
+imported dynamically inside `bounce.ts` since it is a server action whose module reaches `server-only`, which a plain
+top-level import would drag into every test that imports the store. `lab-engine.ts` exports `loadSourceBytes` (the
+download-with-cap-and-copy-fallback half of `load`) so the bounce shares it rather than re-implementing the cap logic. `lib/dsp/bounce-name.ts`'s `bounceName(title,
 version, settings)` composes the attachment's name from the non-default settings alone, in the Lab's own
 top-to-bottom order, reusing `LAB_AUDITIONS`' labels for every audition it covers. `LabControls.curve` (on the
 hybrid engine) is the match-EQ curve `setEqCurve` last set, read back by the bounce since it lives on the

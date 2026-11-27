@@ -10,7 +10,7 @@ import type { MusicPlayerTrack } from "@/components/music-player/types";
 import { AppLink } from "@/components/navigation/AppLink";
 import { useTrackAudioMeasure } from "@/components/track-audio/measures";
 import { hrefFromParsedRoute } from "@/lib/utils";
-import { IconLoader2 } from "@tabler/icons-react";
+import { IconLoader2, IconUpload } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { playedBars, WaveBars } from "@workspace/ui/components/waveform";
 import { cn } from "@workspace/ui/lib/utils";
@@ -22,20 +22,23 @@ const PRINT_BARS = 96;
 const NO_PEAKS: number[] = [];
 
 /**
- * Prints what the Lab plays as a track attachment: the `OfflineAudioContext`
- * render, the 24-bit FLAC encode and the upload run behind the store's
- * `bounce` action, which reports each phase through `useBounce`.
+ * Prints what the Lab plays to a local 24-bit FLAC download: the
+ * `OfflineAudioContext` render and encode run behind the store's `bounce`
+ * action, reporting each phase through `useBounce`. Once downloaded, an
+ * opt-in `Upload` button lets the listener attach that rendered file to the
+ * track via `uploadBounce`.
  *
  * The version's own waveform is the print. It waits in faint ink, and the
  * render draws it in the artwork colour from left to right as far as it has
- * really got; the encode and the upload hold the finished print while the
- * caption counts, and a finished bounce keeps it and links the attachment by
- * name. A failed bounce clears the print and says why, with the button free
- * to try again. Without stored peaks the caption alone carries the progress.
+ * really got; the encode, download and optional upload hold the finished print
+ * while the caption updates, and an uploaded bounce links the attachment by
+ * name. A failed render clears the print and says why; a failed upload keeps
+ * the print and Upload button so the listener can retry. Without stored peaks
+ * the caption alone carries the progress.
  */
 export function Bounce({ current }: { current: MusicPlayerTrack }) {
   const status = useBounce();
-  const { bounce } = usePlayerActions();
+  const { bounce, uploadBounce } = usePlayerActions();
   const view = bounceView(status);
 
   const peaks =
@@ -44,7 +47,7 @@ export function Bounce({ current }: { current: MusicPlayerTrack }) {
   const bars = useMemo(() => toBars(peaks, PRINT_BARS), [peaks]);
 
   const href =
-    view.doneName != null && current.projectId != null
+    view.uploadedName != null && current.projectId != null
       ? hrefFromParsedRoute(ownerRoute(current), current.projectId)
       : null;
 
@@ -70,7 +73,13 @@ export function Bounce({ current }: { current: MusicPlayerTrack }) {
           )}
         >
           {view.caption}
-          {view.doneName && (
+          {view.downloadedName && (
+            <>
+              {" · "}
+              <span className="text-ink">{view.downloadedName}</span>
+            </>
+          )}
+          {view.uploadedName && (
             <>
               {" · "}
               {href ? (
@@ -78,23 +87,42 @@ export function Bounce({ current }: { current: MusicPlayerTrack }) {
                   href={href}
                   className="text-ink underline decoration-ink-faint underline-offset-2 hover:decoration-ink"
                 >
-                  {view.doneName}
+                  {view.uploadedName}
                 </AppLink>
               ) : (
-                <span className="text-ink">{view.doneName}</span>
+                <span className="text-ink">{view.uploadedName}</span>
               )}
             </>
           )}
         </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={bounce}
-          disabled={view.running}
-        >
-          {view.running && <IconLoader2 className="animate-spin" />}
-          Bounce
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {view.canUpload && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={uploadBounce}
+              disabled={view.running !== null}
+            >
+              {view.running === "upload" ? (
+                <IconLoader2 className="animate-spin" />
+              ) : (
+                <IconUpload />
+              )}
+              Upload
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={bounce}
+            disabled={view.running !== null}
+          >
+            {view.running === "bounce" && (
+              <IconLoader2 className="animate-spin" />
+            )}
+            Bounce
+          </Button>
+        </div>
       </div>
     </div>
   );
