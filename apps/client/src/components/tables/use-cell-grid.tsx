@@ -424,6 +424,9 @@ export function useCellGrid<TData extends RowData>({
       const edges = cell.getSelectionEdges();
       const target = { rowKey: cell.row.id, columnId: cell.column.id };
       const entry = entryOf(cell.column.id);
+      const isEditing =
+        editingCell?.rowKey === cell.row.id &&
+        editingCell?.columnId === cell.column.id;
       const startSelection = cell.getSelectionStartHandler();
       return {
         "data-cell": `${cell.row.id}::${cell.column.id}`,
@@ -431,6 +434,7 @@ export function useCellGrid<TData extends RowData>({
         // read-only: it is still selectable and copyable, so it is announced as
         // read-only rather than left indistinguishable from an editable cell.
         "data-editable": entry !== "none" || undefined,
+        "data-editing": isEditing || undefined,
         "aria-readonly": entry === "none" || undefined,
         "aria-selected": cell.getIsSelected(),
         "aria-describedby": entry !== "none" ? editHintId : undefined,
@@ -488,6 +492,7 @@ export function useCellGrid<TData extends RowData>({
       table,
       selectableColumnIds,
       entryOf,
+      editingCell,
       editHintId,
       dispatchCell,
       hasFocusedCell,

@@ -34,6 +34,8 @@ describe("the text editor", () => {
     const { input } = renderEditor("text", "Kick");
     expect(input.value).toBe("Kick");
     expect(document.activeElement).toBe(input);
+    expect(input.className).toContain("h-7");
+    expect(input.className).toContain("-my-1");
   });
 
   it("starts from the seed instead of the value", () => {
@@ -104,7 +106,10 @@ describe("the number editor", () => {
     const { input, onCommit, onCancel } = renderEditor("number", 3);
     fireEvent.change(input, { target: { value: "12abc" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(screen.getByRole("alert").textContent).toBe("Must be a number");
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("Must be a number");
+    expect(alert.className).toContain("absolute");
+    expect(alert.className).toContain("z-20");
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(onCommit).not.toHaveBeenCalled();
     expect(onCancel).not.toHaveBeenCalled();

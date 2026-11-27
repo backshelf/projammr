@@ -33,15 +33,15 @@ import { cn } from "@workspace/ui/lib/utils";
 import { memo, type ReactNode } from "react";
 
 /**
- * What marks a cell as editable, on hover: a 1px inset hairline in the border
- * token and the text cursor. An outline rather than a box-shadow, so it
- * composes with the selection's inset `--art` edges instead of replacing them,
- * and it steps aside for the focus ring. A cell that is its own control (a
- * toggle, a status trigger) gets the pointer on that control instead of an
- * I-beam.
+ * What marks a cell as editable, on a fine pointer hover: a 1px inset hairline
+ * in the stronger rule token and the text cursor. An outline rather than a
+ * box-shadow, so it composes with the selection's inset `--art` edges instead
+ * of replacing them, and it steps aside for the focus ring. A cell that is its
+ * own control (a toggle, a status trigger) gets the pointer on that control
+ * instead of an I-beam.
  */
 const EDITABLE_CELL =
-  "data-editable:cursor-text data-editable:not-focus-visible:hover:outline-1 data-editable:not-focus-visible:hover:-outline-offset-1 data-editable:not-focus-visible:hover:outline-border data-editable:[&_[data-cell-control]]:cursor-pointer";
+  "data-editable:cursor-text fine:data-editable:not-focus-visible:hover:outline-1 fine:data-editable:not-focus-visible:hover:-outline-offset-1 fine:data-editable:not-focus-visible:hover:outline-rule-strong data-editable:[&_[data-cell-control]]:cursor-pointer";
 
 /**
  * A row's element. It travels to its new place while a draft row is open in
@@ -119,7 +119,6 @@ function GridRowBody<TData extends RowData, TChild = never>({
     rowClick,
     openRow,
     rowActions,
-    rowAccent,
     pinnedColumnId,
     subRows,
     editableCells,
@@ -181,10 +180,6 @@ function GridRowBody<TData extends RowData, TChild = never>({
     rowActions != null && isTopLevel && rowId != null
       ? buildRowActions(row.original, rowId)
       : null;
-
-  // The row's status colour, tinting the hover plate. A sub-row belongs to
-  // another record, so it borrows nothing.
-  const accentHex = isTopLevel ? rowAccent?.accentHex?.(row.original) : null;
 
   const tableRow = (
     <SettlingRow
@@ -252,6 +247,7 @@ function GridRowBody<TData extends RowData, TChild = never>({
           firstNavigableColumnId === cell.column.id;
         const selProps: ReturnType<typeof cellGrid.selectionCellProps> =
           isTopLevel ? cellGrid.selectionCellProps(cell, isFirstNavigable) : {};
+        const isEditingCell = Boolean(selProps["data-editing"]);
 
         return (
           <TableCell
@@ -267,14 +263,17 @@ function GridRowBody<TData extends RowData, TChild = never>({
               ...selProps.style,
             }}
             className={cn(
-              "overflow-hidden focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+              isEditingCell
+                ? "relative z-20 overflow-visible"
+                : "overflow-hidden",
+              "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
               EDITABLE_CELL,
               isLeadingColumn && "px-0 text-center [&>*]:mx-auto",
               cell.column.id === pinnedColumnId && PINNED_CELL
             )}
             data-slot={cell.column.id === pinnedColumnId ? "pinned" : undefined}
           >
-            <div className="clip-cell">
+            <div className={isEditingCell ? "relative" : "clip-cell"}>
               <table.AppCell cell={cell}>
                 {(appCell) => renderCellContent(appCell, rowId)}
               </table.AppCell>
@@ -286,8 +285,8 @@ function GridRowBody<TData extends RowData, TChild = never>({
         // Pinned to the viewport's right edge rather than trailing the last
         // column: the grid is routinely wider than the window, and a trailing
         // cell would scroll out of reach exactly when it is wanted. Hidden
-        // until the row is hovered or the bar takes focus, so a table at rest
-        // shows data and nothing else.
+        // until the row is hovered or the bar takes focus on fine pointers, so
+        // a table at rest shows data and nothing else.
         <TableCell
           role="gridcell"
           aria-colindex={row.getVisibleCells().length + 1}
@@ -295,19 +294,18 @@ function GridRowBody<TData extends RowData, TChild = never>({
           style={{ width: 0 }}
         >
           {actions && (
-            // A solid plate, tinted with the row's status colour where one
-            // exists: opaque so it never lets the cell underneath (the
-            // Collections cell, most often) bleed through on a coarse
-            // pointer, where the plate stays visible rather than only
-            // showing on hover. Only the buttons themselves take pointer
-            // events, so the plate never steals a click meant for the row.
+            // Matches the row's composited surface (`--paper`, 4% hover wash,
+            // or 6% peek wash) with a 16px left fade gradient so the trailing
+            // cell eases under the controls without a hard seam or tinted slab.
             <div
-              className="pointer-events-none absolute top-0 right-0 flex h-full items-center gap-0.5 bg-paper pr-4 pl-4 [&_a]:pointer-events-auto [&_button]:pointer-events-auto"
-              style={{
-                backgroundColor: accentHex
-                  ? `color-mix(in oklab, ${accentHex} 22%, var(--paper))`
-                  : undefined,
-              }}
+              data-slot="row-actions-plate"
+              className={cn(
+                "pointer-events-none absolute top-0 right-0 flex h-full items-center gap-0.5 bg-(--row-plate-bg) pr-2 pl-2 [&_a]:pointer-events-auto [&_button]:pointer-events-auto",
+                isPeeked
+                  ? "[--row-plate-bg:color-mix(in_oklab,var(--ink)_6%,var(--paper))]"
+                  : "[--row-plate-bg:var(--paper)] group-hover/row:[--row-plate-bg:color-mix(in_oklab,var(--ink)_4%,var(--paper))]",
+                "before:pointer-events-none before:absolute before:inset-y-0 before:-left-4 before:w-4 before:bg-[linear-gradient(to_right,transparent,var(--row-plate-bg))]"
+              )}
             >
               <RowActionsBar
                 config={actions}

@@ -34,18 +34,17 @@ const NO_SELECTED_IDS: number[] = [];
  *  context to measure "a page from the end" against. */
 const OVERSCAN = 10;
 
-/** A first-paint guess for an item's height; `measureElement` corrects it
- *  once it is in the DOM, so this only has to be roughly right. */
-const ESTIMATED_ITEM_HEIGHT = 40;
+/** The entity table's base row height at density 1 (`--table-row-h`: 2.75rem). */
+const BASE_ROW_HEIGHT = 44;
 
-/** How much of that guess is the cells' vertical padding (the entity table's
- *  `py-2`, top and bottom): the part `--density` scales. */
-const ESTIMATED_CELL_PADDING = 16;
+/** Each row's 1px bottom border (`border-rule`). */
+const ROW_BORDER_HEIGHT = 1;
 
-/** The first-paint guess at a density factor (`useDensity`), so a compact or
- *  spacious table's scroll height is roughly right before a row is measured. */
+/** The first-paint guess at a density factor (`useDensity`), matching
+ *  `--table-row-h: round(calc(2.75rem * var(--density)), 1px)` plus the 1px
+ *  row border so a table's scroll height is right before rows are measured. */
 export const estimatedItemHeight = (density: number) =>
-  ESTIMATED_ITEM_HEIGHT + ESTIMATED_CELL_PADDING * (density - 1);
+  Math.round(BASE_ROW_HEIGHT * density) + ROW_BORDER_HEIGHT;
 
 /** One slot of the flattened list the virtualiser indexes: a group's header,
  *  or a row — top-level or sub-row, the virtualiser does not tell them apart. */

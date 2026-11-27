@@ -1,6 +1,7 @@
 "use client";
 
 import { fieldKind } from "@/fields";
+import { FloatingFieldError } from "@/fields/input";
 import type { FieldValue } from "@/fields/types";
 import { cn } from "@workspace/ui/lib/utils";
 import { type ReactNode, useState } from "react";
@@ -107,7 +108,7 @@ export default function EditableCell({
     return (
       <div
         className={cn(
-          "flex h-full items-center",
+          "-mx-1.5 flex h-full items-center rounded-sm px-1.5 motion-ink fine:hover:bg-[color-mix(in_oklab,var(--ink)_3%,transparent)]",
           isSaving ? "pointer-events-none opacity-50" : ""
         )}
         title={isEmpty ? undefined : text}
@@ -130,7 +131,7 @@ export default function EditableCell({
   return (
     <div
       className={cn(
-        "flex w-full flex-col gap-0.5",
+        "relative flex w-full items-center",
         isSaving ? "pointer-events-none opacity-50" : ""
       )}
     >
@@ -144,11 +145,7 @@ export default function EditableCell({
           onCancel={cancelEdit}
         />
       )}
-      {error && (
-        <span role="alert" className="text-small text-danger">
-          {error}
-        </span>
-      )}
+      {error && <FloatingFieldError message={error} />}
     </div>
   );
 }

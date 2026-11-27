@@ -31,14 +31,26 @@ const LABELS = [
   { id: 7, name: "Demo", colourHex: "#3c7ad0" },
 ] as Label[];
 
-function renderCell(listHref?: string, role: MemberRole = "editor") {
+const MANY_LABELS = [
+  ...LABELS,
+  // eslint-disable-next-line no-restricted-syntax -- a label's own colourHex, not a class name
+  { id: 9, name: "Master", colourHex: "#2e8b57" },
+  // eslint-disable-next-line no-restricted-syntax -- a label's own colourHex, not a class name
+  { id: 12, name: "Remix", colourHex: "#8a4fff" },
+] as Label[];
+
+function renderCell(
+  listHref?: string,
+  role: MemberRole = "editor",
+  labels: Label[] = LABELS
+) {
   return render(
     <ProjectProvider project={{ id: 3, name: "Project", role }}>
       <LabelsCell
         entityType={"track"}
         entityId={9}
-        labels={LABELS}
-        projectLabels={LABELS}
+        labels={labels}
+        projectLabels={labels}
         listHref={listHref}
       />
     </ProjectProvider>
@@ -85,5 +97,33 @@ describe("LabelsCell", () => {
 
     expect(screen.getByPlaceholderText("Filter or create…")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Manage labels" })).toBeNull();
+  });
+
+  it("keeps badges on a single line and collapses overflow into a +N popover", async () => {
+    const { container } = renderCell(
+      "/project/3/track/all",
+      "editor",
+      MANY_LABELS
+    );
+
+    expect(container.firstElementChild?.className).toContain("flex-nowrap");
+    expect(container.firstElementChild?.className).not.toContain("flex-wrap");
+    expect(screen.getByRole("link", { name: "Single" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Demo" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Master" })).toBeNull();
+
+    const pill = screen.getByRole("button", { name: "Show 2 more labels" });
+    expect(pill.textContent).toBe("+2");
+
+    await act(async () => {
+      fireEvent.click(pill);
+    });
+
+    expect(
+      screen.getByRole("link", { name: "Master" }).getAttribute("href")
+    ).toBe("/project/3/track/all?label=9");
+    expect(
+      screen.getByRole("link", { name: "Remix" }).getAttribute("href")
+    ).toBe("/project/3/track/all?label=12");
   });
 });

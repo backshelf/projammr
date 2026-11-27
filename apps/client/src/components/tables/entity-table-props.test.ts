@@ -188,6 +188,16 @@ describe("assembleEntityTableProps", () => {
     );
   });
 
+  it("wires track playback with the active collection scope into rowActions", () => {
+    const props = assembleTrack();
+    expect(props.rowActions?.play?.(trackRow(11, "Kick"))).toEqual({
+      kind: "track",
+      id: 11,
+      title: "Kick",
+      collectionId: 7,
+    });
+  });
+
   it("moves a row to a route in the destination that names the row alone", () => {
     const moveToProject = assembleTrack().moveToProject;
 
@@ -328,8 +338,10 @@ describe("assembleEntityTableProps for a kind with no status", () => {
       pinnedIdentityColumn: true,
     });
 
-  it("withholds the bulk bar's statuses", () => {
-    expect(assembleSession().bulkStatuses).toBeUndefined();
+  it("withholds the bulk bar's statuses and playback row actions", () => {
+    const props = assembleSession();
+    expect(props.bulkStatuses).toBeUndefined();
+    expect(props.rowActions?.play).toBeUndefined();
   });
 
   it("still names, pins and peeks by its own identity field", () => {

@@ -2,11 +2,11 @@
 
 import { StatusDisplay } from "@/components/status/StatusDisplay";
 import {
-  ACTION_COLUMN_SIZE,
   idColumn,
-  TABLE_THUMB_WIDTH,
   labelsColumn,
+  PLAY_COLUMN_SIZE,
   priorityColumn,
+  TABLE_THUMB_WIDTH,
   textColumn,
   timestampColumns,
   titleColumn,
@@ -36,13 +36,12 @@ export function collectionColumns(
   return columnHelper.columns([
     columnHelper.display({
       id: "play",
-      ...ACTION_COLUMN_SIZE,
+      ...PLAY_COLUMN_SIZE,
       cell: (info) => (
         <TableRowPlay
           kind="collection"
           id={info.row.original.id}
           title={info.row.original.title}
-          deleteLabel="Delete collection"
         />
       ),
     }),

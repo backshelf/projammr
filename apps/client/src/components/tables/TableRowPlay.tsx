@@ -3,35 +3,33 @@
 import { PlayAffordance } from "@/components/music-player/PlayAffordance";
 import { useSetting } from "@/lib/settings/provider";
 import { rowPlay, rowPlayAlways } from "@workspace/ui/components/table";
-import { useRequestRowDelete } from "./row-delete";
 
 /**
- * The play column's affordance for a top-level row: playback controls plus a
- * delete entry that runs through the table's own confirmation dialog.
+ * The leading play column's transport control for a top-level row. Queueing,
+ * download and delete live in the row's single trailing action menu rather than
+ * a second overflow button here.
  */
 export function TableRowPlay({
   kind,
   id,
   title,
-  deleteLabel,
+  collectionId,
 }: {
   kind: "track" | "collection";
   id: number;
   title: string;
-  deleteLabel: string;
+  /** The collection a track is listed inside, for contextual playback. */
+  collectionId?: number;
 }) {
-  const requestDelete = useRequestRowDelete();
   const hoverPlay = useSetting("tables.hoverPlay");
   return (
     <PlayAffordance
       kind={kind}
       id={id}
       title={title}
-      deleteLabel={deleteLabel}
+      collectionId={collectionId}
+      hideMenu
       className={hoverPlay === "always" ? rowPlayAlways : rowPlay}
-      onDelete={
-        requestDelete ? () => requestDelete([id], `"${title}"`) : undefined
-      }
     />
   );
 }

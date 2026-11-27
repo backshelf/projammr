@@ -166,7 +166,10 @@ describe("DraftRow", () => {
     await create();
 
     expect(onCreate).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toBe("Must be a number");
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("Must be a number");
+    expect(alert.className).toContain("absolute");
+    expect(alert.className).toContain("z-20");
     expect(bpm!.getAttribute("aria-invalid")).toBe("true");
   });
 

@@ -1,3 +1,4 @@
+import type { PlaybackSubject } from "@/components/music-player/use-playback";
 import type { GroupSummary } from "@/components/tables/group-sections";
 import type { BulkSelection } from "@/entities/api";
 import type { FieldConfig, FieldKindName, FieldValue } from "@/fields/types";
@@ -384,6 +385,8 @@ export interface DataTableProps<TData extends RowData, TChild = never> {
     onDelete?: (id: number) => Promise<{ ok: boolean }>;
     /** How a row is named in a confirmation — its title. */
     label?: (row: TData) => string;
+    /** Playback subject offered at the top of the row's unified action menu. */
+    play?: (row: TData) => PlaybackSubject;
   };
   /**
    * Where a row's colour comes from. The theme itself is achromatic, so the

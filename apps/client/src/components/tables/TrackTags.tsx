@@ -6,48 +6,60 @@ import { useProjectRole } from "@/hooks/use-project-role";
 import { IconPlus, IconX } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { StatusChip } from "@workspace/ui/components/status-chip";
-import type { PropsWithChildren } from "react";
+import type { PropsWithChildren, ReactNode } from "react";
+
+import { OverflowChipList } from "./OverflowChipList";
 
 /**
  * A cell of linked records (a track's collections, relations) as chips, with a
  * trailing "+" that opens the link dialog for the row. The chips stay on one
- * line and clip: a row with many links must not grow taller than its
- * neighbours, and the full set is reachable from the record itself.
+ * line with a `+N` popover for overflow so a row with many links never grows
+ * taller than `--table-row-h`.
  */
-export function TrackTags({
-  children,
+export function TrackTags<T>({
+  items,
+  getKey,
+  renderItem,
   trackId,
   defaultTab,
   linkedCollectionIds,
-}: PropsWithChildren<{
+}: {
+  items: readonly T[];
+  getKey: (item: T, index: number) => string | number;
+  renderItem: (item: T, index: number) => ReactNode;
   trackId: number;
   defaultTab?: "collection" | "session" | "relation";
   linkedCollectionIds?: number[];
-}>) {
+}) {
   const canEdit = useProjectRole()?.can("editor") ?? true;
   return (
-    <div className="flex min-w-0 items-center gap-1">
-      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-        {children}
-      </div>
-      {canEdit && (
-        <LinkToDialog
-          targetKind="track"
-          targetId={trackId}
-          defaultTab={defaultTab}
-          linkedCollectionIds={linkedCollectionIds}
-        >
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Link to another item"
-            className="size-6 flex-none text-ink-soft hover:text-ink"
+    <OverflowChipList
+      items={items}
+      maxVisible={2}
+      getKey={getKey}
+      overflowLabel={defaultTab === "relation" ? "relations" : "collections"}
+      renderItem={renderItem}
+      listClassName="flex-1"
+      trailing={
+        canEdit ? (
+          <LinkToDialog
+            targetKind="track"
+            targetId={trackId}
+            defaultTab={defaultTab}
+            linkedCollectionIds={linkedCollectionIds}
           >
-            <IconPlus size={14} />
-          </Button>
-        </LinkToDialog>
-      )}
-    </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Link to another item"
+              className="size-6 flex-none text-ink-soft hover:text-ink"
+            >
+              <IconPlus size={14} />
+            </Button>
+          </LinkToDialog>
+        ) : undefined
+      }
+    />
   );
 }
 

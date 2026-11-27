@@ -22,6 +22,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { isActionError } from "@workspace/api/lib/action-result";
 
+import { OverflowChipList } from "./OverflowChipList";
+
 // One identity for the absent case, so the memos below actually memoise.
 const NO_LABELS: Label[] = [];
 
@@ -118,92 +120,101 @@ export function LabelsCell({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {rowLabels.map((label) => (
+    <OverflowChipList
+      items={rowLabels}
+      maxVisible={2}
+      getKey={(label) => label.id}
+      overflowLabel="labels"
+      renderItem={(label) => (
         <LabelBadge
-          key={label.id}
           label={label}
           href={listHref && withFilters(listHref, { label: label.id })}
         />
-      ))}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Edit labels"
-            className="size-6"
-          >
-            {rowLabels.length ? <IconPlus size={14} /> : <IconTag size={14} />}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-64 p-2">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Filter or create…"
-            className="mb-2 h-7 text-small"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && draft.trim() && !exactMatch) addNew();
-            }}
-          />
-          <div className="max-h-56 space-y-0.5 overflow-y-auto">
-            {filtered.map((label) => (
-              <button
-                key={label.id}
-                type="button"
-                disabled={saving}
-                onClick={() => toggle(label.id)}
-                className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-small hover:bg-ink/4 disabled:opacity-50"
-              >
-                <span
-                  aria-hidden
-                  className="size-3 shrink-0 rounded-full border"
-                  style={{
-                    backgroundColor: selectedIds.has(label.id)
-                      ? label.colourHex
-                      : "transparent",
-                    borderColor: label.colourHex,
-                  }}
-                />
-                <span className="truncate">{label.name}</span>
-              </button>
-            ))}
-            {draft.trim() && !exactMatch && (
-              <button
-                type="button"
-                disabled={saving}
-                onClick={addNew}
-                className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-small hover:bg-ink/4 disabled:opacity-50"
-              >
+      )}
+      trailing={
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Edit labels"
+              className="size-6 shrink-0"
+            >
+              {rowLabels.length ? (
                 <IconPlus size={14} />
-                Create “{draft.trim()}”
-              </button>
+              ) : (
+                <IconTag size={14} />
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64 p-2">
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Filter or create…"
+              className="mb-2 h-7 text-small"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && draft.trim() && !exactMatch) addNew();
+              }}
+            />
+            <div className="max-h-56 space-y-0.5 overflow-y-auto">
+              {filtered.map((label) => (
+                <button
+                  key={label.id}
+                  type="button"
+                  disabled={saving}
+                  onClick={() => toggle(label.id)}
+                  className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-small hover:bg-ink/4 disabled:opacity-50"
+                >
+                  <span
+                    aria-hidden
+                    className="size-3 shrink-0 rounded-full border"
+                    style={{
+                      backgroundColor: selectedIds.has(label.id)
+                        ? label.colourHex
+                        : "transparent",
+                      borderColor: label.colourHex,
+                    }}
+                  />
+                  <span className="truncate">{label.name}</span>
+                </button>
+              ))}
+              {draft.trim() && !exactMatch && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={addNew}
+                  className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-small hover:bg-ink/4 disabled:opacity-50"
+                >
+                  <IconPlus size={14} />
+                  Create “{draft.trim()}”
+                </button>
+              )}
+              {filtered.length === 0 && !draft.trim() && (
+                <p className="px-1.5 py-1 text-small text-ink-soft">
+                  No labels yet.
+                </p>
+              )}
+            </div>
+            {/* Renaming, recolouring and deleting labels is an editor's. */}
+            {can("editor") && (
+              <>
+                <Separator className="my-2" />
+                <AppLink
+                  href={settingsHref({
+                    section: "project",
+                    projectId,
+                    group: "labels",
+                  })}
+                  className="block rounded px-1.5 py-1 text-small text-ink-soft hover:bg-ink/4"
+                >
+                  Manage labels
+                </AppLink>
+              </>
             )}
-            {filtered.length === 0 && !draft.trim() && (
-              <p className="px-1.5 py-1 text-small text-ink-soft">
-                No labels yet.
-              </p>
-            )}
-          </div>
-          {/* Renaming, recolouring and deleting labels is an editor's. */}
-          {can("editor") && (
-            <>
-              <Separator className="my-2" />
-              <AppLink
-                href={settingsHref({
-                  section: "project",
-                  projectId,
-                  group: "labels",
-                })}
-                className="block rounded px-1.5 py-1 text-small text-ink-soft hover:bg-ink/4"
-              >
-                Manage labels
-              </AppLink>
-            </>
-          )}
-        </PopoverContent>
-      </Popover>
-    </div>
+          </PopoverContent>
+        </Popover>
+      }
+    />
   );
 }

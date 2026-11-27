@@ -1,12 +1,14 @@
 "use client";
 
 import { fieldKind } from "@/fields";
+import { FloatingFieldError } from "@/fields/input";
 import type { FieldKind } from "@/fields/types";
 import { IconPlus } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { Spinner } from "@workspace/ui/components/spinner";
 import { PINNED_CELL, TableCell } from "@workspace/ui/components/table";
 import { FADE, LEAVE } from "@workspace/ui/lib/motion";
+import { cn } from "@workspace/ui/lib/utils";
 import {
   type KeyboardEvent,
   useCallback,
@@ -92,11 +94,11 @@ function DraftField({
   }, [autoFocus]);
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="relative flex items-center">
       <div
         ref={ref}
         inert={disabled}
-        className={disabled ? "opacity-50" : undefined}
+        className={cn("w-full", disabled && "opacity-50")}
         onKeyDown={onKeyDown}
       >
         <DraftInput
@@ -107,11 +109,7 @@ function DraftField({
           invalid={error !== undefined}
         />
       </div>
-      {error && (
-        <span role="alert" className="text-small text-danger">
-          {error}
-        </span>
-      )}
+      {error && <FloatingFieldError message={error} />}
     </div>
   );
 }
@@ -295,7 +293,11 @@ export function DraftRow({
         config.fields[id] ? (
           <TableCell
             key={id}
-            className={id === pinnedColumnId ? PINNED_CELL : undefined}
+            className={cn(
+              "overflow-visible",
+              errors[id] && "relative z-20",
+              id === pinnedColumnId && PINNED_CELL
+            )}
           >
             <div className="flex items-center gap-1">
               <span className="min-w-0 flex-1">{renderField(id)}</span>

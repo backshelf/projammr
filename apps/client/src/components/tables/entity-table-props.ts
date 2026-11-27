@@ -1,3 +1,4 @@
+import type { PlaybackSubject } from "@/components/music-player/use-playback";
 import { navigableColumnIds } from "@/components/tables/columns";
 import type { DataTableProps } from "@/components/tables/DataTable";
 import type {
@@ -226,6 +227,18 @@ export function assembleEntityTableProps<K extends TableEntityKind>({
       copyHref: href,
       label: labelOf,
       onDelete: mutations.onRowDelete,
+      play:
+        definition.kind === "track" || definition.kind === "collection"
+          ? (row: EntityTableRow[K]): PlaybackSubject => ({
+              kind: definition.kind as "track" | "collection",
+              id: row.id,
+              title: labelOf(row),
+              collectionId:
+                definition.kind === "track"
+                  ? (scope as EntityTableScope["track"]).collectionId
+                  : undefined,
+            })
+          : undefined,
     },
   };
 }

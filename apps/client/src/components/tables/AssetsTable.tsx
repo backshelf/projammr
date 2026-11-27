@@ -22,6 +22,7 @@ import { AssetRowActions } from "./AssetRowActions";
 import { ACTION_COLUMN_SIZE, dateTimeColumn, idColumn } from "./columns";
 import { createAppColumnHelper } from "./data-table-hook";
 import { DataTable, usePageTableState } from "./DataTable";
+import { OverflowChipList } from "./OverflowChipList";
 
 const columnHelper = createAppColumnHelper<AssetWithContext>();
 
@@ -111,17 +112,21 @@ function getColumns(projectId: number) {
           if (attachments.length === 0)
             return <span className="text-ink-soft">Unattached</span>;
           return (
-            <span className="flex min-w-0 flex-wrap items-center gap-x-2">
-              {attachments.map((attachment) => (
+            <OverflowChipList
+              items={attachments}
+              maxVisible={2}
+              getKey={(attachment) => `${attachment.kind}-${attachment.id}`}
+              overflowLabel="attachments"
+              listClassName="gap-x-2"
+              renderItem={(attachment) => (
                 <AppLink
-                  key={`${attachment.kind}-${attachment.id}`}
                   href={attachmentHref(attachment, projectId)}
-                  className="truncate text-small text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+                  className="max-w-36 truncate text-small text-ink-soft underline-offset-4 hover:text-ink hover:underline"
                 >
                   {attachment.title}
                 </AppLink>
-              ))}
-            </span>
+              )}
+            />
           );
         },
       }

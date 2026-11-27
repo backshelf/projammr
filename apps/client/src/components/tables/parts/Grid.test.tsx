@@ -1,4 +1,4 @@
-import { renderGrid } from "@/components/tables/test-support";
+import { mixing, press, renderGrid } from "@/components/tables/test-support";
 import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "bun:test";
 
@@ -71,6 +71,67 @@ describe("Grid", () => {
       renderGrid(undefined, undefined, { emptyText: "Nothing here." });
 
       expect(screen.queryByText("Nothing here.")).toBeNull();
+    });
+  });
+
+  describe("row actions plate", () => {
+    it("uses the neutral row surface variable and fade gradient without a status-tinted slab", () => {
+      const { container } = renderGrid(undefined, undefined, {
+        bulkStatuses: [mixing],
+        rowActions: { copyHref: (row) => `/track/${row.id}` },
+        rowAccent: {
+          accentHex: () =>
+            // eslint-disable-next-line no-restricted-syntax -- fixture status colourHex
+            "#336699",
+        },
+      });
+
+      const plate = container.querySelector<HTMLElement>(
+        '[data-slot="row-actions-plate"]'
+      );
+      expect(plate).not.toBeNull();
+      expect(plate?.style.backgroundColor).toBe("");
+      expect(plate?.className).toContain("bg-(--row-plate-bg)");
+      expect(plate?.className).toContain(
+        "group-hover/row:[--row-plate-bg:color-mix(in_oklab,var(--ink)_4%,var(--paper))]"
+      );
+      expect(plate?.className).toContain("before:-left-4");
+      expect(plate?.className).toContain("before:w-4");
+    });
+
+    it("gates hover-only quick buttons to fine pointers while leaving the overflow menu reachable", () => {
+      renderGrid(undefined, undefined, {
+        bulkStatuses: [mixing],
+        rowActions: { copyHref: (row) => `/track/${row.id}` },
+      });
+
+      const copyButton = screen.getAllByRole("button", {
+        name: "Copy link to row",
+      })[0]!;
+      expect(copyButton.parentElement?.className).toContain("hidden");
+      expect(copyButton.parentElement?.className).toContain("fine:flex");
+
+      const moreButton = screen.getAllByRole("button", {
+        name: "More actions for row",
+      })[0]!;
+      expect(moreButton.parentElement?.className).not.toContain("hidden");
+    });
+  });
+
+  describe("inline editing overflow", () => {
+    it("allows overflow while a cell is editing so floating errors are not clipped", () => {
+      const { cell } = renderGrid();
+      const titleCell = cell("10::title");
+
+      expect(titleCell.className).toContain("overflow-hidden");
+      expect(titleCell.querySelector(".clip-cell")).not.toBeNull();
+
+      press(titleCell);
+      press(titleCell);
+
+      expect(titleCell.hasAttribute("data-editing")).toBe(true);
+      expect(titleCell.className).toContain("overflow-visible");
+      expect(titleCell.querySelector(".clip-cell")).toBeNull();
     });
   });
 });

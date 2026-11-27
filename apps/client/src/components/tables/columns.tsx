@@ -323,7 +323,17 @@ export function timestampColumns<
   ];
 }
 
-/** Sizing for the leading play/actions column so neither control is clipped. */
+/** Sizing for a leading play-only column (single transport button, no menu). */
+export const PLAY_COLUMN_SIZE = {
+  header: "",
+  enableHiding: false,
+  enableResizing: false,
+  size: 56,
+  minSize: 56,
+  maxSize: 56,
+} as const;
+
+/** Sizing for a leading two-button column (play + overflow menu, e.g. files). */
 export const ACTION_COLUMN_SIZE = {
   header: "",
   enableHiding: false,

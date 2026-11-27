@@ -6,10 +6,14 @@ import {
   IconCircleDashed,
   IconCopy,
   IconDotsVertical,
+  IconDownload,
   IconFolderShare,
   IconLayoutSidebarRightExpand,
   IconLibraryPlus,
   IconPencil,
+  IconPlayerPlay,
+  IconPlayerTrackNext,
+  IconPlaylistAdd,
   IconTrash,
 } from "@tabler/icons-react";
 import type { Status } from "@workspace/api/api";
@@ -32,6 +36,10 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
+import {
+  type PlaybackSubject,
+  usePlayback,
+} from "@/components/music-player/use-playback";
 import { StatusDisplay } from "@/components/status/StatusDisplay";
 
 /**
@@ -53,6 +61,8 @@ export type DeclaredActionItem = {
  * `statuses` arrives already in pipeline order.
  */
 export type RowActionsConfig = {
+  /** Playback actions offered at the top of the menu for playable rows. */
+  playback?: PlaybackSubject;
   /** Statuses offered by "Set status". */
   statuses?: Status[];
   /** Collections offered by "Add to collection". */
@@ -62,6 +72,8 @@ export type RowActionsConfig = {
   /** Open the row in the side panel with its title editor active. */
   onRename?: () => void;
   onCopyLink?: () => void;
+  /** Download the row's primary asset, when available. */
+  onDownload?: () => void;
   /** Open the row's detail in the side panel (peek). */
   onOpen?: () => void;
   /** Navigate to the row's full page, leaving the table. */
@@ -122,6 +134,45 @@ export type ActionPrimitives = {
 };
 
 /**
+ * Playback entries for a playable row, mounted only while a menu is open so
+ * resting rows carry no player subscriptions.
+ */
+function PlaybackMenuItems({
+  playback,
+  Item,
+}: {
+  playback: PlaybackSubject;
+  Item: ActionPrimitives["Item"];
+}) {
+  const { playInContext, queueNext, queueLast } = usePlayback(playback);
+  const playLabel =
+    playback.kind === "collection"
+      ? "Play collection"
+      : playback.collectionId !== undefined
+        ? "Play from here"
+        : "Play";
+  const queueLabel =
+    playback.kind === "collection" ? "Queue collection" : "Add to queue";
+
+  return (
+    <>
+      <Item onSelect={() => void playInContext()}>
+        <IconPlayerPlay />
+        {playLabel}
+      </Item>
+      <Item onSelect={() => void queueNext()}>
+        <IconPlayerTrackNext />
+        Play next
+      </Item>
+      <Item onSelect={() => void queueLast()}>
+        <IconPlaylistAdd />
+        {queueLabel}
+      </Item>
+    </>
+  );
+}
+
+/**
  * The action list, rendered with whichever primitives are hosting it. Every
  * surface offers the same operations so the right-click menu, the `⋯` overflow
  * and the phone action sheet never disagree about what a row can do.
@@ -139,15 +190,44 @@ export function ActionItems({
   collectionSub?: ControlledSub;
 }) {
   const { Item, Separator, Sub, SubTrigger, SubContent } = primitives;
-  const { statuses, collections, onSetStatus, onAddToCollection } = config;
-  const { onRename, onCopyLink, onOpen, onOpenPage, onMove, onDelete } = config;
+  const { playback, statuses, collections, onSetStatus, onAddToCollection } =
+    config;
+  const {
+    onRename,
+    onCopyLink,
+    onDownload,
+    onOpen,
+    onOpenPage,
+    onMove,
+    onDelete,
+  } = config;
   const { actions } = config;
 
-  // A bulk target has no single row to open, rename or link to.
+  // A bulk target has no single row to play, open, rename or link to.
   const single = target.count === 1;
+  const hasPlayback = Boolean(playback && single);
+  const hasStatus = Boolean(onSetStatus && statuses && statuses.length > 0);
+  const hasCollections = Boolean(
+    onAddToCollection && collections && collections.length > 0
+  );
+  const hasMiddle = Boolean(
+    (onOpen && single) ||
+    (onOpenPage && single) ||
+    hasStatus ||
+    hasCollections ||
+    (onRename && single) ||
+    (onCopyLink && single) ||
+    (onDownload && single) ||
+    (actions && actions.length > 0)
+  );
+  const hasBottom = Boolean(onMove || onDelete);
 
   return (
     <>
+      {hasPlayback && playback && (
+        <PlaybackMenuItems playback={playback} Item={Item} />
+      )}
+      {hasPlayback && hasMiddle && <Separator />}
       {onOpen && single && (
         <Item onSelect={() => onOpen()}>
           <IconLayoutSidebarRightExpand />
@@ -160,7 +240,7 @@ export function ActionItems({
           Open page
         </Item>
       )}
-      {onSetStatus && statuses && statuses.length > 0 && (
+      {hasStatus && onSetStatus && statuses && (
         <Sub>
           <SubTrigger>
             <IconCircleDashed />
@@ -175,7 +255,7 @@ export function ActionItems({
           </SubContent>
         </Sub>
       )}
-      {onAddToCollection && collections && collections.length > 0 && (
+      {hasCollections && onAddToCollection && collections && (
         <Sub
           open={collectionSub?.open}
           onOpenChange={collectionSub?.onOpenChange}
@@ -208,12 +288,19 @@ export function ActionItems({
           Copy link
         </Item>
       )}
+      {onDownload && single && (
+        <Item onSelect={() => onDownload()}>
+          <IconDownload />
+          Download
+        </Item>
+      )}
       {actions?.map(({ id, label, icon: ActionIcon, onSelect }) => (
         <Item key={id} onSelect={() => void onSelect()}>
           {ActionIcon && <ActionIcon />}
           {label}
         </Item>
       ))}
+      {(hasPlayback || hasMiddle) && hasBottom && <Separator />}
       {onMove && (
         <Item onSelect={() => onMove()}>
           <IconFolderShare />
@@ -221,13 +308,10 @@ export function ActionItems({
         </Item>
       )}
       {onDelete && (
-        <>
-          <Separator />
-          <Item variant="destructive" onSelect={() => onDelete()}>
-            <IconTrash />
-            {single ? "Delete" : `Delete ${target.count} ${target.label}`}
-          </Item>
-        </>
+        <Item variant="destructive" onSelect={() => onDelete()}>
+          <IconTrash />
+          {single ? "Delete" : `Delete ${target.count} ${target.label}`}
+        </Item>
       )}
     </>
   );
@@ -301,54 +385,59 @@ export function RowActionsBar({
 
   return (
     <div className="flex items-center justify-end gap-0.5">
-      {onSetStatus && statuses && statuses.length > 0 && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Set status of ${entityLabel}`}
-            >
-              <IconCircleDashed />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {statuses.map((status) => (
-              <DropdownMenuItem
-                key={status.id}
-                onSelect={() => onSetStatus(status.id)}
+      {/* Hover-only quick buttons stay hidden on non-fine pointers so touch
+          devices and headless renders show only the single `⋮` trigger rather
+          than a wide always-on action slab over the trailing column. */}
+      <div className="hidden items-center gap-0.5 fine:flex">
+        {onSetStatus && statuses && statuses.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Set status of ${entityLabel}`}
               >
-                <StatusOption status={status} />
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+                <IconCircleDashed />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {statuses.map((status) => (
+                <DropdownMenuItem
+                  key={status.id}
+                  onSelect={() => onSetStatus(status.id)}
+                >
+                  <StatusOption status={status} />
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
-      {onOpen && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Open ${entityLabel}`}
-          onClick={onOpen}
-        >
-          <IconLayoutSidebarRightExpand />
-        </Button>
-      )}
+        {onOpen && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Open ${entityLabel}`}
+            onClick={onOpen}
+          >
+            <IconLayoutSidebarRightExpand />
+          </Button>
+        )}
 
-      {onCopyLink && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Copy link to ${entityLabel}`}
-          onClick={onCopyLink}
-        >
-          <IconCopy />
-        </Button>
-      )}
+        {onCopyLink && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Copy link to ${entityLabel}`}
+            onClick={onCopyLink}
+          >
+            <IconCopy />
+          </Button>
+        )}
+      </div>
 
       <DropdownMenu
         open={menuOpen}

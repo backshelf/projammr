@@ -83,9 +83,10 @@ describe("editing a cell", () => {
     );
     const { onEditEnd } = mount({ onSave });
     await enterText("Snare");
-    expect(screen.getByRole("alert").textContent).toBe(
-      "Save failed — try again"
-    );
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("Save failed — try again");
+    expect(alert.className).toContain("absolute");
+    expect(alert.className).toContain("z-20");
     expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe(
       "Snare"
     );
@@ -142,5 +143,20 @@ describe("a cell that is not being edited", () => {
   it("mounts no editor", () => {
     mount({ isEditing: false });
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("carries a subtle fine-pointer hover cue on the display wrapper", () => {
+    const { container } = render(
+      <EditableCell
+        value="Kick"
+        config={{ type: "text" }}
+        isEditing={false}
+        onSave={mock(async () => true)}
+        onEditEnd={mock()}
+      />
+    );
+    expect(container.firstElementChild?.className).toContain(
+      "fine:hover:bg-[color-mix(in_oklab,var(--ink)_3%,transparent)]"
+    );
   });
 });

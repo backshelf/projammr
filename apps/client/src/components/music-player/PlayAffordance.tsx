@@ -26,6 +26,7 @@ export function PlayAffordance({
   className,
   menuClassName,
   hero = false,
+  hideMenu = false,
   onDelete,
   deleteLabel = "Delete",
 }: {
@@ -42,6 +43,11 @@ export function PlayAffordance({
    * the marks themselves grow to 44px instead of relying on the halo.
    */
   hero?: boolean;
+  /**
+   * Omits the trailing playback overflow menu — used inside data tables where
+   * playback options live in the row's single unified action menu.
+   */
+  hideMenu?: boolean;
   onDelete?: () => void;
   deleteLabel?: string;
 }) {
@@ -50,6 +56,27 @@ export function PlayAffordance({
   const size = useCoarsePointer() && hero ? "touch" : "default";
   const [menuOpen, setMenuOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
+
+  if (hideMenu) {
+    return (
+      <div
+        className={cn("group/play flex items-center", className)}
+        // The hover-revealed treatment on a table row must not hide the control
+        // for the row that is actually playing.
+        data-active={showPause || undefined}
+      >
+        <IconButton
+          variant="play"
+          size={size}
+          aria-label={`${showPause ? "Pause" : "Play"} ${title ?? kind}`}
+          disabled={loading}
+          onClick={() => void toggle()}
+        >
+          <PlayGlyph playing={showPause} loading={loading} />
+        </IconButton>
+      </div>
+    );
+  }
 
   return (
     <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>

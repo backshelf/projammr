@@ -13,6 +13,7 @@ import {
   timestampColumns,
   titleColumn,
 } from "@/components/tables/columns";
+import { OverflowChipList } from "@/components/tables/OverflowChipList";
 import { Tag } from "@/components/tables/TrackTags";
 import { hrefFromParsedRoute } from "@/lib/utils";
 import { IconPlus } from "@tabler/icons-react";
@@ -137,10 +138,13 @@ export function sessionColumns(
           if (collections.length === 0)
             return <span className="text-ink-soft">—</span>;
           return (
-            <div className="flex flex-wrap gap-1">
-              {collections.map((c) => (
+            <OverflowChipList
+              items={collections}
+              maxVisible={2}
+              getKey={(c) => c.id}
+              overflowLabel="collections"
+              renderItem={(c) => (
                 <Tag
-                  key={c.id}
                   href={hrefFromParsedRoute(
                     { kind: "collection", collectionId: c.id },
                     projectId
@@ -148,8 +152,8 @@ export function sessionColumns(
                 >
                   {c.title}
                 </Tag>
-              ))}
-            </div>
+              )}
+            />
           );
         },
       }

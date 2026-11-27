@@ -96,8 +96,8 @@ function CardList<TData extends RowData, TChild = never>(): ReactNode {
   );
 
   // A tap on a card already goes to the row's page, so its sheet drops "Open"
-  // (the panel beside a table that is not there). Rename keeps its item: it
-  // opens the panel full-width, because editing a title needs no table.
+  // (the panel beside a table that is not there), and drops `playback` because
+  // `RowActionSheet` renders its own `SheetPlayItem` above `ActionItems`.
   const getCardActions = useCallback(
     (id: number) => {
       const row = cardRowFor(id);
@@ -105,6 +105,7 @@ function CardList<TData extends RowData, TChild = never>(): ReactNode {
       return {
         ...buildRowActions(row.original as TData, id),
         onOpen: undefined,
+        playback: undefined,
       };
     },
     [cardRowFor, buildRowActions]

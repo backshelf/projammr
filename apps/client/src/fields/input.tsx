@@ -46,9 +46,26 @@ function useSuggestions(config: FieldConfig, suggest: boolean | undefined) {
 }
 
 /**
+ * Validation feedback anchored beneath an inline table input. Positioned out
+ * of document flow so showing or clearing an error never shifts the row's
+ * height.
+ */
+export function FloatingFieldError({ message }: { message: string }) {
+  return (
+    <span
+      role="alert"
+      className="pointer-events-none absolute top-full left-0 z-20 mt-1 max-w-64 rounded-md border border-danger/30 bg-paper px-2 py-1 text-small whitespace-normal text-danger shadow-menu"
+    >
+      {message}
+    </span>
+  );
+}
+
+/**
  * The cell editor of a kind entered as one line of text. It starts from `seed`
  * or the value's own text, and commits only what `parse` accepts: a parse error
- * shows inline and keeps the editor open. Enter commits; Escape and blur cancel.
+ * floats beneath the input and keeps the editor open. Enter commits; Escape and
+ * blur cancel.
  */
 export function inputEditor(
   { parse, format }: Pick<FieldKind, "parse" | "format">,
@@ -94,7 +111,7 @@ export function inputEditor(
     };
 
     return (
-      <div className="flex w-full flex-col gap-0.5">
+      <div className="relative flex w-full items-center">
         <Input
           ref={inputRef}
           type="text"
@@ -106,14 +123,10 @@ export function inputEditor(
           onBlur={onCancel}
           placeholder={config.placeholder}
           aria-invalid={error !== null || undefined}
-          className="h-6 md:text-small"
+          className="-my-1 h-7 md:text-small"
         />
         {datalist}
-        {error && (
-          <span role="alert" className="text-small text-danger">
-            {error}
-          </span>
-        )}
+        {error && <FloatingFieldError message={error} />}
       </div>
     );
   };

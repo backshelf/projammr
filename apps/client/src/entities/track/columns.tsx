@@ -7,10 +7,10 @@ import {
 } from "@/components/product-linking/RelationSelector";
 import { StatusDisplay } from "@/components/status/StatusDisplay";
 import {
-  ACTION_COLUMN_SIZE,
   countColumn,
   idColumn,
   labelsColumn,
+  PLAY_COLUMN_SIZE,
   priorityColumn,
   relativeDateColumn,
   TABLE_THUMB_WIDTH,
@@ -66,13 +66,13 @@ export function trackColumns(
   return columnHelper.columns([
     columnHelper.display({
       id: "play",
-      ...ACTION_COLUMN_SIZE,
+      ...PLAY_COLUMN_SIZE,
       cell: (info) => (
         <TableRowPlay
           kind="track"
           id={info.row.original.id}
           title={info.row.original.title}
-          deleteLabel="Delete track"
+          collectionId={collectionId}
         />
       ),
     }),
@@ -134,10 +134,10 @@ export function trackColumns(
           trackId={info.row.original.id}
           defaultTab="collection"
           linkedCollectionIds={info.row.original.collections.map((c) => c.id)}
-        >
-          {info.row.original.collections.map((collection) => (
+          items={info.row.original.collections}
+          getKey={(collection) => collection.id}
+          renderItem={(collection) => (
             <Tag
-              key={collection.id}
               href={hrefFromParsedRoute(
                 { kind: "collection", collectionId: collection.id },
                 projectId
@@ -148,8 +148,8 @@ export function trackColumns(
             >
               {collection.title}
             </Tag>
-          ))}
-        </TrackTags>
+          )}
+        />
       ),
     }),
     columnHelper.accessor((row) => row.relations?.length ?? 0, {
@@ -157,10 +157,13 @@ export function trackColumns(
       header: "Relations",
       enableSorting: false,
       cell: (info) => (
-        <TrackTags trackId={info.row.original.id} defaultTab="relation">
-          {info.row.original.relations.map((rel) => (
+        <TrackTags
+          trackId={info.row.original.id}
+          defaultTab="relation"
+          items={info.row.original.relations}
+          getKey={(rel) => rel.id}
+          renderItem={(rel) => (
             <Tag
-              key={rel.id}
               href={hrefFromParsedRoute(
                 { kind: "track", trackId: rel.otherTrack.id },
                 projectId
@@ -174,8 +177,8 @@ export function trackColumns(
                     rel.otherTrack.title
                   )}
             </Tag>
-          ))}
-        </TrackTags>
+          )}
+        />
       ),
     }),
     labelsColumn(columnHelper, "track", projectLabels),

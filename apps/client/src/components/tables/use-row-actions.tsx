@@ -109,6 +109,7 @@ export function useRowActions<TData extends RowData, TChild = never>({
         : [row];
 
       return {
+        playback: rowActions?.play?.(row),
         statuses: orderedStatuses,
         collections: bulkCollections,
         onSetStatus:

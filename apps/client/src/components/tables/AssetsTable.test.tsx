@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { AssetWithContext } from "@workspace/api/api";
 
@@ -74,5 +74,32 @@ describe("AssetsTable", () => {
     await renderAssets(assetsOf(PAGE), 60);
 
     expect(screen.getByText("60 rows")).toBeTruthy();
+  });
+
+  it("keeps multiple attachments single-line behind a +N overflow pill", async () => {
+    locate("");
+    const asset = {
+      ...assetsOf(1)[0]!,
+      attachments: [
+        { kind: "track", id: 1, title: "Intro" },
+        { kind: "track", id: 2, title: "Chorus" },
+        { kind: "collection", id: 3, title: "LP One" },
+      ],
+    } as unknown as AssetWithContext;
+
+    await renderAssets([asset], 1);
+
+    expect(screen.getByRole("link", { name: "Intro" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Chorus" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "LP One" })).toBeNull();
+
+    const pill = screen.getByRole("button", {
+      name: "Show 1 more attachments",
+    });
+    await act(async () => {
+      fireEvent.click(pill);
+    });
+
+    expect(screen.getByRole("link", { name: "LP One" })).toBeTruthy();
   });
 });
