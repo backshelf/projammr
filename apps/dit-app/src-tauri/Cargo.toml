@@ -42,7 +42,7 @@ url = "2"
 
 
 [dev-dependencies]
-base64 = "0.22"
+base64 = "0.23"
 # The scripted instance on a loopback port, for the sign-out's test.
 dit-core = { path = "../../../packages/dit/crates/dit-core", features = ["test-support"] }
 minisign = "0.7"
