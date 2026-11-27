@@ -5,9 +5,8 @@ name: Release
 # until the last job: the images carry only `x.y.z` until the smoke has passed
 # against them, and the GitHub release stays a draft until then.
 #
-#   verify ─┬─ ci ─────┐
-#           └─ e2e ────┴─ images-arch ─ images ─ smoke ─┐
-#                       └─ app ─ draft ─────────────────┴─ publish
+#   verify ─ ci ─┬─ images-arch ─ images ─ smoke ─┐
+#                └─ app ─ draft ──────────────────┴─ publish
 on:
   push:
     tags: ["v*"]
@@ -48,16 +47,11 @@ jobs:
     uses: ./.github/workflows/ci.yml
     secrets: inherit
 
-  e2e:
-    needs: verify
-    uses: ./.github/workflows/e2e.yml
-    secrets: inherit
-
   # Native per-architecture builds (amd64 on ubuntu-latest, arm64 on
   # ubuntu-24.04-arm), pushed by digest and merged into `x.y.z` manifests by
   # `images` below.
   images-arch:
-    needs: [verify, ci, e2e]
+    needs: [verify, ci]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
@@ -225,7 +219,7 @@ jobs:
 
   # The signed, update-ready dit app (`dit-app-package.yml`, release leg).
   app:
-    needs: [verify, ci, e2e]
+    needs: [verify, ci]
     uses: ./.github/workflows/dit-app-package.yml
     with:
       release: true

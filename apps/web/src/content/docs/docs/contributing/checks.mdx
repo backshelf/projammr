@@ -68,8 +68,8 @@ build also validates every link between docs pages and fails on a broken one.
 ## What CI runs
 
 In `.github/workflows/ci.yml`, pull requests to `master` run `test-build`. Release tags
-(`.github/workflows/release.yml`) run every job below, plus the Docker Compose + Playwright E2E suite (`e2e.yml`),
-the multi-arch Docker image build and smoke check, and the signed macOS dit package (`dit-app-package.yml`).
+(`.github/workflows/release.yml`) run every job below, plus the multi-arch Docker image build and smoke check, and the
+signed macOS dit package (`dit-app-package.yml`).
 
 | Job          | When           | What it runs                                                                                       |
 | ------------ | -------------- | -------------------------------------------------------------------------------------------------- |

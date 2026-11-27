@@ -35,5 +35,15 @@ export const nextJsConfig = [
       ...pluginNext.configs["core-web-vitals"].rules,
     },
   },
+  {
+    /* Satori metadata routes (ImageResponse) require raw <img> elements.
+       @next/eslint-plugin-next tries to exempt them via
+       filename.replace(path.sep, "/"), which only replaces the first
+       backslash on Windows and causes cross-OS lint drift. */
+    files: ["**/app/**/{opengraph-image,twitter-image,icon}.{js,jsx,ts,tsx}"],
+    rules: {
+      "@next/next/no-img-element": "off",
+    },
+  },
   reactHooksConfig,
 ];

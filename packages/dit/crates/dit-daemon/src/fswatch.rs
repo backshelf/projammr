@@ -312,25 +312,47 @@ mod tests {
 
     #[test]
     fn windows_verbatim_prefix_matches_ordinary_event_paths() {
-        let subscribers: Subscribers = Arc::default();
-        let repo = subscribe(&subscribers, 1, r"\\?\C:\Projects\Song Project", |_| true);
-        dispatch(
-            &subscribers,
-            &event(
-                EventKind::Create(CreateKind::File),
-                &[r"C:\Projects\Song Project\Song.als"],
-            ),
-        );
-        let events: Vec<_> = repo.try_iter().collect();
-        assert_eq!(events.len(), 1);
         assert_eq!(
-            events[0].path,
-            PathBuf::from(r"C:\Projects\Song Project\Song.als")
+            strip_verbatim(Path::new(r"\\?\C:\Projects\Song Project")),
+            PathBuf::from(r"C:\Projects\Song Project")
         );
-
         assert_eq!(
             strip_verbatim(Path::new(r"\\?\UNC\server\share\Song.als")),
             PathBuf::from(r"\\server\share\Song.als")
         );
+
+        let subscribers: Subscribers = Arc::default();
+        let repo = subscribe(&subscribers, 1, r"\\?\/p/Song Project", |_| true);
+        dispatch(
+            &subscribers,
+            &event(
+                EventKind::Create(CreateKind::File),
+                &["/p/Song Project/Song.als"],
+            ),
+        );
+        let events: Vec<_> = repo.try_iter().collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].path, PathBuf::from("/p/Song Project/Song.als"));
+
+        #[cfg(windows)]
+        {
+            let win_subscribers: Subscribers = Arc::default();
+            let win_repo = subscribe(&win_subscribers, 1, r"\\?\C:\Projects\Song Project", |_| {
+                true
+            });
+            dispatch(
+                &win_subscribers,
+                &event(
+                    EventKind::Create(CreateKind::File),
+                    &[r"C:\Projects\Song Project\Song.als"],
+                ),
+            );
+            let win_events: Vec<_> = win_repo.try_iter().collect();
+            assert_eq!(win_events.len(), 1);
+            assert_eq!(
+                win_events[0].path,
+                PathBuf::from(r"C:\Projects\Song Project\Song.als")
+            );
+        }
     }
 }

@@ -428,15 +428,6 @@ the container's own `pg_restore` (the runner's is 16 and refuses a dump written 
 parallel half of the server suite (auth, `/me`, projects, collections, tracks, track audios, comments, sessions) that
 sign up and read and write the core entities over HTTP. Same secrets and `ffmpeg`/`static/` setup as `test-build`.
 
-`.github/workflows/e2e.yml` runs the browser suite in one job, `browser`, on `workflow_dispatch` and when
-`release.yml` calls it on a tag (`workflow_call`; it has no tag trigger of its own, so a tag runs it once). It calls the setup
-action with `dsp: "false"` (the images build the WebAssembly themselves), loads `api` and `web` through
-`docker/bake-action` from the same compose files with `SOURCE_REVISION` and read-only `type=gha` scopes, starts a
-fresh stack with `bun apps/e2e/src/stack.ts up`, installs Chromium
-with `bunx playwright install --with-deps chromium` and runs `bun run test:e2e` in `apps/e2e`. On failure it uploads
-`playwright-report/` and `test-results/` as the `playwright-report` artifact and prints `stack.ts logs`;
-`stack.ts down` runs under `if: always()`. Needs no secrets.
-
 Three secrets, generated once and never written to the repo: `CI_DB_PASSWORD`, `CI_BETTER_AUTH_SECRET`,
 `CI_NOTES_MASTER_KEY`. Each is set in both the Actions and the Dependabot secret stores, since a
 Dependabot-triggered run reads the Dependabot store.
@@ -478,7 +469,7 @@ there is no Apple credential.
 `.github/workflows/release.yml` runs on a pushed `v*` tag, in one run, with `concurrency: release-<ref>` and no
 cancelling. `verify` runs `packages/release/src/verify-tag.ts` (the tag is `v<root version>`, the changelog has a
 non-empty `## [version] - date` section; the section is the release body and the update feed's notes; `-rc.N` is a
-pre-release); it then calls `ci.yml` and `e2e.yml`. After both, `images-arch` builds `api` and `web` natively on
+pre-release); it then calls `ci.yml`. After it passes, `images-arch` builds `api` and `web` natively on
 `ubuntu-latest` (`linux/amd64`) and `ubuntu-24.04-arm` (`linux/arm64`) — no QEMU emulation — with
 `docker/build-push-action`, pushing each single-arch image by digest (`push-by-digest=true,name-canonical=true,push=true`)
 to `ghcr.io/backshelf/projammr-{api,web}` under per-arch GHA cache scopes (`{api,web}-{amd64,arm64}`), with buildx

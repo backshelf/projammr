@@ -306,8 +306,7 @@ The server suite needs a live database and runs on its own: `cd apps/server && b
 In GitHub Actions (`.github/workflows/ci.yml`), every pull request to `master` runs `test-build` (the full workspace
 build, all workspace test suites and the server suite against a PostgreSQL 17 service). Release tags
 (`.github/workflows/release.yml`) run the remaining static gates (`lint`, `format`, `typecheck`/`knip`, `audit`), the
-Docker Compose + Playwright E2E suite (`.github/workflows/e2e.yml`), the multi-arch Docker images and the signed macOS
-dit package.
+multi-arch Docker images and smoke check, and the signed macOS dit package.
 
 ### Regenerating API types
 
