@@ -19,10 +19,15 @@ function PendingMark() {
 export function AppLink({
   children,
   className,
+  prefetch = false,
   ...props
 }: ComponentProps<typeof Link>) {
   return (
-    <Link {...props} className={cn("link-pending", className)}>
+    <Link
+      {...props}
+      prefetch={prefetch}
+      className={cn("link-pending", className)}
+    >
       {children}
       <PendingMark />
     </Link>

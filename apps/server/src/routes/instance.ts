@@ -12,7 +12,10 @@ import {
 } from "../db/queries/settings.js";
 import { emailEnabled } from "../lib/env.js";
 import { describer, respond } from "../lib/http.js";
-import { instancePolicy } from "../lib/instance-policy.js";
+import {
+  instancePolicy,
+  onInstancePolicyChange,
+} from "../lib/instance-policy.js";
 import { appVersion } from "../lib/version.js";
 
 /** The group for facts about the instance itself, `app.ts`'s health check included. */
@@ -97,6 +100,16 @@ export const instanceSchema = z.object({
   settings: publicSettingsSchema,
 });
 
+const INSTANCE_CACHE_TTL_MS = 5_000;
+let cachedInstancePayload: {
+  expiresAt: number;
+  data: z.output<typeof instanceSchema>;
+} | null = null;
+
+onInstancePolicyChange(() => {
+  cachedInstancePayload = null;
+});
+
 app.get(
   "/",
   describe(
@@ -104,6 +117,15 @@ app.get(
     { schema: instanceSchema, description: "Instance" }
   ),
   async (c) => {
+    const now = Date.now();
+    if (
+      process.env.NODE_ENV !== "test" &&
+      cachedInstancePayload &&
+      cachedInstancePayload.expiresAt > now
+    ) {
+      return respond(c, instanceSchema, cachedInstancePayload.data);
+    }
+
     const [registration, hasUsers, settings, brand] = await Promise.all([
       instanceSetting(SETTINGS["instance-access.registration"]),
       hasAccounts(),
@@ -111,8 +133,7 @@ app.get(
       readBrand(),
     ]);
     const { access, integrations } = instancePolicy();
-
-    return respond(c, instanceSchema, {
+    const data: z.output<typeof instanceSchema> = {
       registration,
       hasUsers,
       emailEnabled,
@@ -124,7 +145,12 @@ app.get(
       selfDeletion: access.selfDeletion,
       brand,
       settings,
-    });
+    };
+    if (process.env.NODE_ENV !== "test") {
+      cachedInstancePayload = { expiresAt: now + INSTANCE_CACHE_TTL_MS, data };
+    }
+
+    return respond(c, instanceSchema, data);
   }
 );
 

@@ -530,6 +530,22 @@ function requireKnownDuration(
  * and rejects with an `AbortError`; exceeding the wall-clock deadline kills
  * the child and rejects with a {@link MediaTimeoutError}.
  */
+/** Pause for `ms`, waking immediately if `signal` aborts. */
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0 || signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export async function decodeInto(
   path: string,
   session: AnalysisSession,
@@ -540,6 +556,7 @@ export async function decodeInto(
     maxMediaSeconds: maxSeconds = maxMediaSeconds(),
     probeTimeoutMs = PROBE_TIMEOUT_MS,
     deadlineMs,
+    cpuDutyCycle,
   }: {
     onProgress?: MediaProgress;
     signal?: AbortSignal;
@@ -551,6 +568,9 @@ export async function decodeInto(
     probeTimeoutMs?: number;
     /** Overridable so a test can exercise the decode deadline without waiting 60s. */
     deadlineMs?: number;
+    /** Target CPU duty cycle in (0, 1). Sleeps between chunks so OS pipe
+     *  backpressure throttles both WASM DSP and ffmpeg on small hosts. */
+    cpuDutyCycle?: number;
   } = {}
 ): Promise<number | null> {
   const probedSeconds =
@@ -563,14 +583,23 @@ export async function decodeInto(
         });
 
   const decodeDeadlineMs = deadlineMs ?? mediaDeadlineMs(probedSeconds ?? 0);
-  const { child, durationMs, exit, cleanup, timedOut } = spawnFfmpeg(
-    buildDecodeArgs(path),
-    {
-      signal,
-      deadlineMs: decodeDeadlineMs,
-    }
-  );
+  const {
+    child,
+    durationMs,
+    exit,
+    cleanup,
+    timedOut,
+    signal: combined,
+  } = spawnFfmpeg(buildDecodeArgs(path), {
+    signal,
+    deadlineMs: decodeDeadlineMs,
+  });
 
+  const sleepRatio =
+    cpuDutyCycle !== undefined && cpuDutyCycle > 0 && cpuDutyCycle < 1
+      ? (1 - cpuDutyCycle) / cpuDutyCycle
+      : 0;
+  let busyMs = 0;
   let expectedFrames: number | null = null;
   let frames = 0;
   let carry: Buffer = Buffer.alloc(0);
@@ -584,9 +613,19 @@ export async function decodeInto(
       const usable = bytes.length - (bytes.length % FRAME_BYTES);
       const samples = new Float32Array(usable / 4);
       Buffer.from(samples.buffer).set(bytes.subarray(0, usable));
+      const t0 = sleepRatio > 0 ? performance.now() : 0;
       session.push(samples);
       carry = bytes.subarray(usable);
       frames += usable / FRAME_BYTES;
+
+      if (sleepRatio > 0) {
+        busyMs += performance.now() - t0;
+        if (busyMs >= 20) {
+          const pauseMs = Math.min(200, Math.round(busyMs * sleepRatio));
+          busyMs = 0;
+          await abortableSleep(pauseMs, combined);
+        }
+      }
 
       const now = Date.now();
       if (onProgress && now - lastReport > PROGRESS_INTERVAL_MS) {

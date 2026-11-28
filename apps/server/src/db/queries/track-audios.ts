@@ -2642,6 +2642,19 @@ registerJobHandler(
     if (job.subjectId == null) throw new Error("job names no track audio");
 
     await analyseTrackAudio(job.subjectId, report);
+    if (process.env.NODE_ENV !== "test" && !report.signal.aborted) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 1_000);
+        report.signal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true }
+        );
+      });
+    }
   },
   {
     label: "Analysing audio",

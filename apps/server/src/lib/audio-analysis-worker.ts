@@ -41,6 +41,7 @@ process.on("message", (raw: unknown) => {
         signal: abortController.signal,
         durationSeconds: message.durationSeconds,
         maxMediaSeconds: message.maxMediaSeconds,
+        cpuDutyCycle: process.env.NODE_ENV === "test" ? undefined : 0.25,
       });
       if (frames === null) {
         send({ type: "result", result: null });

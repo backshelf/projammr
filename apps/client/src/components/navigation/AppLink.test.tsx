@@ -69,4 +69,24 @@ describe("AppLink", () => {
     );
     expect(doneHtml).not.toContain("data-pending");
   });
+
+  it("defaults prefetch to false and lets callers opt back in", () => {
+    const defaultHtml = renderToStaticMarkup(
+      <AppLink href="/project/1">Project</AppLink>
+    );
+    const defaultForwarded = JSON.parse(
+      defaultHtml.match(/data-forwarded="([^"]+)"/)![1]!.replace(/&quot;/g, '"')
+    );
+    expect(defaultForwarded.prefetch).toBe(false);
+
+    const optInHtml = renderToStaticMarkup(
+      <AppLink href="/project/1" prefetch>
+        Project
+      </AppLink>
+    );
+    const optInForwarded = JSON.parse(
+      optInHtml.match(/data-forwarded="([^"]+)"/)![1]!.replace(/&quot;/g, '"')
+    );
+    expect(optInForwarded.prefetch).toBe(true);
+  });
 });
