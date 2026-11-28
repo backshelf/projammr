@@ -390,30 +390,47 @@ describe("TrackStudioDrawer", () => {
     expect(getProjectSamplesMock).not.toHaveBeenCalled();
   });
 
-  it("opens on overview with the w shortcut outside editable inputs", () => {
-    const { container } = render(
-      <div>
-        <input aria-label="Track note" />
-        <TrackStudioDrawer
-          projectId={5}
-          trackId={10}
-          trackTitle="Nightfall"
-          studio={STUDIO_PROP}
-          canEdit={true}
-          viewerId="u1"
-        />
-      </div>,
-      { wrapper: Wrapper }
-    );
+  it("opens on overview with the w shortcut outside editable inputs without triggering router.replace", () => {
+    const historyUrls: string[] = [];
+    const origReplaceState = window.history.replaceState.bind(window.history);
+    window.history.replaceState = ((
+      data: unknown,
+      unused: string,
+      url?: string | URL | null
+    ) => {
+      if (typeof url === "string") historyUrls.push(url);
+      origReplaceState(data, unused, url);
+    }) as typeof window.history.replaceState;
 
-    const input = container.querySelector("input")!;
-    fireEvent.keyDown(input, { key: "w" });
-    expect(replaceCalls).toEqual([]);
+    try {
+      const { container } = render(
+        <div>
+          <input aria-label="Track note" />
+          <TrackStudioDrawer
+            projectId={5}
+            trackId={10}
+            trackTitle="Nightfall"
+            studio={STUDIO_PROP}
+            canEdit={true}
+            viewerId="u1"
+          />
+        </div>,
+        { wrapper: Wrapper }
+      );
 
-    fireEvent.keyDown(window, { key: "w" });
-    expect(replaceCalls).toEqual([
-      "/project/5/track/10?studio=overview&session=812",
-    ]);
+      const input = container.querySelector("input")!;
+      fireEvent.keyDown(input, { key: "w" });
+      expect(historyUrls).toEqual([]);
+      expect(replaceCalls).toEqual([]);
+
+      fireEvent.keyDown(window, { key: "w" });
+      expect(historyUrls).toEqual([
+        "/project/5/track/10?studio=overview&session=812",
+      ]);
+      expect(replaceCalls).toEqual([]);
+    } finally {
+      window.history.replaceState = origReplaceState;
+    }
   });
 
   it("renders overview metadata, repository, and ?standalone=1 escape hatch", async () => {

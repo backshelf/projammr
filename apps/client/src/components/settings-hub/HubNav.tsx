@@ -35,9 +35,11 @@ export type HubPlace = { section: SettingSection; entry?: string };
 export function HubNav({
   sections,
   place,
+  onNavigate,
 }: {
   sections: readonly HubNavSection[];
   place: HubPlace;
+  onNavigate?: () => void;
 }) {
   const router = useRouter();
   const [seenSection, setSeenSection] = useState(place.section);
@@ -69,6 +71,7 @@ export function HubNav({
               <div className="flex items-center justify-between gap-2">
                 <AppLink
                   href={section.href}
+                  onClick={onNavigate}
                   aria-current={open && !place.entry ? "page" : undefined}
                   className={cn(
                     LABEL,
@@ -114,6 +117,7 @@ export function HubNav({
                       <li key={entry.id}>
                         <AppLink
                           href={entry.href}
+                          onClick={onNavigate}
                           aria-current={here ? "page" : undefined}
                           className={cn(
                             "-ml-px block border-l py-1 pl-3 text-small motion-ink coarse:py-2.5",
@@ -152,6 +156,7 @@ export function HubNav({
             onSelect={(id) => {
               const target = current.entries.find((entry) => entry.id === id);
               if (!target) return;
+              onNavigate?.();
               if (target.id === place.entry) {
                 document
                   .getElementById(groupAnchor(target.id))

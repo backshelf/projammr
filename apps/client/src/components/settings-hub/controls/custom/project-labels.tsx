@@ -1,12 +1,12 @@
 "use client";
 
 import { getLabels } from "@/actions/labels";
-import { useProject } from "@/hooks/use-project-role";
 import { isActionError } from "@workspace/api/lib/action-result";
 import type { Label } from "@workspace/api/api";
 import { IconX } from "@tabler/icons-react";
 import { IconButton } from "@workspace/ui/components/icon-button";
 import { useEffect, useState } from "react";
+import { useHub } from "../../hub-rows";
 import { MultiselectPills } from "../MultiselectControl";
 import { describedByOf, labelIdOf, type CustomSettingControl } from "../types";
 
@@ -21,22 +21,33 @@ export const ProjectLabelsControl: CustomSettingControl = ({
   disabled,
   id,
 }) => {
-  const { id: projectId } = useProject();
+  const { projectId } = useHub();
   const chosen = Array.isArray(value) ? (value as number[]) : [];
-  const [labels, setLabels] = useState<Label[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<{
+    projectId: number;
+    labels: Label[] | null;
+    error: string | null;
+  } | null>(null);
 
   useEffect(() => {
+    if (projectId === null) return;
     let current = true;
     void getLabels(projectId).then((result) => {
       if (!current) return;
-      if (isActionError(result)) setLoadError(result.error);
-      else setLabels(result);
+      if (isActionError(result)) {
+        setLoaded({ projectId, labels: null, error: result.error });
+      } else {
+        setLoaded({ projectId, labels: result, error: null });
+      }
     });
     return () => {
       current = false;
     };
   }, [projectId]);
+
+  const current = loaded?.projectId === projectId ? loaded : null;
+  const labels = current?.labels ?? null;
+  const loadError = current?.error ?? null;
 
   const knownIds = new Set((labels ?? []).map((label) => label.id));
   const staleIds = chosen.filter((each) => !knownIds.has(each));

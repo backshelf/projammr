@@ -248,8 +248,8 @@ export const DECODE_SAMPLE_RATE = 48_000;
 export const DECODE_CHANNELS = 2;
 /** Cap ffmpeg's thread pool so background media work cannot starve API requests. */
 const FFMPEG_THREAD_ARGS = ["-threads", "1"] as const;
-/** Lower scheduling priority applied to spawned ffmpeg processes on Linux (`nice -n 10`). */
-const FFMPEG_NICE_PRIORITY = 10;
+/** Lower scheduling priority applied to spawned ffmpeg processes on Linux (`nice -n 19`). */
+const FFMPEG_NICE_PRIORITY = 19;
 const DECODE_ARGS_HEAD = [
   "-hide_banner",
   "-nostats",
@@ -271,7 +271,7 @@ const DECODE_ARGS_TAIL = [
 const FRAME_BYTES = DECODE_CHANNELS * 4;
 
 /** How often `decodeInto` and `convertAudio` report progress, at most. */
-const PROGRESS_INTERVAL_MS = 250;
+const PROGRESS_INTERVAL_MS = 750;
 
 export type MediaProgress = (fraction: number) => Promise<void> | void;
 

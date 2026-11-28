@@ -90,7 +90,7 @@ describe("DEFAULT_INSTANCE_POLICY", () => {
         pushSamplesEverywhere: false,
       },
       jobs: {
-        analysisWorkers: 2,
+        analysisWorkers: 1,
         jobRetentionDays: 7,
         activityRetentionDays: null,
         saveContentRetentionDays: 90,

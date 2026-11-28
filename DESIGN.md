@@ -599,8 +599,8 @@ popovers, sheets), and they share one treatment.
   lightnesses derived from `--art` with relative colour syntax: the core at a wash lightness (`--wash-l`, 0.8 light
   and 0.42 dark, chroma capped by `--wash-c-max`), a deep tone 0.12 below and a lift 0.08 above. A grayscale
   accent stays grey. Every falloff is a bell-shaped run of stops, and the field is masked by a pre-baked seamless PNG noise tile that scatters 8-bit contours into grain without runtime SVG `feTurbulence` compositing.
-- **Grain** (`body::after`): the same pre-baked seamless PNG noise tile at `--grain-opacity × 0.055` (`--grain-opacity` 0.5 light,
-  0.75 dark).
+- **Grain** (`.wash::after`, `.grain-surface::after`): the same pre-baked seamless PNG noise tile at `--grain-opacity × 0.055` (`--grain-opacity` 0.5 light,
+  0.75 dark), scoped to the main tinted wash background and the music player card rather than a global overlay over the sidebar or drawers. Animated with `steps(1)` `translate3d` offsets on the compositor when motion is allowed, and static under reduced motion, `data-ambient="off"`, or phones.
 - **Art fields** (`ArtField`): on the player card, mini-player and share page, the cover blurred hard until only
   its colour survives, over a legibility floor that holds across the whole surface. Type over art uses `.on-art`
   (a `75%` paper-tinted text shadow) and `.on-art-soft` (90% ink) instead of `--ink-soft`.

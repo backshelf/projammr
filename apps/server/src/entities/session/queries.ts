@@ -547,21 +547,24 @@ export async function getSession(sessionId: number): Promise<SessionDetail> {
 
   if (!result) throw new HTTPException(404);
 
-  const [saveCountRow] = await db
-    .select({ saveCount: count() })
-    .from(saves)
-    .where(eq(saves.sessionId, sessionId));
+  const [openOn, labels, artwork, samples, history] = await Promise.all([
+    openOnFor(sessionId),
+    getEntityLabels("session", sessionId),
+    artworkForSession(result),
+    samplesWithHeld(sessionId, result.repoId),
+    getSessionHistory(sessionId),
+  ]);
 
   const { repo, ...session } = result;
   return {
     ...session,
     repoName: repo?.name ?? null,
-    openOn: await openOnFor(sessionId),
-    labels: await getEntityLabels("session", sessionId),
-    artwork: await artworkForSession(result),
-    samples: await samplesWithHeld(sessionId, result.repoId),
-    saveCount: saveCountRow?.saveCount ?? 0,
-    history: await getSessionHistory(sessionId),
+    openOn,
+    labels,
+    artwork,
+    samples,
+    saveCount: history.saves,
+    history,
     archived: result.track?.archivedAt != null,
   };
 }

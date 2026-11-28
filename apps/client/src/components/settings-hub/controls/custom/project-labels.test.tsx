@@ -12,22 +12,26 @@ type Result = Label[] | { error: string };
 const getLabels = mock<(projectId: number) => Promise<Result>>();
 mock.module("@/actions/labels", () => ({ getLabels }));
 
-const { ProjectProvider } = await import("@/hooks/use-project-role");
+const { SettingsProvider } = await import("@/lib/settings/provider");
+const { effectiveSettings } = await import("@/lib/settings/effective");
+const { HubRowsProvider } = await import("../../hub-rows");
 const { ProjectLabelsControl } = await import("./project-labels");
 
-function mount(value: number[]) {
+function mount(value: number[], projectId: number | null = 3) {
   const onChange = mock<(value: unknown) => void>();
   render(
-    <ProjectProvider project={{ id: 3, name: "Sessions", role: "editor" }}>
-      <span id="labels-label">Default labels</span>
-      <ProjectLabelsControl
-        definition={{} as never}
-        value={value}
-        onChange={onChange}
-        disabled={false}
-        id="labels"
-      />
-    </ProjectProvider>
+    <SettingsProvider initial={effectiveSettings({}, "v1")}>
+      <HubRowsProvider initial={{}} projectId={projectId} userId="u1">
+        <span id="labels-label">Default labels</span>
+        <ProjectLabelsControl
+          definition={{} as never}
+          value={value}
+          onChange={onChange}
+          disabled={false}
+          id="labels"
+        />
+      </HubRowsProvider>
+    </SettingsProvider>
   );
   return onChange;
 }
@@ -95,5 +99,11 @@ describe("ProjectLabelsControl", () => {
     await settle();
 
     expect(screen.getByText("Failed to fetch labels")).toBeTruthy();
+  });
+
+  it("does not fetch when no project is active", () => {
+    mount([], null);
+
+    expect(getLabels).not.toHaveBeenCalled();
   });
 });

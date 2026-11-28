@@ -10,8 +10,14 @@ import { useParamWriter } from "@/hooks/use-param-writer";
  * instead of folded under the named commit after it. The choice lives in the
  * address (`?checkpoints=1`), so it survives a reload and a shared link.
  */
-export function ShowCheckpointsToggle({ shown }: { shown: boolean }) {
-  const { write } = useParamWriter();
+export function ShowCheckpointsToggle({
+  shown,
+  shallow,
+}: {
+  shown: boolean;
+  shallow?: boolean;
+}) {
+  const { write } = useParamWriter({ shallow });
   return (
     <Button
       type="button"

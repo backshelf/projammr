@@ -36,7 +36,7 @@ import { cn } from "@workspace/ui/lib/utils";
  * near-black over a scrim.
  */
 const CARD = cn(
-  "group/player fixed bottom-0 left-0 isolate z-40 hidden flex-col justify-end overflow-hidden md:flex",
+  "grain-surface group/player fixed bottom-0 left-0 isolate z-40 hidden flex-col justify-end overflow-hidden md:flex",
   "px-3.5 pt-2.5 pb-2",
   // A border on all four sides from the start, with the three that are flush
   // against the viewport left transparent. The detached state only recolours

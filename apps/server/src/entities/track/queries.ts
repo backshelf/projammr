@@ -463,24 +463,35 @@ export async function getTrack(trackId: number): Promise<TrackDetail> {
 
   if (!result) throw new HTTPException(404);
 
-  const [relations, labels, artwork, fields, studio] = await Promise.all([
-    getTrackRelationEdges(trackId),
-    getEntityLabels("track", trackId),
-    artworkForTrack(result),
-    fieldBagOf("track", trackId),
-    trackStudioSummary(result.sessions),
-  ]);
+  const primaryInAudios =
+    result.primaryAudio != null &&
+    result.audios.some((audio) => audio.id === result.primaryAudio!.id);
 
-  const [audios, [primary] = []] = await Promise.all([
-    withBouncedFrom(result.audios),
-    withBouncedFrom(result.primaryAudio ? [result.primaryAudio] : []),
-  ]);
+  const [relations, labels, artwork, fields, studio, audios, extraPrimary] =
+    await Promise.all([
+      getTrackRelationEdges(trackId),
+      getEntityLabels("track", trackId),
+      artworkForTrack(result),
+      fieldBagOf("track", trackId),
+      trackStudioSummary(result.sessions),
+      withBouncedFrom(result.audios),
+      result.primaryAudio && !primaryInAudios
+        ? withBouncedFrom([result.primaryAudio])
+        : Promise.resolve([]),
+    ]);
+
+  const primaryAudio =
+    result.primaryAudio == null
+      ? null
+      : (audios.find((audio) => audio.id === result.primaryAudio!.id) ??
+        extraPrimary[0] ??
+        null);
 
   return {
     ...result,
     studio,
     audios,
-    primaryAudio: primary ?? null,
+    primaryAudio,
     ...deriveTrackMusicMeta(result.sessions),
     relations,
     labels,

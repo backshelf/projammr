@@ -25,7 +25,7 @@ export function TrackStudioRailBlock({
   studio: GetTrack["studio"];
 }) {
   const format = useFormat();
-  const { write } = useParamWriter();
+  const { write } = useParamWriter({ shallow: true });
   const [holder, setHolder] = useState<DitHolder | null>(null);
   const repoId = studio.mainSession?.repoId ?? null;
 
@@ -110,7 +110,7 @@ export function TrackStudioRailBlock({
 
 /** Add-line control when a track has 0 DAW sets (editors only). */
 export function TrackStudioEmptyControl() {
-  const { write } = useParamWriter();
+  const { write } = useParamWriter({ shallow: true });
   return (
     <SectionAdd onClick={() => write({ studio: "overview" })}>
       DAW set

@@ -17,14 +17,12 @@ import {
   ANALYSIS_LOUDNESS,
   ANALYSIS_PEAKS,
   ANALYSIS_SPECTRUM,
-  AnalysisSession,
 } from "@workspace/dsp/analysis";
 import {
   alignFeatures,
   ANALYSIS_OFFLINE,
   diffFeatures,
   FeatureSet,
-  OfflineAnalyses,
   type Features,
 } from "@workspace/dsp/offline";
 import type { Dsp } from "@workspace/dsp/runtime";
@@ -38,15 +36,10 @@ import {
   TRACK_AUDIO_MEASURES,
   type MeasureName,
 } from "../../entities/track-audio/measures.js";
+import { analyseAudioInWorker } from "../../lib/audio-analysis.js";
 import { SECOND_MS } from "../../lib/duration.js";
 import { errorFields, log } from "../../lib/log.js";
-import {
-  decodeInto,
-  DECODE_CHANNELS,
-  DECODE_SAMPLE_RATE,
-  getDsp,
-  isAudioName,
-} from "../../lib/media.js";
+import { getDsp, isAudioName } from "../../lib/media.js";
 import { writeSpectrogramPng } from "../../lib/spectrogram.js";
 import {
   removeStoredFile,
@@ -1969,57 +1962,44 @@ async function analyseTrackAudio(
   if (!row || !isAudioName(row.name)) return;
   if (!isOutstandingAnalysis(row.analysisVersion)) return;
 
-  const dsp = await getDsp();
-  const session = new AnalysisSession(
-    dsp,
-    DECODE_SAMPLE_RATE,
-    DECODE_CHANNELS,
-    ANALYSIS_FLAGS
-  );
   let thisFeatureSet: FeatureSet | null = null;
   try {
     // `decode` is `ANALYSIS_STEPS`' first entry, so a fresh reporter is
     // already there without a `step` call of its own. A re-analysis (a
     // version bump, most often) already has this row's duration from the
     // run before, so it skips the probe spawn entirely; only a track audio's
-    // first analysis pays for one.
-    const frames = await withLocalStoredFile(row.assetPath, (file) =>
-      decodeInto(file, session, {
+    // first analysis pays for one. Decode and synchronous WASM DSP run in a
+    // low-priority worker child process so the API event loop stays responsive.
+    const measured = await withLocalStoredFile(row.assetPath, (file) =>
+      analyseAudioInWorker(file, {
+        flags: ANALYSIS_FLAGS,
         onProgress: report.progress,
+        onStep: (step) => report.step(step),
         signal: report.signal,
         durationSeconds:
           row.durationMs != null ? row.durationMs / 1000 : undefined,
       })
     );
-    if (frames === null) {
+    if (measured === null) {
       throw new Error(`ffmpeg could not read ${row.name}`);
     }
 
-    await report.step("analyse");
-    const loudness = session.loudness;
-    const offline = new OfflineAnalyses(session);
-    // One tick per estimator read, so the step's bar moves the whole way
-    // through even though every read here is fast: the ladder only knows
-    // there is work to show, not how long each estimator takes.
-    const estimators = 10;
-    let estimated = 0;
-    const readEstimator = async <T>(read: () => T): Promise<T> => {
-      const value = read();
-      await report.progress(++estimated / estimators);
-      return value;
-    };
-    const tempo = await readEstimator(() => offline.tempo);
-    const key = await readEstimator(() => offline.key);
-    const sections = await readEstimator(() => offline.sections);
-    const spectrogram = await readEstimator(() => offline.spectrogram);
-    const loudnessCurve = await readEstimator(() => offline.loudnessCurve);
-    const correlationCurve = await readEstimator(
-      () => offline.correlationCurve
-    );
-    const clipping = await readEstimator(() => offline.clipping);
-    const silence = await readEstimator(() => offline.silence);
-    const pitchTrack = await readEstimator(() => offline.pitchTrack);
-    const features = await readEstimator(() => offline.features);
+    const {
+      durationMs,
+      peaks,
+      loudness,
+      spectrum,
+      tempo,
+      key,
+      sections,
+      spectrogram,
+      loudnessCurve,
+      correlationCurve,
+      clipping,
+      silence,
+      pitchTrack,
+      features,
+    } = measured;
 
     // Autocorrelation and chroma alone can't settle a tempo octave or a
     // major/minor ambiguity; the track's main session, when it has one, is
@@ -2060,7 +2040,10 @@ async function analyseTrackAudio(
         : null;
     const spectrogramKey = tile?.key ?? null;
 
-    if (features) thisFeatureSet = new FeatureSet(dsp, features, loudnessCurve);
+    const dsp = features ? await getDsp() : null;
+    if (features && dsp) {
+      thisFeatureSet = new FeatureSet(dsp, features, loudnessCurve);
+    }
 
     // Everything that reads or writes another version of this track — the
     // sibling scan, the duplicate flag and the neighbouring diffs — runs
@@ -2073,26 +2056,27 @@ async function analyseTrackAudio(
         row.trackId,
         trackAudioId
       );
-      const duplicateOfId = thisFeatureSet
-        ? findDuplicate(
-            dsp,
-            thisFeatureSet,
-            session.durationMs,
-            loudness.lufs,
-            loudness.truePeakDb,
-            siblings
-          )
-        : null;
+      const duplicateOfId =
+        thisFeatureSet && dsp
+          ? findDuplicate(
+              dsp,
+              thisFeatureSet,
+              durationMs,
+              loudness.lufs,
+              loudness.truePeakDb,
+              siblings
+            )
+          : null;
 
       await tx
         .update(trackAudios)
         .set({
-          durationMs: session.durationMs,
-          audioPeaks: session.peaks,
+          durationMs,
+          audioPeaks: peaks,
           lufs: loudness.lufs,
           lra: loudness.lra,
           truePeakDb: loudness.truePeakDb,
-          ltas: session.spectrum,
+          ltas: spectrum,
           bpm: settledTempo?.bpm ?? null,
           bpmConfidence: tempo?.bpmConfidence ?? null,
           beatOffsetMs: settledTempo?.beatOffsetMs ?? null,
@@ -2138,7 +2122,7 @@ async function analyseTrackAudio(
         });
       }
 
-      if (thisFeatureSet) {
+      if (thisFeatureSet && dsp) {
         const currentFeatureSet = thisFeatureSet;
         const previous = siblings.filter((s) => s.version < row.version).at(-1);
         const next = siblings.find((s) => s.version > row.version);
@@ -2182,7 +2166,6 @@ async function analyseTrackAudio(
     }
   } finally {
     thisFeatureSet?.free();
-    session.free();
   }
 }
 
@@ -2687,7 +2670,9 @@ registerJobHandler(
     );
 
     let analysed = 0;
-    for (const id of ids) {
+    const cooldownMs = process.env.NODE_ENV === "test" ? 0 : 250;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i]!;
       await perFile.step(String(id));
       // A second child nests the analysis ladder inside this file's step, so
       // the bar moves through decode, analyse and store within every file
@@ -2704,6 +2689,19 @@ registerJobHandler(
           trackAudioId: id,
           projectId: job.projectId,
           ...errorFields(error),
+        });
+      }
+      if (cooldownMs > 0 && i < ids.length - 1 && !report.signal.aborted) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, cooldownMs);
+          report.signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              resolve();
+            },
+            { once: true }
+          );
         });
       }
     }

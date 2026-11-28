@@ -245,7 +245,7 @@ export function TrackStudioDrawer({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { write } = useParamWriter();
+  const { write } = useParamWriter({ shallow: true });
   const isMobile = useIsMobile();
   const format = useFormat();
   const shell = useShellPolicy();
@@ -1134,7 +1134,10 @@ export function TrackStudioDrawer({
                                 : ""}
                             </p>
                             {historyData.hasCheckpoints && (
-                              <ShowCheckpointsToggle shown={showCheckpoints} />
+                              <ShowCheckpointsToggle
+                                shown={showCheckpoints}
+                                shallow
+                              />
                             )}
                           </div>
 
@@ -1205,6 +1208,7 @@ export function TrackStudioDrawer({
                                       options={historyData.compareOptions}
                                       fromId={historyData.fromId}
                                       toId={historyData.toId}
+                                      shallow
                                     />
                                   }
                                   actions={

@@ -23,19 +23,18 @@ export default async function ProjectLayout({ params, children }: Props) {
   const projectId = parseId((await params).projectId);
   if (projectId === null) notFound();
 
-  const [projectResult, cookieProjectId] = await Promise.all([
-    cachedProject(projectId),
-    currentProjectIdCookie(),
-  ]);
+  // `projectId` is the URL's (not the `currentProject` cookie's, which lags a
+  // deep link's first render). All reads run in parallel; `loaded` still turns
+  // an invisible project into a 404 before anything renders.
+  const [projectResult, cookieProjectId, settings, policies, format] =
+    await Promise.all([
+      cachedProject(projectId),
+      currentProjectIdCookie(),
+      cachedEffectiveSettings(projectId),
+      cachedPolicies(projectId),
+      viewerFormat(projectId),
+    ]);
   const project = loaded(projectResult);
-  // After `loaded`: a project the caller cannot see is a 404 there, never a
-  // settings read the API would refuse. The id is the URL's, not the
-  // `currentProject` cookie's, which lags a deep link's first render.
-  const [settings, policies, format] = await Promise.all([
-    cachedEffectiveSettings(project.id),
-    cachedPolicies(project.id),
-    viewerFormat(project.id),
-  ]);
 
   return (
     <ProjectProvider

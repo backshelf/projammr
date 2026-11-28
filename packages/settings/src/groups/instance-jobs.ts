@@ -24,7 +24,7 @@ export const settings = [
       "How many background jobs run together. Each analysis runs ffmpeg, so more finish sooner but load the server harder. MEDIA_CONCURRENCY gives it until it is set here.",
     keywords: ["concurrency", "workers", "analysis", "ffmpeg", "jobs"],
     schema: wholeNumber(1, 64),
-    default: 2,
+    default: 1,
     control: { kind: "number", min: 1, max: 64, step: 1, unit: "jobs" },
     audience: "admin",
   }),

@@ -118,6 +118,7 @@ export function HubSearchResults({
             action={
               <AppLink
                 href={group.groupHref}
+                onClick={onClear}
                 className={cn(
                   LABEL,
                   "text-ink-faint motion-ink hover:text-ink"

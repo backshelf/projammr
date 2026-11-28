@@ -228,9 +228,30 @@ describe("grain", () => {
 
   it("takes the layer away at off", () => {
     const off = rulesFor("grain", "off").find((b) =>
-      b.prelude.endsWith("body::after")
+      b.prelude.endsWith(":is(.wash, .grain-surface)::after")
     );
     expect(off?.declarations.content).toBe("none");
+  });
+
+  it("scopes animated grain to .wash and .grain-surface instead of body::after", () => {
+    const atmosphere = files["atmosphere.css"]!;
+    expect(atmosphere.some((b) => b.prelude === "body::after")).toBe(false);
+    const grainRule = atmosphere.find(
+      (b) =>
+        b.prelude.includes(".wash::after") &&
+        b.prelude.includes(".grain-surface::after") &&
+        b.context.length === 0
+    );
+    expect(grainRule?.declarations["background-image"]).toContain(
+      "data:image/png;base64,"
+    );
+    const animRule = atmosphere.find(
+      (b) =>
+        b.prelude.includes(".wash::after") &&
+        b.context.includes("@media (prefers-reduced-motion: no-preference)")
+    );
+    expect(animRule?.declarations.animation).toContain("grain-shift");
+    expect(animRule?.declarations.animation).toContain("steps(1)");
   });
 });
 
@@ -571,9 +592,15 @@ describe("prose, noise and keyboard dock", () => {
     expect(token("atmosphere.css", ".wash", "mask-image")).toContain(
       "data:image/png;base64,"
     );
-    expect(
-      token("atmosphere.css", "body::after", "background-image")
-    ).toContain("data:image/png;base64,");
+    const grainRule = files["atmosphere.css"]!.find(
+      (b) =>
+        b.prelude.includes(".wash::after") &&
+        b.prelude.includes(".grain-surface::after") &&
+        b.context.length === 0
+    );
+    expect(grainRule?.declarations["background-image"]).toContain(
+      "data:image/png;base64,"
+    );
   });
 
   it("zeroes --dock when body[data-keyboard] is active on phones", () => {

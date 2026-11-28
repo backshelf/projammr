@@ -13,22 +13,26 @@ type Result = Status[] | { error: string };
 const getStatuses = mock<(projectId: number) => Promise<Result>>();
 mock.module("@/actions/statuses", () => ({ getStatuses }));
 
-const { ProjectProvider } = await import("@/hooks/use-project-role");
+const { SettingsProvider } = await import("@/lib/settings/provider");
+const { effectiveSettings } = await import("@/lib/settings/effective");
+const { HubRowsProvider } = await import("../../hub-rows");
 const { ProjectStatusControl } = await import("./project-status");
 
-function mount(value: number | null) {
+function mount(value: number | null, projectId: number | null = 3) {
   const onChange = mock<(value: unknown) => void>();
   render(
-    <ProjectProvider project={{ id: 3, name: "Sessions", role: "editor" }}>
-      <span id="status-label">Track status</span>
-      <ProjectStatusControl
-        definition={{} as never}
-        value={value}
-        onChange={onChange}
-        disabled={false}
-        id="status"
-      />
-    </ProjectProvider>,
+    <SettingsProvider initial={effectiveSettings({}, "v1")}>
+      <HubRowsProvider initial={{}} projectId={projectId} userId="u1">
+        <span id="status-label">Track status</span>
+        <ProjectStatusControl
+          definition={{} as never}
+          value={value}
+          onChange={onChange}
+          disabled={false}
+          id="status"
+        />
+      </HubRowsProvider>
+    </SettingsProvider>,
     { wrapper: MotionProvider }
   );
   return onChange;
@@ -113,5 +117,12 @@ describe("ProjectStatusControl", () => {
     await settle();
 
     expect(screen.getByText("Failed to fetch statuses")).toBeTruthy();
+  });
+
+  it("stays disabled without fetching when no project is active", () => {
+    mount(null, null);
+
+    expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(true);
+    expect(getStatuses).not.toHaveBeenCalled();
   });
 });

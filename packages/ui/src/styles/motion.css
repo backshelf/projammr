@@ -279,7 +279,9 @@
    overlap, so the second one is redundant weight on a masked, full-viewport
    layer rather than a visible feature. */
 @media (width < 768px) {
-  .masthead__field {
+  .masthead__field,
+  .wash::after,
+  .grain-surface::after {
     animation: none;
   }
 
@@ -294,6 +296,10 @@
    never brings the drift back to a phone. */
 :root[data-ambient="off"]
   :is(.masthead__field, .wash__lobe--deep, .wash__lobe--lift) {
+  animation: none;
+}
+
+:root[data-ambient="off"] :is(.wash, .grain-surface)::after {
   animation: none;
 }
 
@@ -450,7 +456,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(:root:not([data-motion="full"])) body::after {
+  :where(:root:not([data-motion="full"])) :is(.wash, .grain-surface)::after {
+    animation: none;
     opacity: calc(var(--grain-opacity) * 0.03);
   }
 
@@ -462,7 +469,8 @@
   }
 }
 
-:where(:root[data-motion="reduce"]) body::after {
+:where(:root[data-motion="reduce"]) :is(.wash, .grain-surface)::after {
+  animation: none;
   opacity: calc(var(--grain-opacity) * 0.03);
 }
 

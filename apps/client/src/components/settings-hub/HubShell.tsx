@@ -47,6 +47,12 @@ export function HubShell({
   children: ReactNode;
 }) {
   const [query, setQuery] = useState("");
+  const placeKey = `${place.section}:${place.entry ?? ""}`;
+  const [seenPlace, setSeenPlace] = useState(placeKey);
+  if (seenPlace !== placeKey) {
+    setSeenPlace(placeKey);
+    setQuery("");
+  }
   // A long list re-renders on every keystroke otherwise; the box keeps up
   // with typing and the results follow.
   const deferred = useDeferredValue(query);
@@ -132,7 +138,11 @@ export function HubShell({
     <div className="mx-auto grid w-full max-w-[68rem] grid-cols-[12rem_minmax(0,1fr)] items-start gap-x-12 phone:grid-cols-1">
       <aside className="sticky top-0 flex flex-col gap-6 pt-(--gutter) phone:static phone:gap-4">
         <HubSearchField value={query} onChange={setQuery} />
-        <HubNav sections={sections} place={place} />
+        <HubNav
+          sections={sections}
+          place={place}
+          onNavigate={() => setQuery("")}
+        />
       </aside>
       <div ref={contentRef} className="flex min-w-0 flex-col gap-11 pb-11">
         <Activity mode={searching ? "hidden" : "visible"}>{children}</Activity>

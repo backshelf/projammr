@@ -54,7 +54,10 @@ import {
   objectHashSchema as hashSchema,
 } from "./objects.js";
 import { saveMetaFields } from "./saves.js";
-import { setSessionLocalFilepath, upsertRepoMachinePath } from "./repo-paths.js";
+import {
+  setSessionLocalFilepath,
+  upsertRepoMachinePath,
+} from "./repo-paths.js";
 import { sessionTimeInSet, timeInSetCoveredBy } from "./segments.js";
 import { replaceSessionSamples } from "./session-samples.js";
 
@@ -1052,10 +1055,13 @@ async function commitsWhere(
     .limit(limit);
   if (rows.length === 0) return [];
 
-  const covered = await savesCoveredBy(rows.map((row) => row.id));
-  const held = await sampleObjectsOf(rows.map((row) => row.ownSaveId));
-  const timeIn = await timeInSetCoveredBy(rows.map((row) => row.id));
-  const named = await withCurrentMachineNames(rows);
+  const commitIds = rows.map((row) => row.id);
+  const [covered, held, timeIn, named] = await Promise.all([
+    savesCoveredBy(commitIds),
+    sampleObjectsOf(rows.map((row) => row.ownSaveId)),
+    timeInSetCoveredBy(commitIds),
+    withCurrentMachineNames(rows),
+  ]);
   return named.map(({ ownSaveId, ownMeta, ...commit }) => {
     const objectsHeld = held.get(ownSaveId);
     const referenced = ownMeta?.samples ?? [];

@@ -24,15 +24,17 @@ export function CompareControls({
   options,
   fromId,
   toId,
+  shallow,
 }: {
   /** Newest first. */
   options: CompareOption[];
   fromId?: number;
   toId?: number;
+  shallow?: boolean;
 }) {
   const fromLabelId = useId();
   const toLabelId = useId();
-  const { write } = useParamWriter();
+  const { write } = useParamWriter({ shallow });
 
   const setTo = (value: string) => write({ to: value, from: null });
   const setFrom = (value: string) => write({ from: value });

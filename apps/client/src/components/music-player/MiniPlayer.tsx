@@ -101,7 +101,7 @@ export function MiniPlayer() {
           openFromCover();
       }}
       className={
-        "relative isolate flex h-(--miniplayer-height) items-center gap-2 overflow-hidden px-(--gutter)"
+        "grain-surface relative isolate flex h-(--miniplayer-height) items-center gap-2 overflow-hidden px-(--gutter)"
       }
       style={art}
     >

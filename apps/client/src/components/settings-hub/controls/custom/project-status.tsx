@@ -1,7 +1,6 @@
 "use client";
 
 import { getStatuses } from "@/actions/statuses";
-import { useProject } from "@/hooks/use-project-role";
 import { isActionError } from "@workspace/api/lib/action-result";
 import type { Status } from "@workspace/api/api";
 import {
@@ -12,6 +11,7 @@ import {
   SelectValue,
 } from "@workspace/ui/components/select";
 import { useEffect, useState } from "react";
+import { useHub } from "../../hub-rows";
 import { describedByOf, type CustomSettingControl } from "../types";
 
 /** The picker's own value for "none chosen", the schema's `null`. */
@@ -29,22 +29,33 @@ export const ProjectStatusControl: CustomSettingControl = ({
   disabled,
   id,
 }) => {
-  const { id: projectId } = useProject();
+  const { projectId } = useHub();
   const selected = typeof value === "number" ? value : null;
-  const [statuses, setStatuses] = useState<Status[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<{
+    projectId: number;
+    statuses: Status[] | null;
+    error: string | null;
+  } | null>(null);
 
   useEffect(() => {
+    if (projectId === null) return;
     let current = true;
     void getStatuses(projectId).then((result) => {
       if (!current) return;
-      if (isActionError(result)) setLoadError(result.error);
-      else setStatuses(result);
+      if (isActionError(result)) {
+        setLoaded({ projectId, statuses: null, error: result.error });
+      } else {
+        setLoaded({ projectId, statuses: result, error: null });
+      }
     });
     return () => {
       current = false;
     };
   }, [projectId]);
+
+  const current = loaded?.projectId === projectId ? loaded : null;
+  const statuses = current?.statuses ?? null;
+  const loadError = current?.error ?? null;
 
   const stale =
     selected !== null &&
