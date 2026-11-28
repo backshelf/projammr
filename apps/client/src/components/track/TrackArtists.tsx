@@ -73,20 +73,24 @@ export function TrackArtists({
   const tracksHref = hrefFromParsedRoute({ kind: "track-all" }, projectId);
 
   return (
-    <span className={"group"}>
-      {keyedCredits(credited).map(({ artist, key }, index) => (
-        <Fragment key={key}>
-          {index > 0 && ", "}
-          <AppLink
-            href={withFilters(tracksHref, { artist })}
-            className={
-              "rounded-sm underline-offset-2 motion-ink hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden coarse:inline-flex coarse:min-h-11 coarse:items-center"
-            }
-          >
-            {artist}
-          </AppLink>
-        </Fragment>
-      ))}
+    <span className={"group inline-flex flex-wrap items-center"}>
+      {credited.length > 0 && (
+        <span>
+          {keyedCredits(credited).map(({ artist, key }, index) => (
+            <Fragment key={key}>
+              {index > 0 && ", "}
+              <AppLink
+                href={withFilters(tracksHref, { artist })}
+                className={
+                  "rounded-sm underline-offset-2 motion-ink hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden coarse:inline-flex coarse:min-h-11 coarse:items-center"
+                }
+              >
+                {artist}
+              </AppLink>
+            </Fragment>
+          ))}
+        </span>
+      )}
       {vocabulary && (
         <ArtistPicker
           vocabulary={vocabulary}
@@ -117,7 +121,7 @@ function ArtistPicker({
           <IconButton
             aria-label={"Edit artists"}
             className={cn(
-              "ml-1 size-6 align-middle [&_svg]:size-3.5",
+              "ml-1 size-6 [&_svg]:size-3.5",
               REVEAL_ON_HOVER,
               "fine:aria-expanded:opacity-100"
             )}
