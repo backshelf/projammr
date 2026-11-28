@@ -582,7 +582,14 @@ export async function decodeInto(
           timeoutMs: probeTimeoutMs,
         });
 
-  const decodeDeadlineMs = deadlineMs ?? mediaDeadlineMs(probedSeconds ?? 0);
+  const baseDeadlineMs = deadlineMs ?? mediaDeadlineMs(probedSeconds ?? 0);
+  const decodeDeadlineMs =
+    deadlineMs === undefined &&
+    cpuDutyCycle !== undefined &&
+    cpuDutyCycle > 0 &&
+    cpuDutyCycle < 1
+      ? Math.ceil(baseDeadlineMs / cpuDutyCycle)
+      : baseDeadlineMs;
   const {
     child,
     durationMs,

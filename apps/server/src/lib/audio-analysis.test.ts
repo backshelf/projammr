@@ -53,6 +53,16 @@ describe("analyseAudioInWorker", () => {
     expect(progress.length).toBeGreaterThan(0);
   });
 
+  it("transfers large spectrogram payloads over IPC without exiting early", async () => {
+    const longWav = join(dir, "long.wav");
+    await writeTone(longWav, { seconds: 60 });
+
+    const result = await analyseAudioInWorker(longWav, { flags: FLAGS });
+    expect(result).not.toBeNull();
+    expect(result!.durationMs).toBeGreaterThanOrEqual(59_000);
+    expect(result!.spectrogram.bytes.byteLength).toBeGreaterThan(100_000);
+  });
+
   it("returns null for an unreadable file", async () => {
     const bogus = join(dir, "not-audio.wav");
     await writeFile(bogus, "not a wav file");

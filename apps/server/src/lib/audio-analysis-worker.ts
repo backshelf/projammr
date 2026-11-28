@@ -19,8 +19,16 @@ function send(message: AudioAnalysisWorkerMessage): void {
 
 const abortController = new AbortController();
 
+process.on("disconnect", () => {
+  process.exit(0);
+});
+
 process.on("message", (raw: unknown) => {
   const message = raw as AudioAnalysisWorkerRequest;
+  if (message.type === "done") {
+    process.disconnect?.();
+    process.exit(0);
+  }
   if (message.type === "abort") {
     abortController.abort();
     return;
@@ -41,7 +49,7 @@ process.on("message", (raw: unknown) => {
         signal: abortController.signal,
         durationSeconds: message.durationSeconds,
         maxMediaSeconds: message.maxMediaSeconds,
-        cpuDutyCycle: process.env.NODE_ENV === "test" ? undefined : 0.25,
+        cpuDutyCycle: process.env.NODE_ENV === "test" ? undefined : 0.35,
       });
       if (frames === null) {
         send({ type: "result", result: null });
@@ -114,7 +122,9 @@ process.on("message", (raw: unknown) => {
       }
     } finally {
       session.free();
-      process.disconnect?.();
+      // Do not disconnect immediately: large spectrogram/feature IPC payloads
+      // flush asynchronously over the socket. The parent sends `done` once it
+      // has received the result or error message.
     }
   })();
 });

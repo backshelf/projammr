@@ -41,7 +41,8 @@ export type AudioAnalysisWorkerRequest =
       durationSeconds?: number;
       maxMediaSeconds: number;
     }
-  | { type: "abort" };
+  | { type: "abort" }
+  | { type: "done" };
 
 export type AudioAnalysisWorkerMessage =
   | { type: "progress"; fraction: number }
@@ -136,10 +137,20 @@ export async function analyseAudioInWorker(
           return;
         }
         if (msg.type === "result") {
+          try {
+            proc.send({ type: "done" } satisfies AudioAnalysisWorkerRequest);
+          } catch {
+            // Already closed.
+          }
           finish({ ok: true, value: msg.result });
           return;
         }
         if (msg.type === "error") {
+          try {
+            proc.send({ type: "done" } satisfies AudioAnalysisWorkerRequest);
+          } catch {
+            // Already closed.
+          }
           if (msg.kind === "abort") {
             finish({
               ok: false,
