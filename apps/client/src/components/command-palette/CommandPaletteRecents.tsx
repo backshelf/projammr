@@ -45,6 +45,8 @@ export async function CommandPaletteRecents() {
   ]);
   const tracks = isActionError(tracksResult) ? [] : tracksResult;
   const sessions = isActionError(sessionsResult) ? [] : sessionsResult;
+  const projectArtwork = isActionError(detail) ? null : detail.artwork;
+  const trackArtworkById = new Map(tracks.map((t) => [t.id, t.artwork]));
 
   return (
     <CommandPaletteMount
@@ -60,12 +62,17 @@ export async function CommandPaletteRecents() {
           id: t.id,
           title: t.title,
           archivedAt: t.archivedAt,
+          artwork: t.artwork,
         })),
         sessions: sessions.map((s) => ({
           id: s.id,
           name: s.name,
           trackId: s.trackId,
           archived: s.archived,
+          artwork:
+            s.trackId !== null
+              ? (trackArtworkById.get(s.trackId) ?? projectArtwork)
+              : projectArtwork,
         })),
       }}
       settings={settingResults({

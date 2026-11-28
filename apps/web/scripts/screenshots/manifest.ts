@@ -70,7 +70,7 @@ const hover = (role: string, name: string) => [
 /** Clicks through whatever overlaps an element (the phone's sticky rail). */
 const domClick = (label: string) => [
   "eval",
-  `document.querySelector('[aria-label="${label}"]')?.click()`,
+  `document.querySelector('[aria-label*="${label}"]')?.click()`,
 ];
 /** Starts a track; its waveform only carries comment pins while it is the player's track. */
 const play = (title: string): Step[] => [

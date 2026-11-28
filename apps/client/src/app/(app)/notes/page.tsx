@@ -1,3 +1,6 @@
+import { DesktopNoteIndex } from "@/components/notebook/DesktopNoteIndex";
+import { cachedMyNotes } from "@/lib/server-data";
+import { isActionError } from "@workspace/api/lib/action-result";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -5,13 +8,23 @@ export const metadata: Metadata = {
 };
 
 /**
- * The right pane with no note open. Only ever seen on a wide screen: below
- * `md:` the shell shows the list alone until a note is picked.
+ * The right pane when landing on `/notes`: on desktop, opens the latest note
+ * automatically if one exists or shows a quick-compose prompt; below `md:` the
+ * shell shows the list alone until a note is picked.
  */
-export default function Page() {
-  return (
-    <div className={"hidden h-full items-center justify-center p-8 md:flex"}>
-      <p className={"text-small text-ink-soft"}>Select a note or press New</p>
-    </div>
-  );
+export default async function Page() {
+  const result = await cachedMyNotes();
+  const notes = isActionError(result) ? [] : result;
+  const latest =
+    notes.length === 0
+      ? null
+      : notes.reduce(
+          (best, current) =>
+            Date.parse(current.updatedAt) > Date.parse(best.updatedAt)
+              ? current
+              : best,
+          notes[0]!
+        );
+
+  return <DesktopNoteIndex latestNoteId={latest?.id ?? null} />;
 }

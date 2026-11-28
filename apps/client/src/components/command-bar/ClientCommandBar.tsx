@@ -124,7 +124,7 @@ function MountedCommandBar({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="shrink-0 cursor-pointer rounded-sm focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+          className="shrink-0 cursor-pointer rounded-sm focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-hidden"
         >
           <CommandHint keys={shortcutKeys} label="Keys" />
         </button>

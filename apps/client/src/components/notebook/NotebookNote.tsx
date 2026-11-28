@@ -18,8 +18,14 @@ export function NotebookNote(props: NoteSource) {
       {...props}
       surface={"notebook"}
       layout={({ status, menu, editor }) => (
-        <div className={"flex h-full w-full max-w-full flex-col px-(--gutter)"}>
-          <div className={"flex items-center justify-between gap-3 py-2"}>
+        <div
+          className={"flex min-h-full w-full max-w-full flex-col px-(--gutter)"}
+        >
+          <div
+            className={
+              "sticky top-0 z-10 -mx-(--gutter) flex items-center justify-between gap-3 border-b border-rule bg-paper/95 px-(--gutter) py-2 backdrop-blur-sm"
+            }
+          >
             <AppLink
               href={NOTES_HREF}
               className={cn(

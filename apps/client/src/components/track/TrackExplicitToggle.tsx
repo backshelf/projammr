@@ -2,6 +2,7 @@
 
 import { patchEntityFields } from "@/entities/mutations";
 import { useMutate } from "@/hooks/use-mutate";
+import { useProjectRole } from "@/hooks/use-project-role";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import { RailLabel } from "@workspace/ui/components/layout/rail";
@@ -15,9 +16,12 @@ export function TrackExplicitToggle({
   trackId: number;
   explicit: boolean;
 }) {
+  const canEdit = useProjectRole()?.can?.("editor") ?? true;
   const mutate = useMutate();
   const [checked, setChecked] = useOptimistic(explicit);
   const [pending, startTransition] = useTransition();
+
+  if (!canEdit) return null;
 
   const onChange = (next: boolean) =>
     startTransition(async () => {

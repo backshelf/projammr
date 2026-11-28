@@ -13,9 +13,11 @@ export type SettingsTabLink = {
 export function SettingsTabNav({
   tabs,
   activeTab,
+  className,
 }: {
   tabs: SettingsTabLink[];
   activeTab: string;
+  className?: string;
 }) {
   const activeRef = useRef<HTMLAnchorElement>(null);
 
@@ -38,7 +40,8 @@ export function SettingsTabNav({
         // `scroll-fade-x` masks both scrollable edges transparent, shrinking
         // to nothing at the scroll extremes — the cue that a phone-width nav
         // has a tab clipped off past "Danger zone".
-        "scrollbar-none -mx-(--gutter) scroll-fade-x snap-x overflow-x-auto overflow-y-hidden overscroll-x-contain px-(--gutter)"
+        "scrollbar-none -mx-(--gutter) scroll-fade-x snap-x overflow-x-auto overflow-y-hidden overscroll-x-contain px-(--gutter)",
+        className
       )}
     >
       {tabs.map((tab) => {

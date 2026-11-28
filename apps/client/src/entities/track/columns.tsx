@@ -205,18 +205,21 @@ export function trackColumns(
     textColumn(columnHelper, {
       id: "key",
       header: "Key",
+      size: 88,
       value: (row) => row.key,
       display: (row, format) => format.key(row.keyTonic, row.keyScale),
     }),
     textColumn(columnHelper, {
       id: "bpm",
       header: "BPM",
+      size: 76,
       value: (row) => row.bpm,
       display: (row, format) => row.bpm && format.tempo(row.bpm),
     }),
     textColumn(columnHelper, {
       id: "lufs",
       header: "LUFS",
+      size: 84,
       value: (row) => (row.lufs == null ? null : formatLufs(row.lufs)),
       display: (row, format) => row.lufs != null && format.lufs(row.lufs),
       className: "text-right tabular-nums",
@@ -229,6 +232,7 @@ export function trackColumns(
     countColumn(columnHelper, {
       id: "saveCount",
       header: "Saves",
+      size: 76,
       value: (row) => row.saveCount,
     }),
     ...customFieldColumns(columnHelper, customFields),

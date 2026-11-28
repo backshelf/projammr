@@ -9,12 +9,17 @@ import {
 
 import { onFocus } from "./bridge";
 
+export type FocusController = {
+  claim: RefCallback<HTMLElement>;
+  focusCurrent: (fallback?: HTMLElement | null) => void;
+};
+
 /**
  * Moves focus to one element each time the panel's window takes key focus, so the panel opens ready to type into.
- * Returns the ref callback a screen puts on the field it wants focus in (`useFocusTarget` hands it out); with no
- * field claimed, focus is left where it is.
+ * Returns the ref callback a screen puts on the field it wants focus in (`useFocusTarget` hands it out) and a helper
+ * to transfer focus on screen transitions; with no field claimed, focus moves to `fallback` or stays where it is.
  */
-export function useFocusOnShow(): RefCallback<HTMLElement> {
+export function useFocusController(): FocusController {
   const targetRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -24,12 +29,27 @@ export function useFocusOnShow(): RefCallback<HTMLElement> {
     };
   }, []);
 
-  return useCallback((element: HTMLElement | null) => {
+  const claim = useCallback((element: HTMLElement | null) => {
     targetRef.current = element;
     return () => {
       if (targetRef.current === element) targetRef.current = null;
     };
   }, []);
+
+  const focusCurrent = useCallback((fallback?: HTMLElement | null) => {
+    if (targetRef.current) {
+      targetRef.current.focus();
+    } else {
+      fallback?.focus();
+    }
+  }, []);
+
+  return { claim, focusCurrent };
+}
+
+/** Backwards-compatible wrapper returning the claim callback alone. */
+export function useFocusOnShow(): RefCallback<HTMLElement> {
+  return useFocusController().claim;
 }
 
 const FocusTargetContext = createContext<RefCallback<HTMLElement> | null>(null);

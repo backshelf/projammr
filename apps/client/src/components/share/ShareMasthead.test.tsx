@@ -36,6 +36,11 @@ mock.module("@/components/music-player/PlayerControls", () => ({
   Transport: ({ size }: { size: string }) => (
     <div data-testid={"transport"} data-size={size} />
   ),
+  SecondaryControls: {
+    Volume: ({ size }: { size: string }) => (
+      <div data-testid={"volume"} data-size={size} />
+    ),
+  },
 }));
 mock.module("@/components/track/TrackWaveform", () => ({
   TrackWaveform: ({ assetId }: { assetId: number }) => (
@@ -196,5 +201,25 @@ describe("ShareMasthead", () => {
     expect(
       screen.getByText("Download First").closest("a")?.getAttribute("href")
     ).toBe("/media/101?token=t&download");
+  });
+
+  it("shows the active track title in the header only when there are multiple entries", () => {
+    const { unmount } = renderMasthead();
+    expect(screen.getByText("First")).toBeTruthy();
+    unmount();
+
+    const single = [entry(101, "Only")];
+    renderMasthead({ entries: single, entry: single[0] });
+    expect(screen.queryByText("Only")).toBeNull();
+  });
+
+  it("renders a desktop-only volume control and stacks waveform above transport on phone", () => {
+    const { container } = renderMasthead({ loaded: true });
+
+    const vol = screen.getByTestId("volume");
+    expect(vol.parentElement?.className).toContain("phone:hidden");
+
+    const row = container.querySelector('[data-slot="share-transport"]');
+    expect(row?.className).toContain("phone:flex-col");
   });
 });

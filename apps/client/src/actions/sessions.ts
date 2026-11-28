@@ -37,6 +37,7 @@ export const getSessionsPageForProject = async (
     daw?: string;
     track?: number;
     inDit?: string;
+    unassigned?: string;
     archived?: SessionsPageQuery["archived"];
   }
 ): Promise<SessionsPage | ActionError> => {
@@ -53,6 +54,7 @@ export const getSessionsPageForProject = async (
         daw: dawFilter(query.daw),
         track: query.track,
         inDit: query.inDit,
+        unassigned: query.unassigned,
         archived: query.archived,
       },
     },

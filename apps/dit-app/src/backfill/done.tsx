@@ -1,4 +1,5 @@
 import { useId, type JSX, type ReactNode } from "react";
+import { IconArrowUpRight } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { useFormat } from "@workspace/ui/components/format-provider";
 import {
@@ -108,7 +109,8 @@ export function Done({
             size="lg"
             onClick={() => void actions.openSessions(view.sessionsPath)}
           >
-            See sessions not in dit
+            Review unmatched sessions
+            <IconArrowUpRight aria-hidden />
           </Button>
         )}
         <Button

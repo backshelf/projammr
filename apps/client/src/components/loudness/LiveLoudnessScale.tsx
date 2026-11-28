@@ -32,7 +32,7 @@ import { useVisualsPolicy } from "@/lib/policies/provider";
 import { useReducedMotion } from "@workspace/ui/lib/motion";
 import { LABEL } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /** A meter's needle: up in a frame or two, down over a third of a second. */
 const NEEDLE = { attackMs: 12, releaseMs: 320 };
@@ -123,6 +123,21 @@ export function LiveLoudnessScale({
   const mine = owner === "any" ? current != null : belongsTo(current, owner);
   const live = mine && isPlaying;
   const comparing = live && other != null;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setVisible(entry.isIntersecting);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const visibleLive = live && visible;
 
   useAnalysis(live);
 
@@ -139,7 +154,8 @@ export function LiveLoudnessScale({
     sinceText: 0,
   });
 
-  useLoudnessFrames(live, (sides: LiveSides, dt, active) => {
+  useLoudnessFrames(visibleLive, (sides: LiveSides, dt, active) => {
+    if (!active && !visible) return false;
     const s = stateRef.current;
     let moving = false;
 
@@ -233,7 +249,7 @@ export function LiveLoudnessScale({
   );
 
   return (
-    <div className={className}>
+    <div ref={rootRef} className={className}>
       {/* The figures head the meter rather than trail it, so they sit with
           the ruler they read and never beside whatever follows the block.
           The row opens in height rather than appearing, so what sits below

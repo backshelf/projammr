@@ -6,6 +6,7 @@ import { MiniPlayer } from "@/components/music-player/MiniPlayer";
 import { useCurrentTrack } from "@/components/music-player/player-hooks";
 import { useTabContext } from "@/hooks/use-tab-context";
 import { useKeyboardInset } from "@workspace/ui/hooks/use-keyboard-inset";
+import { cn } from "@workspace/ui/lib/utils";
 import { useEffect } from "react";
 
 /**
@@ -75,9 +76,10 @@ function DockContent() {
   return (
     <div
       hidden={hasKeyboard}
-      className={
-        "fixed inset-x-0 bottom-0 z-40 flex flex-col bg-paper-sunk pb-[env(safe-area-inset-bottom)] md:hidden"
-      }
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-40 flex flex-col bg-paper-sunk pb-[env(safe-area-inset-bottom)] md:hidden",
+        hasKeyboard && "hidden"
+      )}
     >
       <MiniPlayer />
       <TabBar />

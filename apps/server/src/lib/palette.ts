@@ -90,7 +90,7 @@ function normalise(
 ): Omit<Palette, "accentHue" | "accentChroma" | "accentHex"> {
   const h = hue.toFixed(1);
   return {
-    light: `oklch(0.55 ${Math.min(chroma * 1.3, 0.19).toFixed(3)} ${h})`,
+    light: `oklch(0.50 ${Math.min(chroma * 1.3, 0.19).toFixed(3)} ${h})`,
     dark: `oklch(0.78 ${Math.min(chroma * 1.25, 0.17).toFixed(3)} ${h})`,
     glowLight: `oklch(0.72 ${Math.min(chroma, 0.14).toFixed(3)} ${h})`,
     glowDark: `oklch(0.45 ${Math.min(chroma, 0.14).toFixed(3)} ${h})`,

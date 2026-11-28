@@ -39,7 +39,7 @@ export function TrackRelationsSection({
 }) {
   const { id: projectId } = useProject();
   const mutate = useMutate();
-  const mayEdit = useProjectRole()?.can("editor") ?? true;
+  const mayEdit = useProjectRole()?.can?.("editor") ?? true;
   const [adding, setAdding] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
 
@@ -68,15 +68,17 @@ export function TrackRelationsSection({
           <SectionHead
             count={relations.length || undefined}
             action={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="h-fit"
-                aria-label="Add a relation"
-                onClick={() => setAdding(true)}
-              >
-                <IconPlus />
-              </Button>
+              mayEdit ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="h-fit"
+                  aria-label="Add a relation"
+                  onClick={() => setAdding(true)}
+                >
+                  <IconPlus />
+                </Button>
+              ) : undefined
             }
           >
             RELATIONS
@@ -100,30 +102,34 @@ export function TrackRelationsSection({
               >
                 {edge.otherTrack.title}
               </AppLink>
-              <button
-                type="button"
-                disabled={removingId === edge.id}
-                onClick={() => remove(edge.id)}
-                aria-label="Remove relation"
-                className={cn(
-                  "ml-auto text-ink-soft hover:text-danger disabled:opacity-50",
-                  REVEAL_ON_HOVER
-                )}
-              >
-                <IconX size={14} />
-              </button>
+              {mayEdit && (
+                <button
+                  type="button"
+                  disabled={removingId === edge.id}
+                  onClick={() => remove(edge.id)}
+                  aria-label="Remove relation"
+                  className={cn(
+                    "ml-auto text-ink-soft hover:text-danger disabled:opacity-50",
+                    REVEAL_ON_HOVER
+                  )}
+                >
+                  <IconX size={14} />
+                </button>
+              )}
             </div>
           ))}
         </section>
       </EmptySection>
-      <Dialog open={adding} onOpenChange={setAdding}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add a relation</DialogTitle>
-          </DialogHeader>
-          <RelationSelector trackId={trackId} />
-        </DialogContent>
-      </Dialog>
+      {mayEdit && (
+        <Dialog open={adding} onOpenChange={setAdding}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add a relation</DialogTitle>
+            </DialogHeader>
+            <RelationSelector trackId={trackId} />
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }

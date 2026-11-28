@@ -4,6 +4,7 @@ import { StatusDisplay } from "@/components/status/StatusDisplay";
 import type { Status } from "@workspace/api/api";
 import { useDroppable } from "@dnd-kit/core";
 import { Button } from "@workspace/ui/components/button";
+import { StatusChip } from "@workspace/ui/components/status-chip";
 import { cn } from "@workspace/ui/lib/utils";
 
 import { BoardCard } from "./BoardCard";
@@ -17,6 +18,10 @@ export function BoardColumn({
   hasMore,
   onLoadMore,
   onOpen,
+  moveTargets,
+  onMoveTo,
+  canEdit = true,
+  className,
 }: {
   status: Status;
   cards: BoardCardData[];
@@ -25,20 +30,35 @@ export function BoardColumn({
   hasMore: boolean;
   onLoadMore: () => void;
   onOpen: (id: number) => void;
+  moveTargets?: Status[];
+  onMoveTo?: (rowId: number, statusId: number) => void;
+  canEdit?: boolean;
+  className?: string;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status.id });
+  // The synthetic "No status" column (`id === 0`) cannot be a drop target
+  // because PATCH statusId requires a positive status id.
+  const { setNodeRef, isOver } = useDroppable({
+    id: status.id,
+    disabled: status.id === 0 || !canEdit,
+  });
 
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-[min(18rem,78vw)] shrink-0 snap-start flex-col gap-3 rounded-lg border border-rule bg-paper-sunk/40 p-3 motion-ink",
+        "flex w-full shrink-0 snap-start flex-col gap-3 rounded-lg border border-rule bg-paper-sunk/40 p-3 motion-ink md:w-[min(18rem,78vw)]",
+        "[contain-intrinsic-size:288px_480px] [content-visibility:auto]",
         // A live drop target answers in the room's light rather than in ink.
-        isOver && "ring-2 ring-art/40"
+        isOver && "ring-2 ring-art/40",
+        className
       )}
     >
       <div className="flex items-center justify-between gap-2 px-1">
-        <StatusDisplay status={status} variant="chip" />
+        {status.id === 0 ? (
+          <StatusChip colour="var(--ink-soft)">{status.name}</StatusChip>
+        ) : (
+          <StatusDisplay status={status} variant="chip" />
+        )}
         <span className="text-micro text-ink-soft tabular-nums">
           {rowCount}
         </span>
@@ -50,11 +70,16 @@ export function BoardColumn({
             card={card}
             columnId={status.id}
             onOpen={onOpen}
+            moveTargets={moveTargets}
+            onMoveTo={onMoveTo}
+            canEdit={canEdit}
           />
         ))}
         {cards.length === 0 && !loading && (
           <p className="py-6 text-center text-micro text-ink-soft">
-            No {status.name.toLowerCase()} items
+            {status.id === 0
+              ? "No items without a status"
+              : `No ${status.name.toLowerCase()} items`}
           </p>
         )}
       </div>

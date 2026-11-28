@@ -47,7 +47,6 @@ import {
 import { SectionHead } from "@workspace/ui/components/layout/section-head";
 import { isBlankStoredDocument } from "@workspace/ui/lib/block-document";
 import { SharingRail } from "@/components/sharing/SharingRail";
-import { StatusDisplay } from "@/components/status/StatusDisplay";
 import { StatusDropdown } from "@/components/status/StatusDropdown";
 import { EntityBoard } from "@/components/tables/EntityBoard";
 import { EntityTable } from "@/components/tables/EntityTable";
@@ -57,16 +56,37 @@ import { cachedFormatters } from "@/lib/formatters";
 import { cachedPolicies } from "@/lib/policies/server";
 import { cachedEffectiveSettings } from "@/lib/settings/server";
 import { PageSections } from "@/components/layout/PageSections";
-import { getCollectionRepos } from "@/actions/repos";
-import { RepositoriesSection } from "@/components/repo/RepositoriesSection";
 import { createBreadcrumbs } from "@/lib/utils";
 import { pluralizeCount } from "@workspace/session-diff/format";
 import { releasePhrase } from "@/lib/release";
 import { TableSkeleton } from "@/components/tables/TableSkeleton";
+import type { ActionError } from "@workspace/api/api";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { loaded } from "@/lib/loaded";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Arrive } from "@workspace/ui/components/layout/arrive";
+
+function actionFallback(message: string): ActionError {
+  return { error: message };
+}
+
+/**
+ * Prevents a streamed Suspense section from throwing an unhandled RSC error
+ * chunk (`resolveErrorProd` / React #441) if an upstream read rejects mid-stream.
+ */
+async function SafeStreamSection({
+  render,
+  fallback = null,
+}: {
+  render: () => Promise<ReactNode>;
+  fallback?: ReactNode;
+}) {
+  try {
+    return await render();
+  } catch {
+    return fallback;
+  }
+}
 
 export default async function CollectionPage({
   projectId,
@@ -101,15 +121,16 @@ export default async function CollectionPage({
   const collection = loaded(collectionResult);
 
   // The table and its filter menus fetch behind their own boundary, so the
-  // masthead and rail paint without waiting on them.
-  const statusesPromise = getStatuses(projectId);
+  // masthead and rail paint without waiting on them. Guard against rejected
+  // promises so an upstream failure never surfaces as an unhandled RSC #441 error.
+  const statusesPromise = getStatuses(projectId).catch(() =>
+    actionFallback("Failed to fetch statuses")
+  );
   const tracksPagePromise = getTracksPageForProject(projectId, {
     collection: collectionId,
     archived: "include",
     pageSize: settings.values["tables.rowsPerLoad"],
-  });
-
-  const reposPromise = getCollectionRepos(collectionId);
+  }).catch(() => actionFallback("Failed to fetch tracks"));
 
   const view = query.view === "board" ? "board" : "list";
 
@@ -200,7 +221,6 @@ export default async function CollectionPage({
                 ...(runtimeLabel ? [runtimeLabel] : []),
               ].join(" · ")}
             </span>
-            {collection.status && <StatusDisplay status={collection.status} />}
             <NowPlayingFlag
               owner={{ kind: "collection", id: collectionId }}
               projectId={projectId}
@@ -309,14 +329,6 @@ export default async function CollectionPage({
                   </section>
                 </EmptySection>
               ),
-              repositories: (
-                <Suspense fallback={null}>
-                  <RepositoriesSection
-                    reposPromise={reposPromise}
-                    projectId={projectId}
-                  />
-                </Suspense>
-              ),
               attachments: (
                 <EmptySection
                   label={"ATTACHMENTS"}
@@ -335,19 +347,27 @@ export default async function CollectionPage({
               ),
               comments: (
                 <Suspense fallback={null}>
-                  <CommentSection
-                    entityType="collection"
-                    entityId={collectionId}
+                  <SafeStreamSection
+                    render={() =>
+                      CommentSection({
+                        entityType: "collection",
+                        entityId: collectionId,
+                      })
+                    }
                   />
                 </Suspense>
               ),
               add: <AddLine label={"Add to this collection"} />,
               activity: (
                 <Suspense fallback={null}>
-                  <ActivityFeed
-                    projectId={projectId}
-                    entityType="collection"
-                    entityId={collectionId}
+                  <SafeStreamSection
+                    render={() =>
+                      ActivityFeed({
+                        projectId,
+                        entityType: "collection",
+                        entityId: collectionId,
+                      })
+                    }
                   />
                 </Suspense>
               ),
@@ -358,6 +378,51 @@ export default async function CollectionPage({
       <RightSideBlur
         more={
           <>
+            {loudness && (
+              <RailBlock>
+                <CollectionLoudness
+                  collectionId={collectionId}
+                  loudness={loudness}
+                  format={format}
+                />
+              </RailBlock>
+            )}
+            {spectrum && (
+              <RailBlock>
+                <CollectionSpectrum
+                  collectionId={collectionId}
+                  spectrum={spectrum}
+                />
+              </RailBlock>
+            )}
+            {tempo && (
+              <RailBlock>
+                <CollectionTempo tempo={tempo} format={format} />
+              </RailBlock>
+            )}
+            {keys.length > 0 && (
+              <RailBlock>
+                <CollectionKeys keys={keys} tempo={tempo} />
+              </RailBlock>
+            )}
+            <RailBlock>
+              <InlinePropertyEditor
+                label="UPC"
+                value={collection.upc || undefined}
+                type="text"
+                entityType="collection"
+                entityId={collectionId}
+                fieldName="upc"
+                placeholder="e.g. 123456789012"
+              />
+            </RailBlock>
+            <CustomFieldsBlock
+              fields={customFields}
+              values={collection.fields}
+              entityType="collection"
+              entityId={collectionId}
+              format={format}
+            />
             <RailBlock grid>
               <div>
                 <RailLabel>TRACKS</RailLabel>
@@ -410,33 +475,6 @@ export default async function CollectionPage({
             />
           </RailBlock>
         )}
-        {loudness && (
-          <RailBlock>
-            <CollectionLoudness
-              collectionId={collectionId}
-              loudness={loudness}
-              format={format}
-            />
-          </RailBlock>
-        )}
-        {spectrum && (
-          <RailBlock>
-            <CollectionSpectrum
-              collectionId={collectionId}
-              spectrum={spectrum}
-            />
-          </RailBlock>
-        )}
-        {tempo && (
-          <RailBlock>
-            <CollectionTempo tempo={tempo} format={format} />
-          </RailBlock>
-        )}
-        {keys.length > 0 && (
-          <RailBlock>
-            <CollectionKeys keys={keys} tempo={tempo} />
-          </RailBlock>
-        )}
         <RailBlock>
           <InlinePropertyEditor
             label="RELEASE DATE"
@@ -452,27 +490,19 @@ export default async function CollectionPage({
             entityId={collectionId}
             fieldName="releaseDate"
           />
-          <InlinePropertyEditor
-            label="UPC"
-            value={collection.upc || undefined}
-            type="text"
-            entityType="collection"
-            entityId={collectionId}
-            fieldName="upc"
-            placeholder="e.g. 123456789012"
-          />
         </RailBlock>
-        <CustomFieldsBlock
-          fields={customFields}
-          values={collection.fields}
-          entityType="collection"
-          entityId={collectionId}
-          format={format}
-        />
         {canEdit && (
           <RailBlock>
             <Suspense fallback={<RailLabel>SHARING</RailLabel>}>
-              <SharingRail entityType="collection" entityId={collectionId} />
+              <SafeStreamSection
+                fallback={<RailLabel>SHARING</RailLabel>}
+                render={() =>
+                  SharingRail({
+                    entityType: "collection",
+                    entityId: collectionId,
+                  })
+                }
+              />
             </Suspense>
           </RailBlock>
         )}
@@ -492,7 +522,9 @@ async function CollectionTracksBoard({
   statusesPromise: ReturnType<typeof getStatuses>;
   query: TableSearchParams;
 }) {
-  const statusesResult = await statusesPromise;
+  const statusesResult = await statusesPromise.catch(() =>
+    actionFallback("Failed to fetch statuses")
+  );
 
   return (
     <EntityBoard
@@ -529,12 +561,16 @@ async function CollectionTracksTable({
     relationTypesResult,
     customFields,
   ] = await Promise.all([
-    pagePromise,
-    statusesPromise,
-    getLabels(projectId),
-    getPriorityLevels(projectId),
-    getRelationTypes(projectId),
-    cachedCustomFields(projectId, "track"),
+    pagePromise.catch(() => actionFallback("Failed to fetch tracks")),
+    statusesPromise.catch(() => actionFallback("Failed to fetch statuses")),
+    getLabels(projectId).catch(() => actionFallback("Failed to fetch labels")),
+    getPriorityLevels(projectId).catch(() =>
+      actionFallback("Failed to fetch priority levels")
+    ),
+    getRelationTypes(projectId).catch(() =>
+      actionFallback("Failed to fetch relation types")
+    ),
+    cachedCustomFields(projectId, "track").catch(() => []),
   ]);
 
   const tracksPage = isActionError(tracksPageResult) ? null : tracksPageResult;

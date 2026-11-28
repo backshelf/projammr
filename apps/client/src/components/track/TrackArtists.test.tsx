@@ -80,7 +80,7 @@ describe("TrackArtists", () => {
 
     const edit = screen.getByRole("button", { name: "Edit artists" });
     await act(async () => fireEvent.click(edit));
-    const juno = await screen.findByRole("button", { name: "Juno Park" });
+    const juno = await screen.findByRole("option", { name: "Juno Park" });
     await act(async () => fireEvent.click(juno));
 
     const input = screen.getByRole("textbox", { name: /add artist/i });

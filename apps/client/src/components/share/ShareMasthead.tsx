@@ -2,7 +2,10 @@
 
 import { mastheadTitle } from "@/components/masthead/Masthead";
 import { useMastheadScroll } from "@/components/motion/masthead-scroll";
-import { Transport } from "@/components/music-player/PlayerControls";
+import {
+  SecondaryControls,
+  Transport,
+} from "@/components/music-player/PlayerControls";
 import { PlayGlyph } from "@/components/music-player/PlayGlyph";
 import {
   useDuration,
@@ -38,7 +41,7 @@ import { useRef } from "react";
  * {@link useProgressFrames}, so the position never re-renders this or the
  * page around it.
  */
-function DurationReadout({
+export function DurationReadout({
   loaded,
   durationMs,
   onArt,
@@ -114,6 +117,7 @@ export function ShareMasthead() {
 
   const onArt = artwork !== null;
   const failed = loadError !== null && loadError.assetId === entry?.assetId;
+  const showActiveTrack = entries.length > 1 && entry != null;
   const byline =
     entry?.version != null ? (
       <VersionBadge version={entry.version} />
@@ -136,14 +140,17 @@ export function ShareMasthead() {
           <m.h1 {...titleArrival} className={mastheadTitle(false)}>
             {shareTitle(sharelink)}
           </m.h1>
-          {byline && (
+          {(showActiveTrack || byline) && (
             <m.div
               {...bylineArrival}
               className={cn(
-                "flex flex-wrap items-center gap-3 text-body text-ink-soft",
+                "flex flex-wrap items-center gap-x-3 gap-y-1 text-body text-ink-soft",
                 onArt && "on-art-soft"
               )}
             >
+              {showActiveTrack && (
+                <span className={"font-medium text-ink"}>{entry.title}</span>
+              )}
               {byline}
             </m.div>
           )}
@@ -166,9 +173,20 @@ export function ShareMasthead() {
             {/* The full transport only means something once this share is
                 the loaded queue, and only a share with somewhere to skip to
                 earns shuffle, repeat and the two skips around the play
-                button. Everything else is the one control that starts it. */}
-            <div className={"flex items-center gap-3"}>
-              <div className={"flex shrink-0 items-center"}>
+                button. Everything else is the one control that starts it. On
+                phones the waveform stacks full-width above the transport so
+                the 5-button row never crushes it. */}
+            <div
+              data-slot={"share-transport"}
+              className={
+                "flex items-center gap-3 phone:flex-col phone:items-stretch phone:gap-2"
+              }
+            >
+              <div
+                className={
+                  "flex shrink-0 items-center phone:order-2 phone:justify-center"
+                }
+              >
                 {loaded && entries.length > 1 ? (
                   <Transport size={"full"} />
                 ) : (
@@ -185,39 +203,48 @@ export function ShareMasthead() {
                   </IconButton>
                 )}
               </div>
-              <div className={"min-w-0 flex-1"}>
-                {failed ? (
-                  <div className={"flex flex-wrap items-center gap-3"}>
-                    <p
-                      role={"alert"}
-                      className={cn(
-                        "text-body text-ink-soft",
-                        onArt && "on-art-soft"
-                      )}
-                    >
-                      This audio can&apos;t be played right now.
-                    </p>
-                    <Button variant={"outline"} size={"sm"} onClick={retry}>
-                      Try again
-                    </Button>
-                  </div>
-                ) : (
-                  <TrackWaveform
-                    assetId={entry.assetId}
-                    playerTrack={entry.playable}
-                    peaks={entry.peaks}
-                    commentMarks={thread.commentMarks}
-                    onMarkerClick={jumpToComment}
-                    onPlay={start}
-                    showClock={false}
-                  />
-                )}
+              <div
+                className={
+                  "flex min-w-0 flex-1 items-center gap-3 phone:order-1 phone:w-full"
+                }
+              >
+                <div className={"min-w-0 flex-1"}>
+                  {failed ? (
+                    <div className={"flex flex-wrap items-center gap-3"}>
+                      <p
+                        role={"alert"}
+                        className={cn(
+                          "text-body text-ink-soft",
+                          onArt && "on-art-soft"
+                        )}
+                      >
+                        This audio can&apos;t be played right now.
+                      </p>
+                      <Button variant={"outline"} size={"sm"} onClick={retry}>
+                        Try again
+                      </Button>
+                    </div>
+                  ) : (
+                    <TrackWaveform
+                      assetId={entry.assetId}
+                      playerTrack={entry.playable}
+                      peaks={entry.peaks}
+                      commentMarks={thread.commentMarks}
+                      onMarkerClick={jumpToComment}
+                      onPlay={start}
+                      showClock={false}
+                    />
+                  )}
+                </div>
+                <DurationReadout
+                  loaded={loaded}
+                  durationMs={entry.durationMs}
+                  onArt={onArt}
+                />
               </div>
-              <DurationReadout
-                loaded={loaded}
-                durationMs={entry.durationMs}
-                onArt={onArt}
-              />
+              <div className={"flex shrink-0 items-center phone:hidden"}>
+                <SecondaryControls.Volume size={"card"} />
+              </div>
             </div>
 
             {sharelink.isDownloadsEnabled && (

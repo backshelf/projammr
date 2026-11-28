@@ -71,7 +71,7 @@ async function pickStatus(name: RegExp) {
     fireEvent.click(screen.getByText("— none —"));
   });
   await act(async () => {
-    fireEvent.click(screen.getByRole("menuitem", { name }));
+    fireEvent.click(screen.getByRole("option", { name }));
   });
 }
 
@@ -243,5 +243,18 @@ describe("TrackForm", () => {
     expect(createTrack).toHaveBeenCalledWith(
       expect.objectContaining({ statusId: 7 })
     );
+  });
+
+  it("folds distribution fields behind a mobile disclosure toggle", async () => {
+    await renderTrackForm([mixing]);
+
+    const toggle = screen.getByRole("button", {
+      name: "Distribution & details",
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.className).toContain("md:hidden");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
   });
 });

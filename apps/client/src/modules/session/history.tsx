@@ -52,6 +52,7 @@ import { PageHead } from "@workspace/ui/components/layout/page-head";
 import { SectionHead } from "@workspace/ui/components/layout/section-head";
 import { PAGE } from "@workspace/ui/lib/shell";
 import { ScrollRoot } from "@workspace/ui/components/layout/scroll-root";
+import { redirect } from "next/navigation";
 
 /** The saves the page loads: the ruler and the compare pickers read them. */
 const SAVES_LIMIT = 500;
@@ -76,6 +77,29 @@ export default async function SessionHistoryPage({
   sessionId: number;
   searchParams: RouteSearchParams;
 }) {
+  const standalone = searchParam(searchParams.standalone) === "1";
+  const initialSession = loaded(await cachedSession(sessionId));
+  if (initialSession.trackId != null && !standalone) {
+    const targetTrackHref = hrefFromParsedRoute(
+      {
+        kind: "track",
+        trackId: initialSession.trackId,
+        collectionId:
+          collectionId ?? initialSession.track?.collections?.[0]?.id,
+      },
+      projectId
+    );
+    const qs = new URLSearchParams({
+      studio: "history",
+      session: String(sessionId),
+    });
+    for (const key of ["from", "to", "checkpoints"] as const) {
+      const val = searchParam(searchParams[key]);
+      if (val != null) qs.set(key, val);
+    }
+    redirect(`${targetTrackHref}?${qs.toString()}`);
+  }
+
   // "Older commits" asks for the most the page ever shows; anything else is the first thirty.
   const commitLimit =
     numberParam(searchParams.commits) === MOST_COMMITS

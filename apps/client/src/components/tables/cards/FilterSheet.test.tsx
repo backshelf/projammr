@@ -122,4 +122,25 @@ describe("FilterSheet's Views section", () => {
 
     expect(savedViews.onShare).toHaveBeenCalledWith(7, true);
   });
+
+  it("uses auto height capped at 85dvh and resets all filters/grouping on Reset all", async () => {
+    const onApplyView = mock();
+    render(
+      <ProjectProvider project={{ id: 1, name: "P", role: "editor" }}>
+        <FilterSheet
+          {...baseProps}
+          onApplyView={onApplyView}
+          columnFilters={{ status: "2" }}
+        />
+      </ProjectProvider>,
+      { wrapper: MotionProvider }
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("h-auto");
+    expect(dialog.className).toContain("max-h-[85dvh]");
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset all" }));
+    expect(onApplyView).toHaveBeenCalledWith("");
+  });
 });

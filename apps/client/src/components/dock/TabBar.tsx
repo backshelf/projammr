@@ -4,6 +4,7 @@ import { useCommandPalette } from "@/components/command-palette/command-palette-
 import { dockTabs, type Tab, type TabContext } from "@/components/dock/tabs";
 import { AppLink } from "@/components/navigation/AppLink";
 import { useLongPress } from "@/hooks/use-long-press";
+import { useProjectRole } from "@/hooks/use-project-role";
 import { useTabContext } from "@/hooks/use-tab-context";
 import { useShellPolicy } from "@/lib/policies/provider";
 import { useHaptics } from "@workspace/ui/components/haptics";
@@ -19,10 +20,12 @@ import { useCallback } from "react";
  * to navigate between, so the bar is absent rather than empty.
  */
 export function TabBar() {
-  const context = useTabContext();
+  const rawContext = useTabContext();
+  const canEdit = useProjectRole()?.can("editor") ?? false;
   const tabs = dockTabs(useShellPolicy().dockTabs);
 
-  if (!context) return null;
+  if (!rawContext) return null;
+  const context: TabContext = { ...rawContext, canEdit };
 
   return (
     <nav
@@ -78,7 +81,11 @@ function TabItem({ tab, context }: { tab: Tab; context: TabContext }) {
           />
         )}
       </span>
-      <span className={LABEL}>{tab.label}</span>
+      <span
+        className={cn(LABEL, "max-w-full truncate px-0.5 tracking-[0.04em]")}
+      >
+        {tab.label}
+      </span>
     </>
   );
 

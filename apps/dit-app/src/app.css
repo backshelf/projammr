@@ -1,16 +1,30 @@
+@import "../../../packages/ui/node_modules/tailwindcss/index.css";
+@import "../../../packages/ui/node_modules/shadcn/dist/tailwind.css";
 @import "@workspace/ui/fonts.css";
-@import "@workspace/ui/globals.css";
+@import "@workspace/ui/styles/foundation.css";
+@import "@workspace/ui/styles/atmosphere.css";
+@import "@workspace/ui/styles/motion.css";
 
-/* Tailwind infers sources from the process cwd; naming the source tree makes
-   the class scan independent of where Vite is invoked from. */
+/* Tailwind infers sources from the process cwd; naming the source trees makes
+   the class scan independent of where Vite is invoked from, and leaves unused
+   BlockNote editor styles out of the panel bundle. */
 @source "./**/*.{ts,tsx}";
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
 
 #root {
   min-height: 100vh;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
 /* The set screen's skyline readout (`set/skyline-readout.tsx`). A bar is 8px wide at most, so its hit area reaches
-   its neighbours and up the whole drawing. */
+   its neighbours and up the skyline itself; clipping on `.skyline` keeps `::after` from overlapping the masthead above. */
+.skyline-readout .skyline {
+  overflow: clip;
+}
 .skyline-readout .skyline__bar {
   position: relative;
 }

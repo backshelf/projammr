@@ -110,7 +110,7 @@ export function SettingRow({
       </RowMain>
       {/* Capped at the row, so a fixed-width control shrinks on a narrow
           phone instead of pushing the page sideways. */}
-      <div className="flex max-w-full min-w-0 shrink-0 items-center gap-3">
+      <div className="flex max-w-full min-w-0 shrink-0 items-center gap-3 has-[[data-wide-control]]:w-full has-[[data-wide-control]]:max-w-80">
         <SettingControl
           definition={definition}
           value={row.value}
@@ -203,8 +203,8 @@ function RowFacts({
             aria-label={`Reset ${label}`}
             className={cn(
               "relative cursor-pointer text-ink-soft motion-ink hover:text-ink",
-              "rounded-sm focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-none",
-              "coarse:after:absolute coarse:after:-inset-3"
+              "rounded-sm focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-hidden",
+              "phone:inline-flex phone:min-h-11 phone:items-center coarse:inline-flex coarse:min-h-11 coarse:min-w-11 coarse:items-center coarse:justify-center coarse:px-2 coarse:after:inset-0"
             )}
           >
             Reset

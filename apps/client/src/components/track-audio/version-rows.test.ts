@@ -131,15 +131,15 @@ describe("fromCommitLabel", () => {
 describe("fromCommitHref", () => {
   const where = { projectId: 5, trackId: 7 };
 
-  it("points at the commit's row in the session's history, with the whole log loaded", () => {
+  it("opens the track's Studio history drawer at the commit", () => {
     expect(fromCommitHref(bounced("user"), where)).toBe(
-      "/project/5/track/7/session/812/history?commits=500#commit-41"
+      "/project/5/track/7?studio=history&session=812&to=90"
     );
   });
 
   it("opens the folded checkpoints for a checkpoint", () => {
     expect(fromCommitHref(bounced("checkpoint"), where)).toBe(
-      "/project/5/track/7/session/812/history?commits=500&checkpoints=1#commit-41"
+      "/project/5/track/7?studio=history&session=812&to=90&checkpoints=1"
     );
   });
 

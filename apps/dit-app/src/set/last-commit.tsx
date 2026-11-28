@@ -23,7 +23,7 @@ export function NothingToCommit({
       <p className="text-body text-ink">Nothing to commit</p>
       {lastCommit !== null && (
         <section aria-labelledby={headingId} className="flex flex-col">
-          <h2 id={headingId} className={cn(sectionTitle(), "mb-2 normal-case")}>
+          <h2 id={headingId} className={cn(sectionTitle(), "mb-2")}>
             Last commit
           </h2>
           <div className="flex items-start gap-2.5 border-t border-rule py-2.5">

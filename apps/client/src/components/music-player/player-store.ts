@@ -43,6 +43,7 @@ import { LabUnavailable } from "@/lib/dsp/lab-engine";
 import {
   type Auditions,
   type CompSettings,
+  DEFAULT_LAB,
   type EqBand,
   type LabLoudness,
   type LabSettings,
@@ -114,6 +115,8 @@ export type LabState = {
   source: LabSource;
   /** The listener keeps the Lab engaged with everything at its default. */
   pinned: boolean;
+  /** Temporarily bypasses all Lab processing without losing the tuned settings. */
+  bypass: boolean;
   /** The normalise target the playing track is heard at: its project's, else the policy's. */
   targetLufs: number;
 };
@@ -254,6 +257,8 @@ export type PlayerActions = {
   setAudition: (patch: Partial<Auditions>) => void;
   /** Keeps the Lab engaged with every setting at its default. */
   pinLab: (on: boolean) => void;
+  /** Temporarily bypasses all Lab processing without losing the tuned settings. */
+  setLabBypass: (bypass: boolean) => void;
   /** Every Lab setting back to its default. */
   resetLab: () => void;
   /**
@@ -364,6 +369,7 @@ function snapshotFrom(initial: PlayerInitial): PlayerSnapshot {
       reason: null,
       source: "original",
       pinned: false,
+      bypass: false,
       targetLufs: initial.policy.lab.normaliseTargetLufs,
     },
     bounce: null,
@@ -449,6 +455,8 @@ export function createPlayerStore({
   let queue = Q.empty;
   let prefs = stored.prefs;
   let lab: LabState = { ...serverSnapshot.lab, settings: stored.lab };
+  /** The match-EQ curve last computed by MatchEq, kept across temporary bypasses. */
+  let eqCurve: number[] | null = null;
   /** Whether the engine was last asked to engage rather than release. */
   let labEngaged = false;
   let releaseTimer: ReturnType<typeof setTimeout> | undefined;
@@ -507,11 +515,15 @@ export function createPlayerStore({
     }
   }
 
+  /** Settings actually sent to the audio graph: neutral when bypassed. */
+  const effectiveSettings = () => (lab.bypass ? DEFAULT_LAB : lab.settings);
+  const effectiveCurve = () => (lab.bypass ? null : eqCurve);
+
   /** Source seconds heard per wall second: the Lab's speed while it plays, the element's rate otherwise. */
   const heardRate = () =>
     lab.phase === "live"
-      ? playbackSpeed(lab.settings)
-      : elementRate(lab.settings);
+      ? playbackSpeed(effectiveSettings())
+      : elementRate(effectiveSettings());
 
   /**
    * The queue a crossfade would move to, and the track it starts, or null
@@ -760,7 +772,7 @@ export function createPlayerStore({
         });
 
   engine.applyPrefs(prefs);
-  engine.lab.set(lab.settings, loudnessOf(null));
+  engine.lab.set(effectiveSettings(), loudnessOf(null));
   syncLab();
 
   const metadata = createMetadataLoader((assetId, meta) => {
@@ -789,7 +801,7 @@ export function createPlayerStore({
     }
     session.setPositionState({
       duration,
-      playbackRate: playbackSpeed(lab.settings),
+      playbackRate: playbackSpeed(effectiveSettings()),
       position: Math.min(duration, engine.time),
     });
   }
@@ -850,7 +862,7 @@ export function createPlayerStore({
       projectTargets.set(projectId, target);
       const playing = Q.current(queue);
       if (playing?.projectId !== projectId || target === applied) return;
-      engine.lab.set(lab.settings, loudnessOf(playing));
+      engine.lab.set(effectiveSettings(), loudnessOf(playing));
       publish();
     });
   }
@@ -942,6 +954,7 @@ export function createPlayerStore({
       };
       lab = { ...lab, settings };
       save.lab(settings);
+      eqCurve = null;
       engine.lab.setEqCurve(null);
       syncLab();
     }
@@ -950,7 +963,7 @@ export function createPlayerStore({
     duration = 0;
     loadError = null;
     emitProgress(0);
-    engine.lab.set(lab.settings, loudnessOf(track));
+    engine.lab.set(effectiveSettings(), loudnessOf(track));
     resolveTargetOf(track);
   }
 
@@ -1024,8 +1037,8 @@ export function createPlayerStore({
       return;
     }
     const wanted = labWanted({
-      settings: lab.settings,
-      pinned: lab.pinned,
+      settings: effectiveSettings(),
+      pinned: lab.pinned && !lab.bypass,
       comparing: compare !== null && compare.phase !== "unavailable",
     });
     if (wanted) {
@@ -1057,7 +1070,7 @@ export function createPlayerStore({
   function updateLabSettings(change: (settings: LabSettings) => LabSettings) {
     const settings = change(lab.settings);
     lab = { ...lab, settings };
-    engine.lab.set(settings, loudnessOf(Q.current(queue)));
+    engine.lab.set(effectiveSettings(), loudnessOf(Q.current(queue)));
     save.lab(settings);
     syncLab();
     syncPositionState();
@@ -1212,7 +1225,10 @@ export function createPlayerStore({
           },
         },
       })),
-    setEqCurve: (gains) => engine.lab.setEqCurve(gains),
+    setEqCurve(gains) {
+      eqCurve = gains;
+      engine.lab.setEqCurve(effectiveCurve());
+    },
     setEqOn: (on) => updateRack("eq", { on }),
     setComp: (patch) => updateRack("comp", patch),
     setReverb: (patch) => updateRack("reverb", patch),
@@ -1222,7 +1238,21 @@ export function createPlayerStore({
         auditions: { ...settings.auditions, ...patch },
       })),
     pinLab: (pinned) => updateLab({ pinned }),
-    resetLab: () => updateLabSettings(() => labSettingsFrom(policy.lab)),
+    setLabBypass(bypass) {
+      if (lab.bypass === bypass) return;
+      lab = { ...lab, bypass };
+      engine.lab.set(effectiveSettings(), loudnessOf(Q.current(queue)));
+      engine.lab.setEqCurve(effectiveCurve());
+      syncLab();
+      syncPositionState();
+      publish();
+    },
+    resetLab() {
+      eqCurve = null;
+      engine.lab.setEqCurve(null);
+      lab = { ...lab, bypass: false };
+      updateLabSettings(() => labSettingsFrom(policy.lab));
+    },
     requestAnalysis: () =>
       engine.requestAnalysis(policy.playback.analysisOnTouch),
     startCompare(b) {
@@ -1319,10 +1349,11 @@ export function createPlayerStore({
         current.ownerType === "track" && current.projectId != null
           ? { projectId: current.projectId, trackId: current.ownerId }
           : null;
+      const appliedSettings = effectiveSettings();
       const name = bounceName(
         trackLabel(current),
         current.trackAudio?.version,
-        lab.settings,
+        appliedSettings,
         { ...policy.lab, normaliseTargetLufs: loudnessOf(current).targetLufs }
       );
       updateBounce({ phase: "rendering", fraction: 0 });
@@ -1332,9 +1363,9 @@ export function createPlayerStore({
             src: mediaProxyUrl(current.asset.assetPath),
             assetId: current.asset.id,
           },
-          settings: lab.settings,
+          settings: appliedSettings,
           loudness: loudnessOf(current),
-          curve: engine.lab.curve,
+          curve: lab.bypass ? null : (eqCurve ?? engine.lab.curve),
           name,
         },
         bounceDeps(),
@@ -1445,7 +1476,9 @@ export function createPlayerStore({
       const keeping = next.playback.persistQueue;
       const keepingChanged = keeping !== policy.playback.persistQueue;
       policy = next;
-      if (retarget) engine.lab.set(lab.settings, loudnessOf(Q.current(queue)));
+      if (retarget) {
+        engine.lab.set(effectiveSettings(), loudnessOf(Q.current(queue)));
+      }
       // Turned on, the queue as it stands is kept at once; turned off, the
       // kept one is forgotten rather than waiting to come back later.
       if (keepingChanged && keptQueueRead) {

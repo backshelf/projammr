@@ -16,8 +16,9 @@ mock.module("@/components/product-linking/pickers", () => ({
   TrackPicker: () => null,
 }));
 
+const back = mock();
 mock.module("next/navigation", () => ({
-  useRouter: () => ({ push: mock() }),
+  useRouter: () => ({ push: mock(), back }),
 }));
 
 mock.module("sonner", () => ({
@@ -35,6 +36,7 @@ const { AddTrackMenu } = await import("./AddTrackMenu");
 afterEach(() => {
   cleanup();
   createTrack.mockClear();
+  back.mockClear();
 });
 
 const mixing: Status = {
@@ -81,7 +83,7 @@ describe("AddTrackMenu", () => {
       fireEvent.click(screen.getByText("— none —"));
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("menuitem", { name: /Mixing/ }));
+      fireEvent.click(screen.getByRole("option", { name: /Mixing/ }));
     });
     fireEvent.change(screen.getByLabelText("Energy"), {
       target: { value: "7" },
@@ -93,5 +95,18 @@ describe("AddTrackMenu", () => {
     expect(createTrack).toHaveBeenCalledWith(
       expect.objectContaining({ collectionId: 4, fields: { cf_2: 7 } })
     );
+  });
+
+  it("closes the modal on Cancel instead of calling router.back()", async () => {
+    await openNewTrackDialog();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+
+    expect(back).not.toHaveBeenCalled();
+    expect(dialog.hasAttribute("data-closed")).toBe(true);
   });
 });

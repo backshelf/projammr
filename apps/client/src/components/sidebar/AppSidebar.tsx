@@ -2,13 +2,22 @@ import { AppLink } from "@/components/navigation/AppLink";
 import { SIDEBAR_EYEBROW } from "@workspace/ui/lib/shell";
 import { cachedShellData } from "@/lib/server-data";
 import { SETTINGS_HREF } from "@/lib/settings/href";
+import { roleSatisfies } from "@/lib/roles";
 import { Loading } from "@workspace/ui/components/layout/loading";
 import { AppSidebarGroup } from "@/components/sidebar/AppSidebarGroup";
 import AppSidebarHeader from "@/components/sidebar/AppSidebarHeader";
 import SignOutDropdownMenuItem from "@/components/sidebar/SignOutDropdownMenuItem";
+import { cachedSidebarProjectToday } from "@/components/sidebar/sidebar-reads";
 import { getCachedSession, sessionUser } from "@/lib/session";
 import { initials, mediaProxyUrl } from "@/lib/utils";
-import { IconUserCircle } from "@tabler/icons-react";
+import { isActionError } from "@workspace/api/lib/action-result";
+import { IconSettings, IconUserCircle } from "@tabler/icons-react";
+import { Button } from "@workspace/ui/components/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@workspace/ui/components/tooltip";
 import {
   Avatar,
   AvatarFallback,
@@ -63,6 +72,21 @@ export const AppSidebar = () => {
             <Suspense fallback={<SignedOutAccount />}>
               <SidebarAccount />
             </Suspense>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={"ghost"}
+                  size={"icon-sm"}
+                  className={"shrink-0 text-ink-soft hover:text-ink"}
+                  asChild
+                >
+                  <AppLink href={SETTINGS_HREF} aria-label={"Settings"}>
+                    <IconSettings />
+                  </AppLink>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Settings</TooltipContent>
+            </Tooltip>
             <SidebarTrigger
               className={"shrink-0 text-ink-soft hover:text-ink"}
               aria-label={"Hide sidebar"}
@@ -79,8 +103,20 @@ async function SidebarProjects() {
 
   if (!user) return null;
 
+  const canEdit =
+    currentProject != null && roleSatisfies(currentProject.role, "editor");
+  const today = canEdit
+    ? await cachedSidebarProjectToday(currentProject.id)
+    : null;
+  const unassignedCount =
+    today && !isActionError(today) ? today.unassignedSets.total : 0;
+
   return (
-    <AppSidebarHeader projects={projects} currentProject={currentProject} />
+    <AppSidebarHeader
+      projects={projects}
+      currentProject={currentProject}
+      unassignedCount={unassignedCount}
+    />
   );
 }
 
@@ -119,18 +155,15 @@ async function SidebarAccount() {
             <AvatarImage src={mediaProxyUrl(user.image)} alt="avatar" />
             <AvatarFallback>{initials(user.name)}</AvatarFallback>
           </Avatar>
-          <div className={"flex min-w-0 flex-col text-left"}>
+          <span className={"flex min-w-0 flex-col text-left"}>
             <span className={SIDEBAR_EYEBROW}>Account</span>
             <span className={"truncate"}>{user.name}</span>
-          </div>
+          </span>
         </SidebarMenuButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuItem asChild>
           <AppLink href="/profile">Profile</AppLink>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <AppLink href={SETTINGS_HREF}>Settings</AppLink>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <SignOutDropdownMenuItem />

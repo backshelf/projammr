@@ -15,6 +15,8 @@ export type RecentItem = {
   href: string;
   /** Omit to show no swatch (sessions carry no artwork of their own). */
   swatch?: Artwork | null;
+  /** Secondary tag shown beside repeated titles (e.g. linked track on notes). */
+  badge?: string | null;
 };
 
 /**
@@ -44,13 +46,20 @@ export function RecentlyEdited({
             <SidebarMenuButton asChild>
               <AppLink
                 href={item.href}
-                title={item.label}
+                title={
+                  item.badge ? `${item.label} · ${item.badge}` : item.label
+                }
                 className={"flex items-center gap-2 truncate"}
               >
                 {item.swatch !== undefined && (
                   <ArtSwatch artwork={item.swatch} />
                 )}
                 <span className={"truncate"}>{item.label}</span>
+                {item.badge && (
+                  <span className="ml-auto max-w-20 shrink-0 truncate rounded border border-rule px-1 text-micro text-ink-faint">
+                    {item.badge}
+                  </span>
+                )}
               </AppLink>
             </SidebarMenuButton>
           </SidebarMenuItem>

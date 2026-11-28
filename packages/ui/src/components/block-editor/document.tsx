@@ -3,7 +3,7 @@
 import { useCreateBlockNote, useEditorChange } from "@blocknote/react";
 import { EditorFrame } from "./frame";
 import { useBlockDocument } from "./use-document";
-import type { VariantProps } from "./variants";
+import { editorDomAttributes, type VariantProps } from "./variants";
 
 /** Prose: BlockNote's default schema, no extensions. */
 export default function DocumentEditor({
@@ -11,6 +11,7 @@ export default function DocumentEditor({
   onChange,
   editable,
   placeholder,
+  ariaLabel,
   theme,
 }: VariantProps) {
   const { initialContent, onDocumentChange } = useBlockDocument(
@@ -21,6 +22,7 @@ export default function DocumentEditor({
   // ponytail: BlockNote's placeholder API uses key "default", not "none".
   const editor = useCreateBlockNote({
     initialContent,
+    domAttributes: editorDomAttributes(ariaLabel),
     placeholders: placeholder ? { default: placeholder } : undefined,
   });
 

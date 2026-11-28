@@ -295,7 +295,7 @@ export function DownloadAssetDialog({
                   aria-checked={mode === value}
                   onClick={() => setMode(value)}
                   className={cn(
-                    "rounded-sm px-2 py-1 text-small motion-ink focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-none",
+                    "rounded-sm px-2 py-1 text-small motion-ink focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-hidden",
                     mode === value
                       ? "bg-paper text-ink"
                       : "text-ink-soft hover:text-ink"

@@ -7,8 +7,11 @@ import { Row, Rows } from "@workspace/ui/components/layout/rows";
 export type Forgettable = {
   key: string;
   title: string;
+  /** Optional full value shown on hover when `title` is humanized or shortened. */
+  rawTitle?: string;
   /** The folder, in faint ink under the title; absent when it is not known. */
   detail?: string | null;
+  rawDetail?: string | null;
 };
 
 /**
@@ -35,11 +38,17 @@ export function ForgetList({
       {items.map((item) => (
         <Row key={item.key} as="li" className="gap-2 px-0 py-1">
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="font-mono text-micro break-all text-ink-soft">
+            <span
+              title={item.rawTitle}
+              className="font-mono text-micro break-all text-ink-soft"
+            >
               {item.title}
             </span>
             {item.detail && (
-              <span className="font-mono text-micro break-all text-ink-faint">
+              <span
+                title={item.rawDetail ?? undefined}
+                className="font-mono text-micro break-all text-ink-faint"
+              >
                 {item.detail}
               </span>
             )}

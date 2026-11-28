@@ -13,6 +13,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogTitle,
 } from "./alert-dialog";
 import { MotionProvider } from "./motion-provider";
@@ -28,6 +29,7 @@ function renderAlert(onActionClick?: (event: MouseEvent) => void) {
     <AlertDialog defaultOpen onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogTitle>Delete track?</AlertDialogTitle>
+        <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
         <AlertDialogCancel>Cancel</AlertDialogCancel>
         <AlertDialogAction variant="destructive" onClick={onActionClick}>
           Delete
@@ -46,6 +48,10 @@ describe("AlertDialog", () => {
     expect(
       screen.getByRole("alertdialog", { name: "Delete track?" })
     ).toBeTruthy();
+    expect(screen.getByText("Delete track?").className).toContain("font-sub");
+    expect(screen.getByText("This cannot be undone.").className).toContain(
+      "text-ink-soft"
+    );
   });
 
   it("gives the action the variant it asks for", () => {

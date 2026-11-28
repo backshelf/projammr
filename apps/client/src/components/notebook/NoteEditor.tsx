@@ -75,6 +75,11 @@ const PLACEHOLDER: Record<Surface, string> = {
   track: "Write lyrics…",
 };
 
+const ARIA_LABEL: Record<Surface, string> = {
+  notebook: "Note editor",
+  track: "Lyrics editor",
+};
+
 /** The pieces a surface lays out around the note: where they go is its call. */
 type NoteEditorParts = {
   /** The save state, as a line of text. */
@@ -376,6 +381,7 @@ function NoteEditorSession({
         editable={rights.write && state !== "conflict"}
         theme={resolvedTheme === "dark" ? "dark" : "light"}
         placeholder={rights.write ? PLACEHOLDER[surface] : " "}
+        ariaLabel={ARIA_LABEL[surface]}
       />
     </div>
   );

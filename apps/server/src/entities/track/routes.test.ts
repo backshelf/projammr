@@ -238,6 +238,18 @@ describe("tracks", () => {
     expect(withMain.keyTonic).toBe("C#");
     expect(withMain.keyScale).toBe("Minor");
     expect(withMain.bpm).toBe("128.5");
+    expect(withMain.studio).toMatchObject({
+      sessionCount: 2,
+      commitCount: 0,
+      saveCount: 0,
+      lastSaveAt: null,
+      openOn: null,
+      openSessionId: null,
+      mainSession: {
+        main: true,
+        daw: "ableton",
+      },
+    });
 
     // The listing and the summaries carry the same halves as the detail.
     const halves = { key: "C# Minor", keyTonic: "C#", keyScale: "Minor" };

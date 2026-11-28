@@ -141,11 +141,11 @@ function SheetClose(props: SheetPrimitive.Close.Props & AsChild) {
 }
 
 /**
- * The scrim, unselectable — as is the content above it. A sheet opened from a
- * long press arrives under a finger that is still down, and WebKit's selection
- * recogniser fires half a second in against whatever lies beneath it, taking
- * its anchor from the page behind the scrim. Sheet bodies are buttons and
- * labels, so nothing is lost by refusing selection there as well.
+ * The scrim, unselectable. A sheet opened from a long press arrives under a
+ * finger that is still down, and WebKit's selection recogniser fires half a
+ * second in against whatever lies beneath it, taking its anchor from the page
+ * behind the scrim. The sheet body itself stays selectable so inputs and
+ * readouts work as expected, while the swipe handle refuses selection.
  */
 function SheetOverlay({ className }: { className?: string }) {
   return (
@@ -169,15 +169,20 @@ function SheetOverlay({ className }: { className?: string }) {
 }
 
 /**
- * The mark that says a bottom sheet swipes to dismiss. A mark, not a control:
- * the primitive's swipe already covers the whole panel, so the grabber itself
- * takes no pointer handling of its own.
+ * The mark that says a bottom sheet swipes to dismiss. Unselectable so a
+ * long press on the handle never triggers WebKit's callout or drags text out
+ * of the sheet body.
  */
-function SheetGrabber() {
+function SheetHandle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       aria-hidden
-      className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-rule-strong"
+      data-slot="sheet-handle"
+      className={cn(
+        "mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-rule-strong select-none [-webkit-touch-callout:none]",
+        className
+      )}
+      {...props}
     />
   );
 }
@@ -230,7 +235,7 @@ const SWIPE_AWAY: Record<SheetSide, string> = {
  * two compose, so neither overwrites the other.
  */
 const PANEL =
-  "fixed z-50 flex flex-col bg-popover bg-clip-padding text-xs/relaxed text-popover-foreground shadow-overlay outline-none select-none [-webkit-touch-callout:none] [transform:translate(var(--drawer-swipe-movement-x,0px),var(--drawer-swipe-movement-y,0px))] transition-[transform] duration-(--dur-settle) ease-arrive data-swipe-dismiss:duration-[calc(var(--dur-settle)*var(--drawer-swipe-strength,1))] data-swiping:transition-none";
+  "fixed z-50 flex flex-col bg-popover bg-clip-padding text-xs/relaxed text-popover-foreground shadow-overlay outline-none [transform:translate(var(--drawer-swipe-movement-x,0px),var(--drawer-swipe-movement-y,0px))] transition-[transform] duration-(--dur-settle) ease-arrive data-swipe-dismiss:duration-[calc(var(--dur-settle)*var(--drawer-swipe-strength,1))] data-swiping:transition-none";
 
 /** Where a sheet waits off its edge, as a `translate` of its own size. */
 const OFFSTAGE: Record<SheetSide, string> = {
@@ -386,7 +391,7 @@ function SheetContent({
               )}
               {...props}
             >
-              {side === "bottom" && swipe && <SheetGrabber />}
+              {side === "bottom" && swipe && <SheetHandle />}
               <ClosedSignal onClosed={onClosed} />
               <SheetPrimitive.Content
                 data-slot="sheet-body"
@@ -470,6 +475,7 @@ export {
   SheetTrigger,
   SheetClose,
   SheetContent,
+  SheetHandle,
   SheetHeader,
   SheetFooter,
   SheetTitle,

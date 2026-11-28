@@ -59,14 +59,14 @@ const tabNames = () =>
   );
 
 describe("TabBar", () => {
-  it("shows every tab in the order it has always stood, by default", () => {
+  it("shows the song-first tabs in order, by default", () => {
     renderBar();
 
     expect(tabNames()).toEqual([
+      "Home",
       "Collections",
       "Tracks",
       "Notes",
-      "Sessions",
       "Search",
     ]);
   });

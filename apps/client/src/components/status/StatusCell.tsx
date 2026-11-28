@@ -4,10 +4,10 @@ import { StatusMenuList } from "@/components/status/components/StatusMenu";
 import type { Status as StatusType } from "@workspace/api/api";
 import { StatusDisplay } from "@/components/status/StatusDisplay";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
+  ResponsivePicker,
+  ResponsivePickerContent,
+  ResponsivePickerTrigger,
+} from "@workspace/ui/components/responsive-picker";
 import type { RefCallback } from "react";
 
 export interface StatusCellProps {
@@ -45,8 +45,8 @@ export function StatusCell({
   const currentStatus = value ? statuses.find((s) => s.id === value) : null;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
+    <ResponsivePicker>
+      <ResponsivePickerTrigger
         asChild
         nativeButton={false}
         onBlur={onBlur}
@@ -61,7 +61,7 @@ export function StatusCell({
           aria-invalid={invalid || undefined}
           aria-labelledby={ariaLabelledBy}
           aria-describedby={ariaDescribedBy}
-          className="inline-block w-full cursor-pointer"
+          className="inline-block w-full cursor-pointer coarse:flex coarse:min-h-11 coarse:items-center in-[td]:coarse:min-h-0"
         >
           {currentStatus ? (
             <StatusDisplay status={currentStatus} variant="chip" />
@@ -71,14 +71,18 @@ export function StatusCell({
             </span>
           )}
         </div>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="overflow-visible p-0">
+      </ResponsivePickerTrigger>
+      <ResponsivePickerContent
+        title="Status"
+        align="start"
+        desktopClassName="w-56 gap-0 p-0"
+      >
         <StatusMenuList
           statuses={statuses}
           currentId={value}
           onPick={(status) => onSave(status.id)}
         />
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </ResponsivePickerContent>
+    </ResponsivePicker>
   );
 }

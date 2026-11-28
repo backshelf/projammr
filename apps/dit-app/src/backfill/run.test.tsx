@@ -239,4 +239,27 @@ describe("Bring in", () => {
     rerender(<WindowOf view={failed} />);
     expect(region()).toBe("halogen Project: failed. Storage is full.");
   });
+
+  test("shows overall progress in the footer and jumps to an active folder when viewing another", async () => {
+    const view = runView({
+      chosen: {
+        ...mother.chosen!,
+        folder: mother.folders[3]!.path,
+        name: "orbit Project",
+      },
+    });
+    const calls = mockBackfillApp(view);
+    renderWindow(view);
+
+    expect(
+      screen.getByRole("progressbar", { name: "Overall progress" })
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Jump to active" }));
+
+    await waitFor(() =>
+      expect(argsOf(calls, "backfill_choose")).toEqual([
+        { folder: mother.folders[0]!.path },
+      ])
+    );
+  });
 });

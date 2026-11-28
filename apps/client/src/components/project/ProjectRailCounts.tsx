@@ -5,40 +5,43 @@ import {
   RailLabel,
 } from "@workspace/ui/components/layout/rail";
 import { pluralizeCount } from "@workspace/session-diff/format";
-import { ActionError, CollectionSummary } from "@workspace/api/api";
+import { ActionError, CollectionSummary, TracksPage } from "@workspace/api/api";
 import { isActionError } from "@workspace/api/lib/action-result";
 
 export async function ProjectRailCounts({
   name,
   collectionsPromise,
+  trackCountPromise,
 }: {
   name: string;
   collectionsPromise: Promise<CollectionSummary[] | ActionError>;
+  trackCountPromise: Promise<TracksPage | ActionError>;
 }) {
-  const collections = await collectionsPromise;
+  const [collections, tracksPage] = await Promise.all([
+    collectionsPromise,
+    trackCountPromise,
+  ]);
 
-  if (isActionError(collections)) {
+  if (isActionError(collections) && isActionError(tracksPage)) {
     return <RailIdentity title={name} />;
   }
 
-  const trackCount = collections.reduce(
-    (total, collection) => total + collection.trackCount,
-    0
-  );
+  const collectionCount = isActionError(collections) ? 0 : collections.length;
+  const trackCount = isActionError(tracksPage) ? 0 : tracksPage.rowCount;
 
   return (
     <>
       <RailIdentity
         title={name}
         subtitle={`${pluralizeCount(
-          collections.length,
+          collectionCount,
           "collection"
         )} · ${pluralizeCount(trackCount, "track")}`}
       />
       <RailBlock grid>
         <div>
           <RailLabel>COLLECTIONS</RailLabel>
-          <MetadataItem>{collections.length}</MetadataItem>
+          <MetadataItem>{collectionCount}</MetadataItem>
         </div>
         <div>
           <RailLabel>TRACKS</RailLabel>

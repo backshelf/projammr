@@ -22,12 +22,15 @@ import { renderToPlayable, type TodayRender } from "./playable";
 export function RenderRow({
   row,
   projectId,
+  versionLabel,
 }: {
   row: TodayRender;
   projectId: number;
+  versionLabel?: string;
 }) {
   const format = useFormat();
   const title = row.owner?.title ?? row.asset.name;
+  const versionText = versionLabel || `v${row.version}`;
 
   return (
     <Row>
@@ -47,7 +50,7 @@ export function RenderRow({
             <RowTitle>{title}</RowTitle>
           </AppLink>
           <RowMeta>
-            v{row.version} · {format.relative(row.createdAt)}
+            {versionText} · {format.relative(row.createdAt)}
           </RowMeta>
         </RowMain>
       </TrackCell>

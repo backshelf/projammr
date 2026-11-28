@@ -6,16 +6,21 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, mock } from "bun:test";
+import { silentEngine } from "@/components/music-player/player-engine";
+import { PlayerStoreContext } from "@/components/music-player/player-hooks";
 import { MotionProvider } from "@workspace/ui/components/motion-provider";
 import { ModalScopeProvider } from "@workspace/ui/lib/modal-scope";
 import type { PeekPanelProps, PeekRow } from "./PeekPanel";
 
+mock.module("server-only", () => ({}));
 // next/link updates state as it mounts, outside any act() the test can wrap.
 mock.module("@/components/navigation/AppLink", () => ({
   AppLink: ({ href, ...props }: React.ComponentProps<"a">) => (
     <a href={href} {...props} />
   ),
 }));
+const { createPlayerStore } =
+  await import("@/components/music-player/player-store");
 const { PeekPanel } = await import("./PeekPanel");
 
 afterEach(cleanup);
@@ -150,5 +155,78 @@ describe("PeekPanel modal scope", () => {
 
     expect(screen.getByRole("dialog", { name: "Blue Hour" })).toBeTruthy();
     expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe("PeekPanel play and statusEdit", () => {
+  it("renders a play control when play is provided and lets statusEdit update status", async () => {
+    const store = createPlayerStore({
+      createEngine: () => silentEngine,
+      persist: null,
+    });
+    const onSelect = mock(async () => true);
+
+    render(
+      <MotionProvider>
+        <PlayerStoreContext value={store}>
+          <PeekPanel
+            row={{
+              id: 1,
+              title: "Blue Hour",
+              status: {
+                id: 1,
+                name: "Idea",
+                percentage: 10,
+                colourHex: "var(--ink-soft)",
+              },
+            }}
+            onClose={mock()}
+            href="/track/1"
+            play={{ kind: "track", id: 1, title: "Blue Hour" }}
+            statusEdit={{
+              statuses: [
+                {
+                  id: 1,
+                  projectId: 1,
+                  name: "Idea",
+                  percentage: 10,
+                  description: null,
+                  colourHex: "var(--ink-soft)",
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                {
+                  id: 2,
+                  projectId: 1,
+                  name: "Mixing",
+                  percentage: 60,
+                  description: null,
+                  colourHex: "var(--ink-soft)",
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+              ],
+              onSelect,
+            }}
+          />
+        </PlayerStoreContext>
+      </MotionProvider>
+    );
+
+    expect(
+      screen.getByRole("button", { name: /play blue hour/i })
+    ).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Change status" }));
+    });
+    await act(async () => {
+      const option = screen.getByRole("option", { name: "Mixing" });
+      fireEvent.pointerDown(option);
+      fireEvent.click(option);
+    });
+
+    expect(onSelect).toHaveBeenCalledWith(2);
+    store.destroy();
   });
 });

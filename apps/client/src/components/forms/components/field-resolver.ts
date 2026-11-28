@@ -8,14 +8,16 @@ import type { FieldSpec } from "@/components/forms/components/EntityForm";
 
 type FlatFieldSpec<T extends FieldValues> = Exclude<
   FieldSpec<T>,
-  { kind: "pair" }
+  { kind: "pair" } | { kind: "disclosure" }
 >;
 
 function flatten<T extends FieldValues>(
   fields: FieldSpec<T>[]
 ): FlatFieldSpec<T>[] {
   return fields.flatMap((field): FlatFieldSpec<T> | FlatFieldSpec<T>[] =>
-    field.kind === "pair" ? flatten(field.fields) : field
+    field.kind === "pair" || field.kind === "disclosure"
+      ? flatten(field.fields)
+      : field
   );
 }
 

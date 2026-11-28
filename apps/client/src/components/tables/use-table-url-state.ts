@@ -211,6 +211,25 @@ export function useTableViewState() {
     });
   }, []);
 
+  const setColumnFilters = useCallback(
+    (patch: Record<string, string | null>) => {
+      replaceNextRef.current = false;
+      layoutOnlyRef.current = false;
+      setState((prev) => {
+        const columnFilters = { ...prev.columnFilters };
+        for (const [id, value] of Object.entries(patch)) {
+          if (value == null || value === "") delete columnFilters[id];
+          else columnFilters[id] = value;
+        }
+        return {
+          ...prev,
+          columnFilters,
+        };
+      });
+    },
+    []
+  );
+
   // "Show all of this group": clears grouping and pins the group's own filter,
   // landing on the ordinary paginated list scoped to that one group.
   const drillIntoGroup = useCallback((filterParam: string, value: string) => {
@@ -331,6 +350,7 @@ export function useTableViewState() {
       setGlobalFilter,
       setSorting,
       setColumnFilter,
+      setColumnFilters,
       drillIntoGroup,
       setColumnVisibility,
       setColumnOrder,
@@ -345,6 +365,7 @@ export function useTableViewState() {
       setGlobalFilter,
       setSorting,
       setColumnFilter,
+      setColumnFilters,
       drillIntoGroup,
       setColumnVisibility,
       setColumnOrder,

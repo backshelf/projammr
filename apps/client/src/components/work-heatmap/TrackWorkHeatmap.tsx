@@ -7,6 +7,7 @@ import { pluralizeCount } from "@workspace/session-diff/format";
 import type { HeatmapDay } from "@workspace/api/api";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { Heatmap } from "@workspace/ui/components/heatmap";
+import { RailBlock, RailLabel } from "@workspace/ui/components/layout/rail";
 import { streaks } from "@workspace/ui/lib/heatmap";
 import { useEffect, useState } from "react";
 
@@ -15,7 +16,9 @@ const WEEKS = 12;
 /**
  * A compact 12-week save-activity grid for one track, shown in the rail.
  * Unfiltered (`trackId` pins the request), so — unlike `WorkHeatmap` on the
- * project page — there is no URL filter state to own.
+ * project page — there is no URL filter state to own. Owns its own
+ * `RailBlock` so tracks with no saves render nothing without flashing an
+ * empty heading.
  */
 export function TrackWorkHeatmap({
   projectId,
@@ -43,6 +46,8 @@ export function TrackWorkHeatmap({
     };
   }, [projectId, trackId, query]);
 
+  if (days.length === 0) return null;
+
   const activeDays = days.length;
   const { since } = streaks(days, today);
 
@@ -54,9 +59,18 @@ export function TrackWorkHeatmap({
     .join(" · ");
 
   return (
-    <div className="flex flex-col gap-2">
-      <Heatmap days={days} from={from} to={to} weekStart={weekStart} compact />
-      <p className="text-micro text-ink-soft">{caption}</p>
-    </div>
+    <RailBlock>
+      <RailLabel>WORKED ON</RailLabel>
+      <div className="flex flex-col gap-2">
+        <Heatmap
+          days={days}
+          from={from}
+          to={to}
+          weekStart={weekStart}
+          compact
+        />
+        <p className="text-micro text-ink-soft">{caption}</p>
+      </div>
+    </RailBlock>
   );
 }

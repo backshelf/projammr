@@ -24,6 +24,7 @@ import {
   prefixCandidates,
   usePrefixCommandResults,
 } from "@/components/command-palette/use-prefix-command";
+import type { Artwork } from "@workspace/api/api";
 import type { SearchResult } from "@/components/command-palette/use-search";
 import { useSearch } from "@/components/command-palette/use-search";
 import { removeTrackFromCollection } from "@/actions/collections";
@@ -60,7 +61,13 @@ import {
 } from "@workspace/ui/components/command";
 import { useIsApplePlatform } from "@workspace/ui/hooks/use-apple-platform";
 import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
-import { IconFolderPlus, IconSettings } from "@tabler/icons-react";
+import {
+  IconDisc,
+  IconExternalLink,
+  IconFolderPlus,
+  IconSettings,
+} from "@tabler/icons-react";
+import { useTrackStudioActions } from "@/components/track/track-studio-bridge";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { useRouter } from "next/navigation";
 import { Fragment, type ReactNode, useState } from "react";
@@ -76,8 +83,13 @@ export type PaletteRecents = {
   /** Every track in the project, so a track page can tell whether its track
    *  is archived. */
   allTracks: { id: number; title: string; archived: boolean }[];
-  tracks: { id: number; title: string }[];
-  sessions: { id: number; name: string; trackId: number | null }[];
+  tracks: { id: number; title: string; artwork?: Artwork | null }[];
+  sessions: {
+    id: number;
+    name: string;
+    trackId: number | null;
+    artwork?: Artwork | null;
+  }[];
 };
 
 const NO_SETTINGS: readonly SettingResult[] = [];
@@ -137,6 +149,7 @@ export function CommandPalette({
   const actionContext = useActionContext();
   const commands = useCommands();
   const runCommand = useRunCommand();
+  const trackStudio = useTrackStudioActions();
   // `provider.tsx` already resolves the hub-page fallback and the
   // outside-a-project default; the palette reads the same values off it
   // rather than recomputing them.
@@ -222,9 +235,40 @@ export function CommandPalette({
     go(resultHref(result, projectId));
   }
 
-  const paletteCommands = commands
-    .filter(isPaletteCommand)
-    .filter((command) => command.available);
+  const trackCommands: PaletteCommand[] =
+    route.kind === "track" && trackStudio
+      ? [
+          {
+            id: "inspect-daw-history",
+            label: "Inspect DAW & history",
+            group: "Track" as const,
+            keys: ["w"],
+            alsoIn: [],
+            available: true,
+            run: () => trackStudio.openStudio(),
+            palette: { icon: IconDisc, hidden: false },
+          },
+          ...(trackStudio.openInDaw
+            ? [
+                {
+                  id: "open-in-daw",
+                  label: "Open in DAW",
+                  group: "Track" as const,
+                  keys: [],
+                  alsoIn: [],
+                  available: true,
+                  run: () => trackStudio.openInDaw?.(),
+                  palette: { icon: IconExternalLink, hidden: false },
+                },
+              ]
+            : []),
+        ]
+      : [];
+
+  const paletteCommands = [
+    ...commands.filter(isPaletteCommand).filter((command) => command.available),
+    ...trackCommands,
+  ];
   const matchedActions = matchActions(paletteCommands, query);
   const matchedSettings = matchSettingResults(settings, query);
 
@@ -233,6 +277,7 @@ export function CommandPalette({
         projectId: actionContext.projectId,
         route: current?.route ?? null,
         pathname: actionContext.pathname,
+        canEdit: listedRecents?.canEdit ?? false,
       })
     : [];
   const quickJumpByCommandId = new Map(
@@ -335,7 +380,7 @@ export function CommandPalette({
             value={`recent-track-${track.id}`}
             onSelect={() => select({ kind: "track", trackId: track.id })}
           >
-            <ArtSwatch artwork={null} />
+            <ArtSwatch artwork={track.artwork ?? null} />
             <span className="truncate">{track.title}</span>
           </CommandItem>
         ))}
@@ -355,7 +400,7 @@ export function CommandPalette({
               })
             }
           >
-            <ArtSwatch artwork={null} />
+            <ArtSwatch artwork={session.artwork ?? null} />
             <span className="truncate">{session.name}</span>
           </CommandItem>
         ))}
@@ -617,9 +662,11 @@ export function CommandPalette({
                           <span className="truncate">{result.title}</span>
                           {result.archived && <ArchivedFlag />}
                         </span>
-                        {result.snippet && (
+                        {(result.subtitle || result.snippet) && (
                           <CommandItemDetail className="block">
-                            {result.snippet}
+                            {result.subtitle && result.snippet
+                              ? `${result.subtitle} · ${result.snippet}`
+                              : result.subtitle || result.snippet}
                           </CommandItemDetail>
                         )}
                       </span>

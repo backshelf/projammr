@@ -215,10 +215,10 @@ describe("CommentList under a resolved thread", () => {
   it("keeps the author's name in full ink until the thread is resolved", () => {
     renderList([row({ id: 1 })], stubBackend());
 
-    expect(screen.getByText("Ada Lovelace").className).toContain("text-ink");
-    expect(screen.getByText("Ada Lovelace").className).not.toContain(
-      "text-ink-soft"
-    );
+    const authorEl = screen.getByText("Ada Lovelace");
+    expect(authorEl.className).toContain("text-ink");
+    expect(authorEl.className).not.toContain("text-ink-soft");
+    expect(authorEl.parentElement?.className).toContain("flex-wrap");
   });
 });
 

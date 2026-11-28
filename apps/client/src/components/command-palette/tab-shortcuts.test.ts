@@ -11,21 +11,31 @@ const projectCtx: TabContext = {
 };
 
 describe("tabQuickJumps", () => {
-  it("surfaces the Notes tab's long-press destination with its gesture hint", () => {
-    const jumps = tabQuickJumps(DEFAULT_SHELL.dockTabs, projectCtx);
-
-    expect(jumps).toHaveLength(1);
-    expect(jumps[0]).toMatchObject({
+  it("surfaces Home and Notes long-press destinations for viewers, plus Collections and Tracks for editors", () => {
+    const viewerJumps = tabQuickJumps(DEFAULT_SHELL.dockTabs, projectCtx);
+    expect(viewerJumps.map((j) => j.id)).toEqual(["home", "notes"]);
+    expect(viewerJumps[1]).toMatchObject({
       id: "notes",
       label: "New note",
       href: NEW_NOTE_HREF,
       hint: "Hold Notes",
       commandId: "new-note",
     });
+
+    const editorJumps = tabQuickJumps(DEFAULT_SHELL.dockTabs, {
+      ...projectCtx,
+      canEdit: true,
+    });
+    expect(editorJumps.map((j) => j.id)).toEqual([
+      "home",
+      "collections",
+      "tracks",
+      "notes",
+    ]);
   });
 
   it("omits shortcuts for tabs absent from the configured dock policy", () => {
-    expect(tabQuickJumps(["tracks", "sessions", "search"], projectCtx)).toEqual(
+    expect(tabQuickJumps(["tracks", "studio", "search"], projectCtx)).toEqual(
       []
     );
   });

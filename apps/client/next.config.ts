@@ -68,6 +68,7 @@ const nextConfig: NextConfig = {
     // and retries it when the connection returns, instead of throwing, and
     // gives `useOffline` its value.
     useOffline: true,
+    optimizePackageImports: ["@tabler/icons-react"],
   },
 
   async headers() {

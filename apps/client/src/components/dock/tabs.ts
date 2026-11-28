@@ -5,10 +5,12 @@ import {
   isNotesPath,
   NEW_NOTE_HREF,
   NOTES_HREF,
+  PROJECTS_HREF,
 } from "@/lib/utils";
 import {
   IconDisc,
   IconFileMusic,
+  IconHome,
   IconMusic,
   IconNotes,
   IconSearch,
@@ -21,6 +23,8 @@ export type TabContext = {
   /** `null` outside `/project/:id` — e.g. on `/notes`. */
   route: ParsedRoute | null;
   pathname: string;
+  /** Whether the caller can create collections/tracks in `projectId`. */
+  canEdit?: boolean;
 };
 
 type TabCommon = {
@@ -68,11 +72,22 @@ const projectHref =
  */
 export const TABS: Tab[] = [
   {
+    id: "home",
+    label: "Home",
+    icon: IconHome,
+    kind: "link",
+    href: projectHref({ kind: "project" }),
+    longPressHref: () => PROJECTS_HREF,
+    isActive: (ctx) => ctx.route?.kind === "project",
+  },
+  {
     id: "collections",
     label: "Collections",
     icon: IconFileMusic,
     kind: "link",
     href: projectHref({ kind: "collection-all" }),
+    longPressHref: (ctx) =>
+      ctx.canEdit ? projectHref({ kind: "collection-new" })(ctx) : null,
     isActive: (ctx) => head(ctx.route) === "collection",
   },
   {
@@ -81,6 +96,8 @@ export const TABS: Tab[] = [
     icon: IconMusic,
     kind: "link",
     href: projectHref({ kind: "track-all" }),
+    longPressHref: (ctx) =>
+      ctx.canEdit ? projectHref({ kind: "track-new" })(ctx) : null,
     isActive: (ctx) => head(ctx.route) === "track",
   },
   {
@@ -93,19 +110,22 @@ export const TABS: Tab[] = [
     isActive: (ctx) => isNotesPath(ctx.pathname),
   },
   {
-    id: "sessions",
-    label: "Sessions",
-    icon: IconDisc,
-    kind: "link",
-    href: projectHref({ kind: "session-all" }),
-    isActive: (ctx) => head(ctx.route) === "session",
-  },
-  {
     id: "search",
     label: "Search",
     icon: IconSearch,
     kind: "palette",
     isActive: () => false,
+  },
+  {
+    id: "studio",
+    label: "Studio",
+    icon: IconDisc,
+    kind: "link",
+    href: projectHref({ kind: "session-all" }),
+    isActive: (ctx) =>
+      head(ctx.route) === "session" ||
+      ctx.route?.kind === "plugins" ||
+      ctx.route?.kind === "samples",
   },
 ];
 

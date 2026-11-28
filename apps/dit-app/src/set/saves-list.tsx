@@ -1,4 +1,5 @@
-import { useId, type CSSProperties, type JSX } from "react";
+import { useId, useState, type CSSProperties, type JSX } from "react";
+import { Button } from "@workspace/ui/components/button";
 import { useFormat } from "@workspace/ui/components/format-provider";
 import { Row, Rows } from "@workspace/ui/components/layout/rows";
 import { sectionTitle } from "@workspace/ui/components/layout/section-head";
@@ -51,6 +52,8 @@ function emptyOf(save: SaveRow): string {
     : "Saved, no track or setting changed";
 }
 
+const VISIBLE_SAVE_CAP = 5;
+
 /**
  * The saves since the last commit, each with its time, what it changed and a dot for whether the hub has it. A save
  * made on the day of the newest reads as a time of day; an older one, as a date and time.
@@ -66,23 +69,23 @@ export function SavesList({
 }): JSX.Element {
   const headingId = useId();
   const format = useFormat();
+  const [expanded, setExpanded] = useState(false);
   const chips = chipsOf(saves, headMeta);
   const newestDay = saves[0] ? format.calendarDay(saves[0].at) : null;
+  const capped = saves.length > VISIBLE_SAVE_CAP;
+  const visible = capped && !expanded ? saves.slice(0, VISIBLE_SAVE_CAP) : saves;
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col">
-      <h2
-        id={headingId}
-        className={cn(sectionTitle(), "mb-2 truncate normal-case")}
-      >
+      <h2 id={headingId} className={cn(sectionTitle(), "mb-2 truncate")}>
         {headingOf(saves.length, lastCommit)}
       </h2>
       <Rows as="ul">
-        {saves.map((save, index) => (
+        {visible.map((save, index) => (
           <Row
             as="li"
             key={save.id}
-            className="items-start gap-2.5 px-0 [contain-intrinsic-size:auto_3rem] [content-visibility:auto]"
+            className="items-start gap-2.5 px-0"
           >
             <PushDotMark push={save.push} />
             <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -108,6 +111,16 @@ export function SavesList({
           </Row>
         ))}
       </Rows>
+      {capped && (
+        <Button
+          variant="link"
+          aria-expanded={expanded}
+          className="mt-1 self-start px-0 text-ink-soft"
+          onClick={() => setExpanded((was) => !was)}
+        >
+          {expanded ? "Show fewer saves" : `Show all ${saves.length} saves`}
+        </Button>
+      )}
     </section>
   );
 }

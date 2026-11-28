@@ -129,7 +129,7 @@ export function HubShell({
   }, [entry]);
 
   return (
-    <div className="grid grid-cols-[12rem_minmax(0,1fr)] items-start gap-x-12 phone:grid-cols-1">
+    <div className="mx-auto grid w-full max-w-[68rem] grid-cols-[12rem_minmax(0,1fr)] items-start gap-x-12 phone:grid-cols-1">
       <aside className="sticky top-0 flex flex-col gap-6 pt-(--gutter) phone:static phone:gap-4">
         <HubSearchField value={query} onChange={setQuery} />
         <HubNav sections={sections} place={place} />

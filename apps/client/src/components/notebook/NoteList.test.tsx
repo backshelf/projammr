@@ -142,4 +142,27 @@ describe("NoteList keys", () => {
     fireEvent.keyDown(filter, { key: "j" });
     expect(push).not.toHaveBeenCalled();
   });
+
+  it("places a linked track chip inside RowMain alongside the timestamp", () => {
+    summaries = [
+      note(1, {
+        title: "Chorus Hook Idea That Should Not Be Crushed",
+        track: {
+          id: 12,
+          title: "Midnight Tape",
+          projectId: 5,
+          projectName: "Night Drive",
+        },
+      }),
+    ];
+    renderList();
+
+    const noteLink = screen
+      .getByText("Chorus Hook Idea That Should Not Be Crushed")
+      .closest("a")!;
+    const trackLink = screen.getByRole("link", { name: "Midnight Tape" });
+    expect(noteLink.parentElement).toBe(
+      trackLink.closest("span.min-w-0.flex-1")
+    );
+  });
 });

@@ -8,9 +8,23 @@ import {
   type Row,
 } from "@/components/tables/test-support";
 import { CanvasRootProvider } from "@workspace/ui/components/layout/scroll-root";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { stubGlobal } from "@workspace/test/globals";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  mock,
+} from "bun:test";
 import { useRef, type ReactNode } from "react";
 
 // The card list is the phone's presentation of the same rows: the root picks
@@ -495,5 +509,119 @@ describe("Cards virtualised", () => {
 
     expect(calls).toHaveLength(2);
     expect(calls[1]?.page).toBe(2);
+  });
+
+  it("renders + Add on phones and creates a row from the mobile draft form", async () => {
+    const onCreate = mock(async () => true);
+    await renderCards({
+      entityLabel: "track",
+      newRow: {
+        entityLabel: "track",
+        fields: {
+          title: { type: "text", placeholder: "Track title", required: true },
+        },
+        onCreate,
+      },
+    });
+
+    const addBtn = screen.getByRole("button", { name: "+ Add track" });
+    fireEvent.click(addBtn);
+
+    const input = screen.getByPlaceholderText("Track title *");
+    fireEvent.change(input, { target: { value: "Dawn Chorus" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Create track" }));
+    });
+
+    expect(onCreate).toHaveBeenCalledWith({ title: "Dawn Chorus" });
+  });
+
+  it("offers collection track Reorder mode for editors and withholds it from viewers", async () => {
+    const onMove = mock(async () => true);
+    await renderCards({
+      reorder: { onMove },
+      rowActions: { label: (row) => row.title },
+    });
+
+    const reorderBtn = screen.getByRole("button", { name: "Reorder" });
+    fireEvent.click(reorderBtn);
+
+    const handles = screen.getAllByRole("button", {
+      name: /^Drag to reorder /,
+    });
+    expect(handles).toHaveLength(2);
+    expect(handles[0]!.className).toContain("size-11");
+    expect(handles[0]!.style.touchAction).toBe("none");
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(
+      screen.queryByRole("button", { name: /^Drag to reorder / })
+    ).toBeNull();
+
+    cleanup();
+    stubViewport(true);
+    renderGrid("viewer", undefined, {
+      peek,
+      cards: {},
+      reorder: { onMove },
+    });
+    await screen.findAllByRole("list");
+    expect(screen.queryByRole("button", { name: "Reorder" })).toBeNull();
+  });
+
+  it("offers Move down, Set track #, Priority, Labels, and Artists in RowActionSheet", async () => {
+    const onMove = mock(async () => true);
+    const onBulkSetLabels = mock(async () => ({ ok: true as const }));
+    await renderCards({
+      reorder: { onMove },
+      rowActions: { label: (row) => row.title },
+      bulkPriorityLevels: [
+        {
+          id: 9,
+          name: "Urgent",
+          colour: "var(--ink-soft)",
+          rank: 3,
+          isDefault: false,
+        } as never,
+      ],
+      bulkLabels: [
+        {
+          id: 4,
+          name: "Single",
+          // eslint-disable-next-line no-restricted-syntax -- fixture colourHex
+          colourHex: "#336699",
+          projectId: 1,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      onBulkSetLabels,
+      editableCells: {
+        title: { type: "text" },
+        priority: { type: "priority", priorityLevels: [] },
+        artists: { type: "list", suggestions: ["Mara"] },
+      },
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Actions for row One" })
+      );
+    });
+
+    expect(screen.getByRole("button", { name: "Set priority" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Labels" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Artists" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Move down" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Set track #" }));
+    const numInput = screen.getByLabelText("Track number");
+    fireEvent.change(numInput, { target: { value: "2" } });
+    await act(async () => {
+      fireEvent.submit(numInput.closest("form")!);
+    });
+
+    expect(onMove).toHaveBeenCalledWith(10, 2);
   });
 });

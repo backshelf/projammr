@@ -32,8 +32,10 @@ export const CANVAS = [
   "[grid-template-areas:'head_rail'_'body_rail']",
   // Below the layout breakpoint the rail leaves its column and sits between
   // the title and the content, where the status and the property editors are
-  // in reach instead of buried under the tables and the comments.
-  "stack:grid-cols-[minmax(0,1fr)] stack:grid-rows-none",
+  // in reach instead of buried under the tables and the comments. Explicit
+  // `max-content` for both head and rail keeps tall mastheads (audio strips)
+  // from overlapping the stacked rail.
+  "stack:grid-cols-[minmax(0,1fr)] stack:grid-rows-[max-content_max-content_1fr]",
   "stack:[grid-template-areas:'head'_'rail'_'body']",
 ].join(" ");
 

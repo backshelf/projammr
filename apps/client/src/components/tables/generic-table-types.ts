@@ -125,6 +125,17 @@ export type FilterColumnConfig =
   ChoiceFilterConfig | RangeFilterConfig | TextFilterConfig;
 
 /**
+ * A quick filter pill shown above the table toolbar (for example `All`,
+ * `Unassigned`, `Not in dit` on the sessions list). Selecting a preset clears
+ * every other preset's params and sets its own filter params.
+ */
+export type FilterPreset = {
+  id: string;
+  label: string;
+  params: Record<string, string>;
+};
+
+/**
  * The expandable hierarchy: a row's children are a different entity (a
  * track's sessions, a collection's tracks) drawn on the parent's grid. Each
  * child cell is rendered by the entry for the parent column it sits under, so
@@ -216,6 +227,8 @@ export interface DataTableProps<TData extends RowData, TChild = never> {
    * refetches. Only meaningful alongside `serverPage`.
    */
   filterColumns?: FilterColumnConfig[];
+  /** Quick single-click filter preset pills rendered above the toolbar. */
+  filterPresets?: FilterPreset[];
   /**
    * Faceted option counts from the server, keyed by filter param then by
    * stringified option value. Feeds the counts shown next to each filter
@@ -398,6 +411,13 @@ export interface DataTableProps<TData extends RowData, TChild = never> {
    */
   rowAccent?: {
     accentHex?: (row: TData) => string | null | undefined;
+  };
+  /**
+   * Track reordering within a scoped collection. Provided for editors on
+   * collection-scoped track tables; gated by `canEdit` inside `DataTable`.
+   */
+  reorder?: {
+    onMove: (rowId: number, trackNumber: number) => Promise<boolean>;
   };
   /**
    * Identity column to pin while the grid scrolls sideways. The table keeps

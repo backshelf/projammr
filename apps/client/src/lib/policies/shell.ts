@@ -20,6 +20,7 @@ import { DELETE_KINDS } from "@workspace/settings/groups/feedback";
 import { DOCK_TABS, SIDEBAR_SECTIONS } from "@workspace/settings/groups/layout";
 import {
   COLLECTION_PAGE_SECTIONS,
+  PROJECT_HOME_HIDDEN_SECTIONS,
   PROJECT_HOME_SECTIONS,
   SESSION_PAGE_SECTIONS,
   TRACK_PAGE_SECTIONS,
@@ -147,6 +148,10 @@ export type ShellPolicy = {
   };
 };
 
+const DEFAULT_HIDDEN_PROJECT_HOME = new Set<ProjectHomeSection>(
+  PROJECT_HOME_HIDDEN_SECTIONS
+);
+
 export const DEFAULT_SHELL: ShellPolicy = {
   sidebarWidthRem: 16,
   recentItems: 5,
@@ -154,14 +159,17 @@ export const DEFAULT_SHELL: ShellPolicy = {
   sidebarSections: SIDEBAR_SECTIONS.map((id) => ({
     id,
     shown: true,
-    collapsed: false,
+    collapsed: id === "studio",
   })),
   sidebarCollectionOrder: "release",
-  dockTabs: DOCK_TABS,
+  dockTabs: DOCK_TABS.filter((id) => id !== "studio"),
   paletteResultCap: 5,
   paletteAliases: {},
   paletteEmptyGroups: PALETTE_EMPTY_GROUPS,
-  projectHomeSections: allShown(PROJECT_HOME_SECTIONS),
+  projectHomeSections: PROJECT_HOME_SECTIONS.map((id) => ({
+    id,
+    shown: !DEFAULT_HIDDEN_PROJECT_HOME.has(id),
+  })),
   entityPageSections: {
     collection: allShown(COLLECTION_PAGE_SECTIONS),
     track: allShown(TRACK_PAGE_SECTIONS),

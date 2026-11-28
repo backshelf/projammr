@@ -12,6 +12,7 @@ import {
   stepGain,
   stepHz,
   stepQFromDrag,
+  stepQFromWheel,
 } from "./eq-curve-geometry";
 
 describe("hzAtFraction / gainAtFraction", () => {
@@ -171,5 +172,24 @@ describe("qDragStep", () => {
 
     expect(reheld.q).toBe(moved.q);
     expect(reheld.origin).toEqual({ q: moved.q, y: 0.4 });
+  });
+});
+
+describe("stepQFromWheel", () => {
+  test("scrolling up raises Q and scrolling down lowers Q", () => {
+    expect(stepQFromWheel(1, -100, false)).toBeGreaterThan(1);
+    expect(stepQFromWheel(1, 100, false)).toBeLessThan(1);
+  });
+
+  test("moves in smaller increments when fine is true", () => {
+    const coarse = stepQFromWheel(1, -100, false) - 1;
+    const fine = stepQFromWheel(1, -100, true) - 1;
+    expect(fine).toBeGreaterThan(0);
+    expect(fine).toBeLessThan(coarse);
+  });
+
+  test("clamps to [Q_MIN, Q_MAX]", () => {
+    expect(stepQFromWheel(Q_MAX, -5000, false)).toBe(Q_MAX);
+    expect(stepQFromWheel(Q_MIN, 5000, false)).toBe(Q_MIN);
   });
 });

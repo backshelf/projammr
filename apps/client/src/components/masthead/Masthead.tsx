@@ -12,10 +12,11 @@ import type { PropsWithChildren, ReactNode } from "react";
  *  editable title is set exactly like a fixed one. */
 export const mastheadTitle = (compact: boolean) =>
   cn(
-    "mb-2 font-heading tracking-[-0.015em] [overflow-wrap:anywhere]",
+    "mb-2 font-heading tracking-[-0.015em] text-balance wrap-break-word",
     compact
-      ? "max-w-[24ch] text-title/[0.94]"
-      : "max-w-[18ch] text-display/[0.94] phone:text-title"
+      ? "max-w-[24ch] text-title"
+      : "max-w-[18ch] text-display phone:text-title",
+    "leading-[1.02]"
   );
 
 /**
@@ -70,7 +71,7 @@ export function Masthead({
           // `masthead` scopes the status pie fill in globals.css to this
           // header. Its floor is `--masthead-head`, which the phone tier and
           // `data-masthead` step.
-          "masthead relative flex min-h-(--masthead-head) flex-col p-(--gutter) pb-7",
+          "masthead on-art relative flex min-h-(--masthead-head) flex-col p-(--gutter) pb-7",
           "phone:pt-4",
           className
         )}
@@ -79,7 +80,7 @@ export function Masthead({
 
         <m.div style={headScroll} className={cn("mt-auto", COLUMN)}>
           {eyebrow && (
-            <m.div {...eyebrowArrival} className={EYEBROW}>
+            <m.div {...eyebrowArrival} className={cn(EYEBROW, "on-art-soft")}>
               {eyebrow}
             </m.div>
           )}
@@ -94,7 +95,7 @@ export function Masthead({
             <m.div
               {...bylineArrival}
               className={
-                "flex flex-wrap items-center gap-3 text-body text-ink-soft"
+                "on-art-soft flex flex-wrap items-center gap-3 text-body"
               }
             >
               {byline}

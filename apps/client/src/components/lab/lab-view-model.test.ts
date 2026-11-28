@@ -1,5 +1,7 @@
+import { DEFAULT_LAB_POLICY, labSettingsFrom } from "@/lib/policies/lab";
 import { describe, expect, test } from "bun:test";
 import {
+  labHasChanges,
   matchEqAvailable,
   matchEqReferenceLabel,
   normaliseAvailable,
@@ -129,5 +131,38 @@ describe("normaliseAvailable", () => {
   test("needs a stored loudness figure", () => {
     expect(normaliseAvailable(null)).toBe(false);
     expect(normaliseAvailable(-14)).toBe(true);
+  });
+});
+
+describe("labHasChanges", () => {
+  test("is false when settings match the policy defaults", () => {
+    expect(
+      labHasChanges(labSettingsFrom(DEFAULT_LAB_POLICY), DEFAULT_LAB_POLICY)
+    ).toBe(false);
+  });
+
+  test("detects linked speed, rack, or audition changes", () => {
+    const base = labSettingsFrom(DEFAULT_LAB_POLICY);
+    expect(
+      labHasChanges({ ...base, mode: "linked", speed: 1.2 }, DEFAULT_LAB_POLICY)
+    ).toBe(true);
+    expect(
+      labHasChanges(
+        {
+          ...base,
+          rack: { ...base.rack, eq: { ...base.rack.eq, on: true } },
+        },
+        DEFAULT_LAB_POLICY
+      )
+    ).toBe(true);
+    expect(
+      labHasChanges(
+        {
+          ...base,
+          auditions: { ...base.auditions, dim: true },
+        },
+        DEFAULT_LAB_POLICY
+      )
+    ).toBe(true);
   });
 });

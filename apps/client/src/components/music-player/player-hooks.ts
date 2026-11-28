@@ -8,6 +8,7 @@ import {
   PlayerSnapshot,
   PlayerStore,
 } from "@/components/music-player/player-store";
+import { settingsNeedLab } from "@/lib/dsp/lab-settings";
 import { imageUrl } from "@/lib/utils";
 import { artVarsFromAccent, type ArtVars } from "@workspace/ui/lib/art";
 import { useCoarsePointer } from "@workspace/ui/hooks/use-coarse-pointer";
@@ -53,6 +54,8 @@ const selectAnalyser = (s: PlayerSnapshot) => s.analyser;
 const selectRouted = (s: PlayerSnapshot) => s.routed;
 const selectLab = (s: PlayerSnapshot) => s.lab;
 const selectLabSettings = (s: PlayerSnapshot) => s.lab.settings;
+const selectLabAltering = (s: PlayerSnapshot) =>
+  !s.lab.bypass && settingsNeedLab(s.lab.settings);
 const selectLabTarget = (s: PlayerSnapshot) => s.lab.targetLufs;
 const selectBounce = (s: PlayerSnapshot) => s.bounce;
 const selectCompareProgress = (s: PlayerSnapshot) => s.compareProgress;
@@ -84,6 +87,8 @@ export const useComparedSide = () => usePlayer(selectComparedSide);
 export const useLab = () => usePlayer(selectLab);
 /** The Lab's settings alone, steady while the Lab prepares. */
 export const useLabSettings = () => usePlayer(selectLabSettings);
+/** Whether the Lab is actively altering playback (not bypassed and at least one setting away from plain). */
+export const useLabAltering = () => usePlayer(selectLabAltering);
 /** The normalise target the playing track is heard at, for naming it. */
 export const useLabTarget = () => usePlayer(selectLabTarget);
 /**

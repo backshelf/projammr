@@ -144,6 +144,7 @@ export const SESSION_FILTER_PARAMS = [
   "priority",
   "track",
   "inDit",
+  "unassigned",
 ] as const;
 
 export type SessionFilterParam = (typeof SESSION_FILTER_PARAMS)[number];

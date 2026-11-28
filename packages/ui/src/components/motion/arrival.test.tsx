@@ -1,10 +1,24 @@
 import { MotionProvider } from "@workspace/ui/components/motion-provider";
+import { PageHead } from "@workspace/ui/components/layout/page-head";
 import { m } from "@workspace/ui/lib/motion";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "bun:test";
-import { arrivalVariants, ArrivalRoot, useArrival } from "./arrival";
+import { MotionGlobalConfig } from "motion/react";
+import { Activity } from "react";
+import {
+  arrivalVariants,
+  ArrivalRoot,
+  useArrival,
+  useArrivalSettled,
+} from "./arrival";
 
-afterEach(cleanup);
+const previousSkip = MotionGlobalConfig.skipAnimations;
+
+afterEach(() => {
+  cleanup();
+  MotionGlobalConfig.skipAnimations = previousSkip;
+  document.documentElement.removeAttribute("data-motion");
+});
 
 /** A part nested below the root, as the real ones are below server components.
  *  It declares no `initial` of its own, so what it renders at is whatever the
@@ -70,5 +84,91 @@ describe("ArrivalRoot", () => {
 
     expect(root?.getAttribute("data-arrival")).toBe("load");
     await waitFor(() => expect(root?.hasAttribute("data-arrival")).toBe(false));
+  });
+
+  it("starts settled when reduced motion is enabled so headings never render hidden", () => {
+    document.documentElement.setAttribute("data-motion", "reduce");
+    render(
+      <MotionProvider>
+        <PageHead title="Personal" lede="Your preferences" />
+      </MotionProvider>
+    );
+
+    expect(screen.getByText("Personal").style.opacity).toBe("1");
+  });
+
+  it("settles cleanly when hidden and revealed inside React <Activity>", async () => {
+    MotionGlobalConfig.skipAnimations = false;
+    const { rerender } = render(
+      <MotionProvider>
+        <Activity mode="hidden">
+          <PageHead title="Personal" lede="Your preferences" />
+        </Activity>
+      </MotionProvider>
+    );
+
+    await act(async () => {
+      rerender(
+        <MotionProvider>
+          <Activity mode="visible">
+            <PageHead title="Personal" lede="Your preferences" />
+          </Activity>
+        </MotionProvider>
+      );
+    });
+
+    await waitFor(
+      () => {
+        expect(screen.getByText("Personal").style.opacity).toBe("1");
+      },
+      { timeout: 2000 }
+    );
+  });
+
+  it("settles arrival state when Activity toggles visible -> hidden -> visible", async () => {
+    function SettledProbe() {
+      const settled = useArrivalSettled();
+      return <span data-testid="settled">{String(settled)}</span>;
+    }
+
+    const { rerender } = render(
+      <MotionProvider>
+        <Activity mode="visible">
+          <ArrivalRoot kind="load">
+            <SettledProbe />
+          </ArrivalRoot>
+        </Activity>
+      </MotionProvider>
+    );
+
+    await act(async () => {
+      rerender(
+        <MotionProvider>
+          <Activity mode="hidden">
+            <ArrivalRoot kind="load">
+              <SettledProbe />
+            </ArrivalRoot>
+          </Activity>
+        </MotionProvider>
+      );
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    await act(async () => {
+      rerender(
+        <MotionProvider>
+          <Activity mode="visible">
+            <ArrivalRoot kind="load">
+              <SettledProbe />
+            </ArrivalRoot>
+          </Activity>
+        </MotionProvider>
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settled").textContent).toBe("true");
+    });
   });
 });

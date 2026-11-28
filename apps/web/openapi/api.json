@@ -3497,13 +3497,167 @@
                         "total"
                       ],
                       "additionalProperties": false
+                    },
+                    "unassignedSets": {
+                      "type": "object",
+                      "properties": {
+                        "sessions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "daw": {
+                                "type": "string"
+                              },
+                              "dawName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "dawVersion": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "tempo": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "rootNote": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 4
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "scale": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 64
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "tracksCount": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -2147483648,
+                                    "maximum": 2147483647
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "scenesCount": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": -2147483648,
+                                    "maximum": 2147483647
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "localFilepath": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "localFileUpdatedAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "inDit": {
+                                "type": "boolean"
+                              },
+                              "saveCount": {
+                                "type": "number"
+                              },
+                              "lastSaveAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "daw",
+                              "dawName",
+                              "dawVersion",
+                              "tempo",
+                              "rootNote",
+                              "scale",
+                              "tracksCount",
+                              "scenesCount",
+                              "localFilepath",
+                              "localFileUpdatedAt",
+                              "updatedAt",
+                              "inDit",
+                              "saveCount",
+                              "lastSaveAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "total": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "sessions",
+                        "total"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "renders",
                     "saves",
                     "counts",
-                    "quiet"
+                    "quiet",
+                    "unassignedSets"
                   ],
                   "additionalProperties": false
                 }
@@ -7023,6 +7177,17 @@
                           }
                         ]
                       },
+                      "inboxDismissedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "projectId": {
                         "type": "integer",
                         "minimum": -2147483648,
@@ -7662,6 +7827,7 @@
                       "priorityId",
                       "main",
                       "trackId",
+                      "inboxDismissedAt",
                       "projectId",
                       "localFilepath",
                       "localFileCreatedAt",
@@ -20219,6 +20385,17 @@
                           }
                         ]
                       },
+                      "inboxDismissedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "projectId": {
                         "type": "integer",
                         "minimum": -2147483648,
@@ -20503,6 +20680,7 @@
                       "priorityId",
                       "main",
                       "trackId",
+                      "inboxDismissedAt",
                       "projectId",
                       "localFilepath",
                       "localFileCreatedAt",
@@ -22217,6 +22395,17 @@
                               }
                             ]
                           },
+                          "inboxDismissedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "projectId": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -22501,6 +22690,7 @@
                           "priorityId",
                           "main",
                           "trackId",
+                          "inboxDismissedAt",
                           "projectId",
                           "localFilepath",
                           "localFileCreatedAt",
@@ -22523,6 +22713,143 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "studio": {
+                      "type": "object",
+                      "properties": {
+                        "sessionCount": {
+                          "type": "number"
+                        },
+                        "commitCount": {
+                          "type": "number"
+                        },
+                        "saveCount": {
+                          "type": "number"
+                        },
+                        "lastSaveAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "openOn": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "machine": {
+                                  "type": "string"
+                                },
+                                "owner": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "machine",
+                                "owner"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "openSessionId": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "mainSession": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer",
+                                  "minimum": -2147483648,
+                                  "maximum": 2147483647
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "daw": {
+                                  "type": "string"
+                                },
+                                "dawName": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "dawVersion": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "repoId": {
+                                  "anyOf": [
+                                    {
+                                      "type": "integer",
+                                      "minimum": -2147483648,
+                                      "maximum": 2147483647
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "main": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "daw",
+                                "dawName",
+                                "dawVersion",
+                                "repoId",
+                                "main"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "sessionCount",
+                        "commitCount",
+                        "saveCount",
+                        "lastSaveAt",
+                        "openOn",
+                        "openSessionId",
+                        "mainSession"
+                      ],
+                      "additionalProperties": false
                     },
                     "collections": {
                       "type": "array",
@@ -23682,6 +24009,7 @@
                     "priority",
                     "attachments",
                     "sessions",
+                    "studio",
                     "collections",
                     "audios",
                     "primaryAudio",
@@ -24802,6 +25130,18 @@
                           }
                         ]
                       },
+                      "inboxDismissedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 date-time string."
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "localFilepath": {
                         "type": [
                           "string",
@@ -25908,6 +26248,17 @@
                         }
                       ]
                     },
+                    "inboxDismissedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "projectId": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -26265,6 +26616,7 @@
                     "priorityId",
                     "main",
                     "trackId",
+                    "inboxDismissedAt",
                     "projectId",
                     "localFilepath",
                     "localFileCreatedAt",
@@ -26963,6 +27315,17 @@
                         }
                       ]
                     },
+                    "inboxDismissedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "projectId": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -27247,6 +27610,7 @@
                     "priorityId",
                     "main",
                     "trackId",
+                    "inboxDismissedAt",
                     "projectId",
                     "localFilepath",
                     "localFileCreatedAt",
@@ -27416,6 +27780,18 @@
                         "type": "integer",
                         "minimum": -2147483648,
                         "maximum": 2147483647
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "inboxDismissedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "ISO 8601 date-time string."
                       },
                       {
                         "type": "null"
@@ -27763,6 +28139,17 @@
                           "type": "integer",
                           "minimum": -2147483648,
                           "maximum": 2147483647
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "inboxDismissedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
                         },
                         {
                           "type": "null"
@@ -28768,6 +29155,7 @@
                     "priorityId",
                     "main",
                     "trackId",
+                    "inboxDismissedAt",
                     "projectId",
                     "localFilepath",
                     "localFileCreatedAt",
@@ -28973,6 +29361,17 @@
                           "type": "integer",
                           "minimum": -2147483648,
                           "maximum": 2147483647
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "inboxDismissedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
                         },
                         {
                           "type": "null"
@@ -29263,6 +29662,7 @@
                     "priorityId",
                     "main",
                     "trackId",
+                    "inboxDismissedAt",
                     "projectId",
                     "localFilepath",
                     "localFileCreatedAt",
@@ -29410,6 +29810,18 @@
                         "type": "integer",
                         "minimum": -2147483648,
                         "maximum": 2147483647
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "inboxDismissedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "ISO 8601 date-time string."
                       },
                       {
                         "type": "null"
@@ -31928,6 +32340,17 @@
                               }
                             ]
                           },
+                          "inboxDismissedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "projectId": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -32197,6 +32620,7 @@
                           "priorityId",
                           "main",
                           "trackId",
+                          "inboxDismissedAt",
                           "projectId",
                           "localFilepath",
                           "localFileCreatedAt",
@@ -32396,6 +32820,13 @@
           {
             "in": "query",
             "name": "inDit",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unassigned",
             "schema": {
               "type": "string"
             }
@@ -42141,8 +42572,8 @@
                                 "enum": [
                                   "collections",
                                   "tracks",
-                                  "notebook",
-                                  "sessions"
+                                  "studio",
+                                  "notebook"
                                 ]
                               },
                               "shown": {
@@ -42176,11 +42607,12 @@
                               "id": {
                                 "type": "string",
                                 "enum": [
+                                  "home",
                                   "collections",
                                   "tracks",
                                   "notes",
-                                  "sessions",
-                                  "search"
+                                  "search",
+                                  "studio"
                                 ]
                               },
                               "shown": {
@@ -42203,9 +42635,9 @@
                                 "type": "string",
                                 "enum": [
                                   "new",
+                                  "unassigned-sets",
                                   "quiet",
                                   "jobs",
-                                  "recent-activity",
                                   "overview",
                                   "collections",
                                   "plugins",
@@ -42239,7 +42671,6 @@
                                 "enum": [
                                   "overview",
                                   "tracks",
-                                  "repositories",
                                   "attachments",
                                   "comments",
                                   "add",
@@ -42267,8 +42698,6 @@
                                 "enum": [
                                   "overview",
                                   "lyrics",
-                                  "sessions",
-                                  "repositories",
                                   "relations",
                                   "attachments",
                                   "comments",
@@ -55826,8 +56255,8 @@
                                 "enum": [
                                   "collections",
                                   "tracks",
-                                  "notebook",
-                                  "sessions"
+                                  "studio",
+                                  "notebook"
                                 ]
                               },
                               "shown": {
@@ -55905,8 +56334,8 @@
                                     "enum": [
                                       "collections",
                                       "tracks",
-                                      "notebook",
-                                      "sessions"
+                                      "studio",
+                                      "notebook"
                                     ]
                                   },
                                   "shown": {
@@ -55934,8 +56363,8 @@
                                     "enum": [
                                       "collections",
                                       "tracks",
-                                      "notebook",
-                                      "sessions"
+                                      "studio",
+                                      "notebook"
                                     ]
                                   },
                                   "shown": {
@@ -55963,8 +56392,8 @@
                                     "enum": [
                                       "collections",
                                       "tracks",
-                                      "notebook",
-                                      "sessions"
+                                      "studio",
+                                      "notebook"
                                     ]
                                   },
                                   "shown": {
@@ -56148,11 +56577,12 @@
                               "id": {
                                 "type": "string",
                                 "enum": [
+                                  "home",
                                   "collections",
                                   "tracks",
                                   "notes",
-                                  "sessions",
-                                  "search"
+                                  "search",
+                                  "studio"
                                 ]
                               },
                               "shown": {
@@ -56224,11 +56654,12 @@
                                   "id": {
                                     "type": "string",
                                     "enum": [
+                                      "home",
                                       "collections",
                                       "tracks",
                                       "notes",
-                                      "sessions",
-                                      "search"
+                                      "search",
+                                      "studio"
                                     ]
                                   },
                                   "shown": {
@@ -56250,11 +56681,12 @@
                                   "id": {
                                     "type": "string",
                                     "enum": [
+                                      "home",
                                       "collections",
                                       "tracks",
                                       "notes",
-                                      "sessions",
-                                      "search"
+                                      "search",
+                                      "studio"
                                     ]
                                   },
                                   "shown": {
@@ -56276,11 +56708,12 @@
                                   "id": {
                                     "type": "string",
                                     "enum": [
+                                      "home",
                                       "collections",
                                       "tracks",
                                       "notes",
-                                      "sessions",
-                                      "search"
+                                      "search",
+                                      "studio"
                                     ]
                                   },
                                   "shown": {
@@ -56341,9 +56774,9 @@
                                 "type": "string",
                                 "enum": [
                                   "new",
+                                  "unassigned-sets",
                                   "quiet",
                                   "jobs",
-                                  "recent-activity",
                                   "overview",
                                   "collections",
                                   "plugins",
@@ -56426,9 +56859,9 @@
                                     "type": "string",
                                     "enum": [
                                       "new",
+                                      "unassigned-sets",
                                       "quiet",
                                       "jobs",
-                                      "recent-activity",
                                       "overview",
                                       "collections",
                                       "plugins",
@@ -56461,9 +56894,9 @@
                                     "type": "string",
                                     "enum": [
                                       "new",
+                                      "unassigned-sets",
                                       "quiet",
                                       "jobs",
-                                      "recent-activity",
                                       "overview",
                                       "collections",
                                       "plugins",
@@ -56496,9 +56929,9 @@
                                     "type": "string",
                                     "enum": [
                                       "new",
+                                      "unassigned-sets",
                                       "quiet",
                                       "jobs",
-                                      "recent-activity",
                                       "overview",
                                       "collections",
                                       "plugins",
@@ -56570,7 +57003,6 @@
                                 "enum": [
                                   "overview",
                                   "tracks",
-                                  "repositories",
                                   "attachments",
                                   "comments",
                                   "add",
@@ -56648,7 +57080,6 @@
                                     "enum": [
                                       "overview",
                                       "tracks",
-                                      "repositories",
                                       "attachments",
                                       "comments",
                                       "add",
@@ -56676,7 +57107,6 @@
                                     "enum": [
                                       "overview",
                                       "tracks",
-                                      "repositories",
                                       "attachments",
                                       "comments",
                                       "add",
@@ -56704,7 +57134,6 @@
                                     "enum": [
                                       "overview",
                                       "tracks",
-                                      "repositories",
                                       "attachments",
                                       "comments",
                                       "add",
@@ -56770,8 +57199,6 @@
                                 "enum": [
                                   "overview",
                                   "lyrics",
-                                  "sessions",
-                                  "repositories",
                                   "relations",
                                   "attachments",
                                   "comments",
@@ -56850,8 +57277,6 @@
                                     "enum": [
                                       "overview",
                                       "lyrics",
-                                      "sessions",
-                                      "repositories",
                                       "relations",
                                       "attachments",
                                       "comments",
@@ -56880,8 +57305,6 @@
                                     "enum": [
                                       "overview",
                                       "lyrics",
-                                      "sessions",
-                                      "repositories",
                                       "relations",
                                       "attachments",
                                       "comments",
@@ -56910,8 +57333,6 @@
                                     "enum": [
                                       "overview",
                                       "lyrics",
-                                      "sessions",
-                                      "repositories",
                                       "relations",
                                       "attachments",
                                       "comments",
@@ -83467,8 +83888,8 @@
                                 "enum": [
                                   "collections",
                                   "tracks",
-                                  "notebook",
-                                  "sessions"
+                                  "studio",
+                                  "notebook"
                                 ]
                               },
                               "shown": {
@@ -83546,8 +83967,8 @@
                                     "enum": [
                                       "collections",
                                       "tracks",
-                                      "notebook",
-                                      "sessions"
+                                      "studio",
+                                      "notebook"
                                     ]
                                   },
                                   "shown": {
@@ -83575,8 +83996,8 @@
                                     "enum": [
                                       "collections",
                                       "tracks",
-                                      "notebook",
-                                      "sessions"
+                                      "studio",
+                                      "notebook"
                                     ]
                                   },
                                   "shown": {
@@ -83604,8 +84025,8 @@
                                     "enum": [
                                       "collections",
                                       "tracks",
-                                      "notebook",
-                                      "sessions"
+                                      "studio",
+                                      "notebook"
                                     ]
                                   },
                                   "shown": {
@@ -83789,11 +84210,12 @@
                               "id": {
                                 "type": "string",
                                 "enum": [
+                                  "home",
                                   "collections",
                                   "tracks",
                                   "notes",
-                                  "sessions",
-                                  "search"
+                                  "search",
+                                  "studio"
                                 ]
                               },
                               "shown": {
@@ -83865,11 +84287,12 @@
                                   "id": {
                                     "type": "string",
                                     "enum": [
+                                      "home",
                                       "collections",
                                       "tracks",
                                       "notes",
-                                      "sessions",
-                                      "search"
+                                      "search",
+                                      "studio"
                                     ]
                                   },
                                   "shown": {
@@ -83891,11 +84314,12 @@
                                   "id": {
                                     "type": "string",
                                     "enum": [
+                                      "home",
                                       "collections",
                                       "tracks",
                                       "notes",
-                                      "sessions",
-                                      "search"
+                                      "search",
+                                      "studio"
                                     ]
                                   },
                                   "shown": {
@@ -83917,11 +84341,12 @@
                                   "id": {
                                     "type": "string",
                                     "enum": [
+                                      "home",
                                       "collections",
                                       "tracks",
                                       "notes",
-                                      "sessions",
-                                      "search"
+                                      "search",
+                                      "studio"
                                     ]
                                   },
                                   "shown": {
@@ -83982,9 +84407,9 @@
                                 "type": "string",
                                 "enum": [
                                   "new",
+                                  "unassigned-sets",
                                   "quiet",
                                   "jobs",
-                                  "recent-activity",
                                   "overview",
                                   "collections",
                                   "plugins",
@@ -84067,9 +84492,9 @@
                                     "type": "string",
                                     "enum": [
                                       "new",
+                                      "unassigned-sets",
                                       "quiet",
                                       "jobs",
-                                      "recent-activity",
                                       "overview",
                                       "collections",
                                       "plugins",
@@ -84102,9 +84527,9 @@
                                     "type": "string",
                                     "enum": [
                                       "new",
+                                      "unassigned-sets",
                                       "quiet",
                                       "jobs",
-                                      "recent-activity",
                                       "overview",
                                       "collections",
                                       "plugins",
@@ -84137,9 +84562,9 @@
                                     "type": "string",
                                     "enum": [
                                       "new",
+                                      "unassigned-sets",
                                       "quiet",
                                       "jobs",
-                                      "recent-activity",
                                       "overview",
                                       "collections",
                                       "plugins",
@@ -84211,7 +84636,6 @@
                                 "enum": [
                                   "overview",
                                   "tracks",
-                                  "repositories",
                                   "attachments",
                                   "comments",
                                   "add",
@@ -84289,7 +84713,6 @@
                                     "enum": [
                                       "overview",
                                       "tracks",
-                                      "repositories",
                                       "attachments",
                                       "comments",
                                       "add",
@@ -84317,7 +84740,6 @@
                                     "enum": [
                                       "overview",
                                       "tracks",
-                                      "repositories",
                                       "attachments",
                                       "comments",
                                       "add",
@@ -84345,7 +84767,6 @@
                                     "enum": [
                                       "overview",
                                       "tracks",
-                                      "repositories",
                                       "attachments",
                                       "comments",
                                       "add",
@@ -84411,8 +84832,6 @@
                                 "enum": [
                                   "overview",
                                   "lyrics",
-                                  "sessions",
-                                  "repositories",
                                   "relations",
                                   "attachments",
                                   "comments",
@@ -84491,8 +84910,6 @@
                                     "enum": [
                                       "overview",
                                       "lyrics",
-                                      "sessions",
-                                      "repositories",
                                       "relations",
                                       "attachments",
                                       "comments",
@@ -84521,8 +84938,6 @@
                                     "enum": [
                                       "overview",
                                       "lyrics",
-                                      "sessions",
-                                      "repositories",
                                       "relations",
                                       "attachments",
                                       "comments",
@@ -84551,8 +84966,6 @@
                                     "enum": [
                                       "overview",
                                       "lyrics",
-                                      "sessions",
-                                      "repositories",
                                       "relations",
                                       "attachments",
                                       "comments",
@@ -99429,8 +99842,8 @@
                               "enum": [
                                 "collections",
                                 "tracks",
-                                "notebook",
-                                "sessions"
+                                "studio",
+                                "notebook"
                               ]
                             },
                             "shown": {
@@ -99477,11 +99890,12 @@
                             "id": {
                               "type": "string",
                               "enum": [
+                                "home",
                                 "collections",
                                 "tracks",
                                 "notes",
-                                "sessions",
-                                "search"
+                                "search",
+                                "studio"
                               ]
                             },
                             "shown": {
@@ -99510,9 +99924,9 @@
                               "type": "string",
                               "enum": [
                                 "new",
+                                "unassigned-sets",
                                 "quiet",
                                 "jobs",
-                                "recent-activity",
                                 "overview",
                                 "collections",
                                 "plugins",
@@ -99552,7 +99966,6 @@
                               "enum": [
                                 "overview",
                                 "tracks",
-                                "repositories",
                                 "attachments",
                                 "comments",
                                 "add",
@@ -99586,8 +99999,6 @@
                               "enum": [
                                 "overview",
                                 "lyrics",
-                                "sessions",
-                                "repositories",
                                 "relations",
                                 "attachments",
                                 "comments",
@@ -116364,8 +116775,8 @@
                                 "enum": [
                                   "collections",
                                   "tracks",
-                                  "notebook",
-                                  "sessions"
+                                  "studio",
+                                  "notebook"
                                 ]
                               },
                               "shown": {
@@ -116443,8 +116854,8 @@
                                     "enum": [
                                       "collections",
                                       "tracks",
-                                      "notebook",
-                                      "sessions"
+                                      "studio",
+                                      "notebook"
                                     ]
                                   },
                                   "shown": {
@@ -116472,8 +116883,8 @@
                                     "enum": [
                                       "collections",
                                       "tracks",
-                                      "notebook",
-                                      "sessions"
+                                      "studio",
+                                      "notebook"
                                     ]
                                   },
                                   "shown": {
@@ -116501,8 +116912,8 @@
                                     "enum": [
                                       "collections",
                                       "tracks",
-                                      "notebook",
-                                      "sessions"
+                                      "studio",
+                                      "notebook"
                                     ]
                                   },
                                   "shown": {
@@ -116686,11 +117097,12 @@
                               "id": {
                                 "type": "string",
                                 "enum": [
+                                  "home",
                                   "collections",
                                   "tracks",
                                   "notes",
-                                  "sessions",
-                                  "search"
+                                  "search",
+                                  "studio"
                                 ]
                               },
                               "shown": {
@@ -116762,11 +117174,12 @@
                                   "id": {
                                     "type": "string",
                                     "enum": [
+                                      "home",
                                       "collections",
                                       "tracks",
                                       "notes",
-                                      "sessions",
-                                      "search"
+                                      "search",
+                                      "studio"
                                     ]
                                   },
                                   "shown": {
@@ -116788,11 +117201,12 @@
                                   "id": {
                                     "type": "string",
                                     "enum": [
+                                      "home",
                                       "collections",
                                       "tracks",
                                       "notes",
-                                      "sessions",
-                                      "search"
+                                      "search",
+                                      "studio"
                                     ]
                                   },
                                   "shown": {
@@ -116814,11 +117228,12 @@
                                   "id": {
                                     "type": "string",
                                     "enum": [
+                                      "home",
                                       "collections",
                                       "tracks",
                                       "notes",
-                                      "sessions",
-                                      "search"
+                                      "search",
+                                      "studio"
                                     ]
                                   },
                                   "shown": {
@@ -116879,9 +117294,9 @@
                                 "type": "string",
                                 "enum": [
                                   "new",
+                                  "unassigned-sets",
                                   "quiet",
                                   "jobs",
-                                  "recent-activity",
                                   "overview",
                                   "collections",
                                   "plugins",
@@ -116964,9 +117379,9 @@
                                     "type": "string",
                                     "enum": [
                                       "new",
+                                      "unassigned-sets",
                                       "quiet",
                                       "jobs",
-                                      "recent-activity",
                                       "overview",
                                       "collections",
                                       "plugins",
@@ -116999,9 +117414,9 @@
                                     "type": "string",
                                     "enum": [
                                       "new",
+                                      "unassigned-sets",
                                       "quiet",
                                       "jobs",
-                                      "recent-activity",
                                       "overview",
                                       "collections",
                                       "plugins",
@@ -117034,9 +117449,9 @@
                                     "type": "string",
                                     "enum": [
                                       "new",
+                                      "unassigned-sets",
                                       "quiet",
                                       "jobs",
-                                      "recent-activity",
                                       "overview",
                                       "collections",
                                       "plugins",
@@ -117108,7 +117523,6 @@
                                 "enum": [
                                   "overview",
                                   "tracks",
-                                  "repositories",
                                   "attachments",
                                   "comments",
                                   "add",
@@ -117186,7 +117600,6 @@
                                     "enum": [
                                       "overview",
                                       "tracks",
-                                      "repositories",
                                       "attachments",
                                       "comments",
                                       "add",
@@ -117214,7 +117627,6 @@
                                     "enum": [
                                       "overview",
                                       "tracks",
-                                      "repositories",
                                       "attachments",
                                       "comments",
                                       "add",
@@ -117242,7 +117654,6 @@
                                     "enum": [
                                       "overview",
                                       "tracks",
-                                      "repositories",
                                       "attachments",
                                       "comments",
                                       "add",
@@ -117308,8 +117719,6 @@
                                 "enum": [
                                   "overview",
                                   "lyrics",
-                                  "sessions",
-                                  "repositories",
                                   "relations",
                                   "attachments",
                                   "comments",
@@ -117388,8 +117797,6 @@
                                     "enum": [
                                       "overview",
                                       "lyrics",
-                                      "sessions",
-                                      "repositories",
                                       "relations",
                                       "attachments",
                                       "comments",
@@ -117418,8 +117825,6 @@
                                     "enum": [
                                       "overview",
                                       "lyrics",
-                                      "sessions",
-                                      "repositories",
                                       "relations",
                                       "attachments",
                                       "comments",
@@ -117448,8 +117853,6 @@
                                     "enum": [
                                       "overview",
                                       "lyrics",
-                                      "sessions",
-                                      "repositories",
                                       "relations",
                                       "attachments",
                                       "comments",

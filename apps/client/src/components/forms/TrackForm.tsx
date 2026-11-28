@@ -49,6 +49,7 @@ export const TrackForm = ({
   initialTitle,
   customFields = [],
   onStay,
+  onCancel,
 }: {
   projectId: number;
   collectionId?: number;
@@ -58,6 +59,8 @@ export const TrackForm = ({
   customFields?: readonly CustomField[];
   /** Closes the dialog the form sits in, when it sits in one. */
   onStay?: () => void;
+  /** Closes an embedded modal instead of calling `router.back()`. */
+  onCancel?: () => void;
 }) => {
   const defaultStatusId = useDefaultStatusRaw(
     "project-defaults.trackStatusId",
@@ -109,42 +112,50 @@ export const TrackForm = ({
       ],
     },
     {
-      kind: "pair",
+      kind: "disclosure",
+      key: "distribution",
+      label: "Distribution & details",
+      mobileOnly: true,
       fields: [
         {
-          kind: "field-kind",
-          name: "isrc",
-          field: "text",
-          label: "ISRC",
-          config: { placeholder: "USXX12300000" },
+          kind: "pair",
+          fields: [
+            {
+              kind: "field-kind",
+              name: "isrc",
+              field: "text",
+              label: "ISRC",
+              config: { placeholder: "USXX12300000" },
+            },
+            {
+              kind: "field-kind",
+              name: "iswc",
+              field: "text",
+              label: "ISWC",
+              config: { placeholder: "T-00000000000" },
+            },
+          ],
         },
         {
-          kind: "field-kind",
-          name: "iswc",
-          field: "text",
-          label: "ISWC",
-          config: { placeholder: "T-00000000000" },
+          kind: "pair",
+          fields: [
+            {
+              kind: "field-kind",
+              name: "releaseDate",
+              field: "date",
+              label: "Release date",
+            },
+            {
+              kind: "field-kind",
+              name: "explicit",
+              field: "checkbox",
+              label: "Explicit",
+            },
+          ],
         },
+        ...customFieldSpecs<TrackFormDraft>(customFields),
       ],
     },
-    {
-      kind: "pair",
-      fields: [
-        {
-          kind: "field-kind",
-          name: "releaseDate",
-          field: "date",
-          label: "Release date",
-        },
-        {
-          kind: "field-kind",
-          name: "explicit",
-          field: "checkbox",
-          label: "Explicit",
-        },
-      ],
-    },
-    ...customFieldSpecs<TrackFormDraft>(customFields),
   ];
 
   const defaultValues: TrackFormDraft = {
@@ -189,6 +200,7 @@ export const TrackForm = ({
       fields={fields}
       submitLabel="Create track"
       busyLabel="Creating…"
+      onCancel={onCancel ?? onStay}
     />
   );
 };

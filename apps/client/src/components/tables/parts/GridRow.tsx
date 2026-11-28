@@ -248,6 +248,9 @@ function GridRowBody<TData extends RowData, TChild = never>({
         const selProps: ReturnType<typeof cellGrid.selectionCellProps> =
           isTopLevel ? cellGrid.selectionCellProps(cell, isFirstNavigable) : {};
         const isEditingCell = Boolean(selProps["data-editing"]);
+        const flexFill =
+          (cell.column.id === "title" || cell.column.id === "name") &&
+          table.state.columnSizing[cell.column.id] == null;
 
         return (
           <TableCell
@@ -256,7 +259,9 @@ function GridRowBody<TData extends RowData, TChild = never>({
             aria-colindex={cellIndex + 1}
             {...selProps}
             style={{
-              width: cell.column.getSize(),
+              ...(flexFill
+                ? { minWidth: cell.column.getSize() }
+                : { width: cell.column.getSize() }),
               ...(firstDataColumn && !isTopLevel
                 ? { paddingLeft: 12 + row.depth * 20 }
                 : {}),

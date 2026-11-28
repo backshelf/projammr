@@ -15,7 +15,7 @@ import { z } from "zod";
 import { ENTITIES } from "../../entities/index.js";
 import { instancePolicy } from "../../lib/instance-policy.js";
 import type { PushMachine } from "../../lib/push-machine.js";
-import { db, type Tx } from "../index.js";
+import { db } from "../index.js";
 import { collectionTracks } from "../schema/collections.js";
 import { machines } from "../schema/machines.js";
 import {
@@ -29,7 +29,10 @@ import {
 import { sessions } from "../schema/sessions.js";
 import { isUniqueViolation } from "../unique-violation.js";
 import type { ProjectResolution } from "./authorization.js";
-import { setSessionLocalFilepath, upsertRepoMachinePath } from "./repo-paths.js";
+import {
+  setSessionLocalFilepath,
+  upsertRepoMachinePath,
+} from "./repo-paths.js";
 import { emptyRepoStorage, repoStorages } from "./storage-usage.js";
 
 const rowId = z.number().int().positive();

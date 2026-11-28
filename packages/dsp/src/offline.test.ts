@@ -18,6 +18,11 @@ import {
   OfflineAnalyses,
   sectionGroupLetter,
   SPECTROGRAM_BANDS,
+  SPECTROGRAM_CEIL_DB,
+  SPECTROGRAM_COLUMN_MS,
+  SPECTROGRAM_FLOOR_DB,
+  SPECTROGRAM_HIGH_HZ,
+  SPECTROGRAM_LOW_HZ,
 } from "./offline";
 import { DspError, type Dsp } from "./runtime";
 
@@ -104,8 +109,14 @@ describe("OfflineAnalyses", () => {
     expect(offline.sections[0]).toMatchObject({ startMs: 0, group: "A" });
     expect(offline.sections.at(-1)?.endMs).toBe(12_000);
     const spectrogram = offline.spectrogram;
-    expect(spectrogram.columns).toBe(120);
-    expect(spectrogram.bytes.length).toBe(120 * SPECTROGRAM_BANDS);
+    expect(spectrogram.columns).toBe(240);
+    expect(spectrogram.bytes.length).toBe(240 * SPECTROGRAM_BANDS);
+    expect(SPECTROGRAM_BANDS).toBe(160);
+    expect(SPECTROGRAM_COLUMN_MS).toBe(50);
+    expect(SPECTROGRAM_LOW_HZ).toBe(20);
+    expect(SPECTROGRAM_HIGH_HZ).toBe(20_000);
+    expect(SPECTROGRAM_FLOOR_DB).toBe(-80);
+    expect(SPECTROGRAM_CEIL_DB).toBe(0);
     expect(offline.loudnessCurve).toHaveLength(12);
     expect(offline.loudnessCurve[5]).toBeGreaterThan(-20);
     expect(offline.correlationCurve).toEqual(Array(12).fill(1));

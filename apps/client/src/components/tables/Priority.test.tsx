@@ -38,6 +38,17 @@ describe("PriorityBadge", () => {
     expect(chip.style.getPropertyValue("--status")).toBe(NONE.colour);
   });
 
+  it("suppresses the default None level when hideDefault is set", () => {
+    const { container } = render(<PriorityBadge level={NONE} hideDefault />);
+    expect(container.querySelector('[data-slot="status-chip"]')).toBeNull();
+
+    cleanup();
+    const high = render(<PriorityBadge level={HIGH} hideDefault />);
+    expect(
+      high.container.querySelector('[data-slot="status-chip"]')?.textContent
+    ).toBe("High");
+  });
+
   it("gives every level the same weight, whatever its rank", () => {
     const bottom = chipOf(LOW).className;
     cleanup();

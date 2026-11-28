@@ -50,12 +50,20 @@ export function CommandPaletteMount({
     () =>
       recents && {
         ...recents,
-        tracks: recentTracks(recents.tracks, shell).map(({ id, title }) => ({
-          id,
-          title,
-        })),
+        tracks: recentTracks(recents.tracks, shell).map(
+          ({ id, title, artwork }) => ({
+            id,
+            title,
+            artwork: artwork ?? null,
+          })
+        ),
         sessions: recentSessions(recents.sessions, shell).map(
-          ({ id, name, trackId }) => ({ id, name, trackId })
+          ({ id, name, trackId, artwork }) => ({
+            id,
+            name,
+            trackId,
+            artwork: artwork ?? null,
+          })
         ),
       },
     [recents, shell]

@@ -86,7 +86,7 @@ export const settings = [
     // Any id, so a strip a later build retires drops out where the list is
     // read rather than throwing the viewer's whole choice away.
     schema: z.array(z.string().min(1)),
-    default: [...STRIP_IDS],
+    default: [],
     control: { kind: "multiselect", options: optionsOf(STRIP_LABELS) },
     audience: "all",
   }),

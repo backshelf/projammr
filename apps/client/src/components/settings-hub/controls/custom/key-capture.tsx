@@ -79,7 +79,7 @@ export function KeyCapture({
           setPending(null);
           onCancel();
         }}
-        className="flex min-h-8 min-w-32 items-center rounded-sm border border-rule px-2 text-small text-ink-soft focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-none coarse:min-h-11"
+        className="flex min-h-8 min-w-32 items-center rounded-sm border border-rule px-2 text-small text-ink-soft focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-hidden coarse:min-h-11"
       >
         {pending === null ? (
           "Press keys…"

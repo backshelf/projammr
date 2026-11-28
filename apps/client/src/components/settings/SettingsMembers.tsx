@@ -178,7 +178,10 @@ export default function SettingsMembers({
             const user = member.user;
             const isSelf = member.userId === currentUserId;
             return (
-              <Row key={member.id}>
+              <Row
+                key={member.id}
+                className="phone:flex-wrap phone:gap-x-3 phone:gap-y-2"
+              >
                 <Avatar className="size-8 shrink-0">
                   {user?.image && (
                     <AvatarImage src={user.image} alt={user.name} />
@@ -187,78 +190,83 @@ export default function SettingsMembers({
                     {(user?.name ?? "?").charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <RowMain>
+                <RowMain className="min-w-[min(100%,10rem)]">
                   <RowTitle>
                     {user?.name ?? "Unknown user"}
                     {isSelf && <span className="text-ink-soft"> (you)</span>}
                   </RowTitle>
                 </RowMain>
-                {canManage && member.userId && member.role !== "owner" ? (
-                  <Select
-                    value={member.role}
-                    onValueChange={(value) =>
-                      handleRoleChange(member.userId!, value as AssignableRole)
-                    }
-                    disabled={pendingUserId === member.userId}
-                    items={ASSIGNABLE_ROLES.map((role) => ({
-                      value: role,
-                      label: role,
-                    }))}
-                  >
-                    <SelectTrigger
-                      className="w-28"
-                      size="sm"
-                      aria-label={`Role for ${user?.name ?? "member"}`}
+                <div className="flex shrink-0 items-center gap-1.5 phone:ml-auto coarse:gap-2">
+                  {canManage && member.userId && member.role !== "owner" ? (
+                    <Select
+                      value={member.role}
+                      onValueChange={(value) =>
+                        handleRoleChange(
+                          member.userId!,
+                          value as AssignableRole
+                        )
+                      }
+                      disabled={pendingUserId === member.userId}
+                      items={ASSIGNABLE_ROLES.map((role) => ({
+                        value: role,
+                        label: role,
+                      }))}
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ASSIGNABLE_ROLES.map((role) => (
-                        <SelectItem key={role} value={role}>
-                          {role}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <span className="font-sub text-micro tracking-[0.1em] text-ink-soft uppercase">
-                    {member.role}
-                  </span>
-                )}
-                {isOwner && member.userId && member.role !== "owner" && (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setTransferTarget(member)}
-                    disabled={pendingUserId === member.userId}
-                    aria-label={`Transfer ownership to ${user?.name ?? "member"}`}
-                    className="shrink-0 text-ink-soft hover:text-ink fine:opacity-0 fine:motion-reveal fine:group-focus-within/row:opacity-100 fine:group-hover/row:opacity-100"
-                  >
-                    <IconCrown size={14} />
-                  </Button>
-                )}
-                {isSelf && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setLeaving(true)}
-                    className="shrink-0 text-ink-soft hover:text-danger"
-                  >
-                    Leave
-                  </Button>
-                )}
-                {canManage && member.userId && !isSelf && (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => removal.request(member)}
-                    disabled={pendingUserId === member.userId}
-                    aria-label={`Remove ${user?.name ?? "member"}`}
-                    className="shrink-0 text-ink-soft hover:text-danger fine:opacity-0 fine:motion-reveal fine:group-focus-within/row:opacity-100 fine:group-hover/row:opacity-100"
-                  >
-                    <IconTrash size={14} />
-                  </Button>
-                )}
+                      <SelectTrigger
+                        className="w-28 phone:min-h-11"
+                        size="sm"
+                        aria-label={`Role for ${user?.name ?? "member"}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ASSIGNABLE_ROLES.map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {role}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="font-sub text-micro tracking-[0.1em] text-ink-soft uppercase">
+                      {member.role}
+                    </span>
+                  )}
+                  {isOwner && member.userId && member.role !== "owner" && (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setTransferTarget(member)}
+                      disabled={pendingUserId === member.userId}
+                      aria-label={`Transfer ownership to ${user?.name ?? "member"}`}
+                      className="shrink-0 text-ink-soft hover:text-ink fine:opacity-0 fine:motion-reveal fine:group-focus-within/row:opacity-100 fine:group-hover/row:opacity-100 coarse:size-11 coarse:after:inset-0"
+                    >
+                      <IconCrown size={14} />
+                    </Button>
+                  )}
+                  {isSelf && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setLeaving(true)}
+                      className="shrink-0 text-ink-soft hover:text-danger phone:min-h-11"
+                    >
+                      Leave
+                    </Button>
+                  )}
+                  {canManage && member.userId && !isSelf && (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => removal.request(member)}
+                      disabled={pendingUserId === member.userId}
+                      aria-label={`Remove ${user?.name ?? "member"}`}
+                      className="shrink-0 text-ink-soft hover:text-danger fine:opacity-0 fine:motion-reveal fine:group-focus-within/row:opacity-100 fine:group-hover/row:opacity-100 coarse:size-11 coarse:after:inset-0"
+                    >
+                      <IconTrash size={14} />
+                    </Button>
+                  )}
+                </div>
               </Row>
             );
           })}
@@ -270,7 +278,7 @@ export default function SettingsMembers({
           <SectionHead>INVITE BY EMAIL</SectionHead>
           <form
             onSubmit={form.handleSubmit(handleInvite)}
-            className="flex items-start gap-2"
+            className="flex items-start gap-2 phone:flex-col phone:items-stretch"
           >
             <Field className="flex-1">
               <Input
@@ -293,7 +301,10 @@ export default function SettingsMembers({
                 label: role,
               }))}
             >
-              <SelectTrigger className="w-28" aria-label="Invite role">
+              <SelectTrigger
+                className="w-28 phone:min-h-11 phone:w-full"
+                aria-label="Invite role"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -304,7 +315,11 @@ export default function SettingsMembers({
                 ))}
               </SelectContent>
             </Select>
-            <Button type="submit" disabled={form.formState.isSubmitting}>
+            <Button
+              type="submit"
+              disabled={form.formState.isSubmitting}
+              className="phone:min-h-11 phone:w-full"
+            >
               Invite
             </Button>
           </form>
@@ -326,8 +341,8 @@ export default function SettingsMembers({
           ) : (
             <Rows>
               {invites.map((invite) => (
-                <Row key={invite.id}>
-                  <RowMain>
+                <Row key={invite.id} className="phone:flex-wrap phone:gap-y-2">
+                  <RowMain className="phone:basis-full">
                     <RowTitle>{invite.email}</RowTitle>
                     <RowMeta>
                       {invite.role} · invited by{" "}
@@ -335,24 +350,26 @@ export default function SettingsMembers({
                       {format.date(invite.expiresAt)}
                     </RowMeta>
                   </RowMain>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => copyInviteLink(invite.token)}
-                    className="shrink-0 text-ink-soft"
-                  >
-                    <IconCopy size={14} />
-                    Copy link
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => handleRevoke(invite.id)}
-                    aria-label={`Revoke invite for ${invite.email}`}
-                    className="shrink-0 text-ink-soft hover:text-danger fine:opacity-0 fine:motion-reveal fine:group-focus-within/row:opacity-100 fine:group-hover/row:opacity-100"
-                  >
-                    <IconTrash size={14} />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-2 phone:w-full phone:justify-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyInviteLink(invite.token)}
+                      className="shrink-0 text-ink-soft phone:min-h-11"
+                    >
+                      <IconCopy size={14} />
+                      Copy link
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => handleRevoke(invite.id)}
+                      aria-label={`Revoke invite for ${invite.email}`}
+                      className="shrink-0 text-ink-soft hover:text-danger fine:opacity-0 fine:motion-reveal fine:group-focus-within/row:opacity-100 fine:group-hover/row:opacity-100 coarse:size-11 coarse:after:inset-0"
+                    >
+                      <IconTrash size={14} />
+                    </Button>
+                  </div>
                 </Row>
               ))}
             </Rows>

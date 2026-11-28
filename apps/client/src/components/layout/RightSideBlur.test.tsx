@@ -14,6 +14,7 @@ describe("RightSideBlur", () => {
 
     const rail = container.querySelector(".rail");
     expect(rail).not.toBeNull();
+    expect(container.querySelector("aside#rightside")).not.toBeNull();
     const classes = rail!.className.split(/\s+/);
     expect(classes).toContain("stack:border-t");
     expect(classes).toContain("stack:border-b");

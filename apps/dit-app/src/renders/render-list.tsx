@@ -122,8 +122,11 @@ function RenderList({ cards }: { cards: readonly RenderCard[] }): JSX.Element {
     if (event.defaultPrevented) return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (!active) return;
-    const onOption =
-      (event.target as HTMLElement).getAttribute("role") === "option";
+    const target = event.target as HTMLElement;
+    const onCard = target.getAttribute("role") === "listitem";
+    const inCard =
+      target.closest('[role="listitem"]') !== null &&
+      !target.closest("input, textarea, select");
     const idle = !pending;
 
     switch (event.key) {
@@ -159,7 +162,7 @@ function RenderList({ cards }: { cards: readonly RenderCard[] }): JSX.Element {
         return;
       case " ": {
         const file = mainFile(active);
-        if (onOption && file) {
+        if (onCard && file) {
           event.preventDefault();
           void toggleAudition(file.path);
         }
@@ -169,7 +172,7 @@ function RenderList({ cards }: { cards: readonly RenderCard[] }): JSX.Element {
       case "ArrowRight": {
         const file = mainFile(active);
         if (
-          onOption &&
+          inCard &&
           file &&
           previewPlayer.getSnapshot().filePath === file.path
         ) {
@@ -193,9 +196,8 @@ function RenderList({ cards }: { cards: readonly RenderCard[] }): JSX.Element {
       </h2>
       <div
         ref={listRef}
-        role="listbox"
+        role="list"
         aria-labelledby={headingId}
-        aria-orientation="vertical"
         aria-keyshortcuts="ArrowUp ArrowDown Y N Space"
         onKeyDown={onKeyDown}
         onFocus={() => {

@@ -7,12 +7,18 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 
 const copyNoteText = mock(async () => {});
 const linkDialogOpen = mock();
+const capturedEditorProps = mock();
 
 mock.module("next/navigation", () => ({
   usePathname: () => "/notes/7",
   useRouter: () => ({ push: mock(), refresh: mock() }),
 }));
-mock.module("next/dynamic", () => ({ default: () => () => null }));
+mock.module("next/dynamic", () => ({
+  default: () => (props: Record<string, unknown>) => {
+    capturedEditorProps(props);
+    return null;
+  },
+}));
 mock.module("@/actions/notes", () => ({
   deleteNote: mock(),
   unlinkNote: mock(),
@@ -83,6 +89,7 @@ afterEach(() => {
   cleanup();
   copyNoteText.mockClear();
   linkDialogOpen.mockClear();
+  capturedEditorProps.mockClear();
 });
 
 describe("NoteEditor keys", () => {
@@ -121,5 +128,18 @@ describe("NoteEditor keys", () => {
 
     press("t");
     expect(linkDialogOpen).not.toHaveBeenCalledWith(true);
+  });
+
+  it("passes contextual ariaLabel to BlockEditor for notebook and track surfaces", () => {
+    renderEditor("notebook");
+    expect(capturedEditorProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ariaLabel: "Note editor" })
+    );
+
+    cleanup();
+    renderEditor("track");
+    expect(capturedEditorProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ariaLabel: "Lyrics editor" })
+    );
   });
 });

@@ -12,13 +12,14 @@ import { extendTailwindMerge } from "tailwind-merge";
  * `text-small text-ink` survives intact and a later size still overrides an
  * earlier one.
  *
- * The two lifts (`shadow-overlay`, `shadow-menu`) are registered for the same
- * reason: an unknown `shadow-*` reads as a shadow colour.
+ * The three lifts (`shadow-overlay`, `shadow-menu`, `shadow-float`) are
+ * registered for the same reason: an unknown `shadow-*` reads as a shadow
+ * colour.
  */
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      shadow: [{ shadow: ["overlay", "menu"] }],
+      shadow: [{ shadow: ["overlay", "menu", "float"] }],
       "font-size": [
         {
           text: [
@@ -27,6 +28,7 @@ const twMerge = extendTailwindMerge({
             "body",
             "lead",
             "section",
+            "subtitle",
             "title",
             "display",
           ],

@@ -3,7 +3,8 @@ import { DEFAULT_VISUALS } from "@/lib/policies/visuals";
 import { DEFAULT_STRIP_IDS, knownStrips, toggleStrip } from "./strip-legend";
 
 describe("knownStrips", () => {
-  it("shows every strip under the default visuals policy", () => {
+  it("defaults to empty under the default visuals policy", () => {
+    expect(DEFAULT_VISUALS.strips).toEqual([]);
     expect(knownStrips(DEFAULT_VISUALS.strips)).toEqual([...DEFAULT_STRIP_IDS]);
   });
 

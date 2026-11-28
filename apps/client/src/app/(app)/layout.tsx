@@ -39,7 +39,13 @@ export default async function AppLayout({
 
   if (!isAuthed) {
     return (
-      <main className={"flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"}>
+      <main
+        id={"main-content"}
+        tabIndex={-1}
+        className={
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden focus:outline-hidden"
+        }
+      >
         <div className={"min-h-0 flex-1 overflow-hidden"}>{children}</div>
       </main>
     );
@@ -63,6 +69,14 @@ export default async function AppLayout({
                   className={"min-h-0 flex-1"}
                 >
                   <CommandProvider>
+                    <a
+                      href={"#main-content"}
+                      className={
+                        "sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:border focus:border-rule-strong focus:bg-paper focus:px-3 focus:py-2 focus:text-small focus:text-ink focus:shadow-overlay focus:ring-2 focus:ring-art focus:outline-hidden"
+                      }
+                    >
+                      Skip to content
+                    </a>
                     <ShortcutsOverlay />
                     <AppSidebar />
                     <MusicPlayer />
@@ -75,8 +89,10 @@ export default async function AppLayout({
                       <CommandPaletteRecents />
                     </Suspense>
                     <main
+                      id={"main-content"}
+                      tabIndex={-1}
                       className={
-                        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden focus:outline-hidden"
                       }
                     >
                       <ClientCommandBar edge="top" />

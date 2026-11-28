@@ -14,6 +14,8 @@ export type SidebarSectionContent = {
   /** The "+" link's accessible name and tooltip. */
   newLabel?: string;
   hrefAll?: string;
+  separator?: boolean;
+  hint?: string;
   children: ReactNode;
 };
 

@@ -2,11 +2,14 @@
 
 import {
   type Icon,
+  IconArrowDown,
+  IconArrowUp,
   IconArrowUpRight,
   IconCircleDashed,
   IconCopy,
   IconDotsVertical,
   IconDownload,
+  IconFlag,
   IconFolderShare,
   IconLayoutSidebarRightExpand,
   IconLibraryPlus,
@@ -16,7 +19,7 @@ import {
   IconPlaylistAdd,
   IconTrash,
 } from "@tabler/icons-react";
-import type { Status } from "@workspace/api/api";
+import type { Label, PriorityLevel, Status } from "@workspace/api/api";
 import { Button } from "@workspace/ui/components/button";
 import {
   ContextMenuItem,
@@ -41,6 +44,7 @@ import {
   usePlayback,
 } from "@/components/music-player/use-playback";
 import { StatusDisplay } from "@/components/status/StatusDisplay";
+import { PriorityBadge } from "./Priority";
 
 /**
  * One of the table kind's declared actions, bound to a target: the row menus
@@ -68,6 +72,27 @@ export type RowActionsConfig = {
   /** Collections offered by "Add to collection". */
   collections?: { id: number; title: string }[];
   onSetStatus?: (statusId: number) => void;
+  /** Priority scale offered by "Set priority". */
+  priorityLevels?: PriorityLevel[];
+  onSetPriority?: (priorityId: number) => void;
+  /** Project labels and current row's label ids for quick label edits. */
+  labels?: Label[];
+  rowLabelIds?: number[];
+  onSetLabels?: (add: number[], remove: number[]) => void;
+  /** Inline artist editing for track rows on mobile action sheet. */
+  artists?: {
+    current: string[];
+    suggestions?: string[];
+    onSave: (next: string[]) => Promise<boolean>;
+  };
+  /** Track reordering inside a collection-scoped table. */
+  reorder?: {
+    trackNumber: number;
+    total: number;
+    onMoveUp?: () => void;
+    onMoveDown?: () => void;
+    onSetTrackNumber: (trackNumber: number) => Promise<boolean>;
+  };
   onAddToCollection?: (collectionId: number) => void;
   /** Open the row in the side panel with its title editor active. */
   onRename?: () => void;
@@ -190,8 +215,16 @@ export function ActionItems({
   collectionSub?: ControlledSub;
 }) {
   const { Item, Separator, Sub, SubTrigger, SubContent } = primitives;
-  const { playback, statuses, collections, onSetStatus, onAddToCollection } =
-    config;
+  const {
+    playback,
+    statuses,
+    collections,
+    onSetStatus,
+    priorityLevels,
+    onSetPriority,
+    reorder,
+    onAddToCollection,
+  } = config;
   const {
     onRename,
     onCopyLink,
@@ -207,6 +240,12 @@ export function ActionItems({
   const single = target.count === 1;
   const hasPlayback = Boolean(playback && single);
   const hasStatus = Boolean(onSetStatus && statuses && statuses.length > 0);
+  const hasPriority = Boolean(
+    onSetPriority && priorityLevels && priorityLevels.length > 0
+  );
+  const hasReorder = Boolean(
+    single && reorder && (reorder.onMoveUp || reorder.onMoveDown)
+  );
   const hasCollections = Boolean(
     onAddToCollection && collections && collections.length > 0
   );
@@ -214,6 +253,8 @@ export function ActionItems({
     (onOpen && single) ||
     (onOpenPage && single) ||
     hasStatus ||
+    hasPriority ||
+    hasReorder ||
     hasCollections ||
     (onRename && single) ||
     (onCopyLink && single) ||
@@ -254,6 +295,33 @@ export function ActionItems({
             ))}
           </SubContent>
         </Sub>
+      )}
+      {hasPriority && onSetPriority && priorityLevels && (
+        <Sub>
+          <SubTrigger>
+            <IconFlag />
+            Set priority
+          </SubTrigger>
+          <SubContent>
+            {priorityLevels.map((level) => (
+              <Item key={level.id} onSelect={() => onSetPriority(level.id)}>
+                <PriorityBadge level={level} />
+              </Item>
+            ))}
+          </SubContent>
+        </Sub>
+      )}
+      {single && reorder?.onMoveUp && (
+        <Item onSelect={() => reorder.onMoveUp?.()}>
+          <IconArrowUp />
+          Move up
+        </Item>
+      )}
+      {single && reorder?.onMoveDown && (
+        <Item onSelect={() => reorder.onMoveDown?.()}>
+          <IconArrowDown />
+          Move down
+        </Item>
       )}
       {hasCollections && onAddToCollection && collections && (
         <Sub

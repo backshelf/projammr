@@ -29,4 +29,26 @@ describe("FormController input", () => {
       HTMLInputElement
     );
   });
+
+  it("renders title inputs with design-system font and placeholder tokens", () => {
+    function TitleForm() {
+      const form = useForm<NameValues>({ defaultValues: { displayName: "" } });
+      return (
+        <FormController
+          name="displayName"
+          control={form.control}
+          label="Track title"
+          type="title"
+          placeholder="Untitled"
+        />
+      );
+    }
+    render(<TitleForm />);
+
+    const input = screen.getByRole("textbox", { name: "Track title" });
+    expect(input.className).toContain("font-heading");
+    expect(input.className).toContain("placeholder:text-ink-faint");
+    expect(input.className).not.toContain("text-3xl");
+    expect(input.className).not.toContain("placeholder:font-sans");
+  });
 });

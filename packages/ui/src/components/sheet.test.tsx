@@ -70,6 +70,8 @@ const overlay = () =>
   document.querySelector<HTMLElement>('[data-slot="sheet-overlay"]');
 const content = () =>
   document.querySelector<HTMLElement>('[data-slot="sheet-content"]');
+const handle = () =>
+  document.querySelector<HTMLElement>('[data-slot="sheet-handle"]');
 
 type TestSheetProps = React.ComponentProps<typeof Sheet> & {
   side?: SheetSide;
@@ -104,15 +106,19 @@ describe("SheetContent", () => {
   const openSheet = (props: TestSheetProps = {}) =>
     render(<TestSheet open {...props} />, { wrapper: MotionProvider });
 
-  it("refuses selection on the scrim and the panel above it", () => {
+  it("refuses selection on the scrim and handle while keeping sheet content selectable", () => {
     openSheet();
 
-    for (const element of [overlay()!, content()!]) {
+    for (const element of [overlay()!, handle()!]) {
       expect(element.classList.contains("select-none")).toBe(true);
       expect(element.classList.contains("[-webkit-touch-callout:none]")).toBe(
         true
       );
     }
+    expect(content()!.classList.contains("select-none")).toBe(false);
+    expect(content()!.classList.contains("[-webkit-touch-callout:none]")).toBe(
+      false
+    );
   });
 
   it("keeps the home-indicator spacer when a consumer sets its own padding", () => {

@@ -20,9 +20,13 @@ import type { PropsWithChildren, ReactNode } from "react";
  */
 function RailColumn({ children }: PropsWithChildren) {
   return (
-    <div id={"rightside"} className={"relative z-3 [grid-area:rail]"}>
+    <aside
+      id={"rightside"}
+      aria-label={"Details"}
+      className={"relative z-3 [grid-area:rail]"}
+    >
       {children}
-    </div>
+    </aside>
   );
 }
 

@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { IconArrowUpRight } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { useFormat } from "@workspace/ui/components/format-provider";
+import { LABEL } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
 
 import { call } from "../bridge";
@@ -60,9 +61,27 @@ export function SetMasthead({
       )}
       <header className="flex flex-col gap-1.5">
         <div className="flex items-start gap-1">
-          <h1 className="min-w-0 flex-1 font-heading text-title/[1.05] text-balance [overflow-wrap:anywhere] text-ink">
-            {open.name}
-          </h1>
+          <div className="min-w-0 flex-1">
+            {open.track !== null && (
+              <p
+                className={cn(
+                  LABEL,
+                  "mb-1 truncate",
+                  hasArtwork ? "on-art-soft" : "text-ink-soft"
+                )}
+              >
+                Song · {open.track.title}
+              </p>
+            )}
+            <h1
+              className={cn(
+                "font-heading text-subtitle/[1.08] text-balance [overflow-wrap:anywhere]",
+                hasArtwork ? "on-art" : "text-ink"
+              )}
+            >
+              {open.name}
+            </h1>
+          </div>
           <PanelMenu signedIn />
         </div>
         {byline.length > 0 && (
@@ -79,12 +98,15 @@ export function SetMasthead({
           <div>
             <Button
               variant="link"
-              className="-ml-1 gap-0.5 px-1 text-ink"
+              className={cn(
+                "-ml-1 gap-0.5 px-1",
+                hasArtwork ? "on-art" : "text-ink"
+              )}
               onClick={() =>
                 void run(() => call("open_web", { path: open.webPath }))
               }
             >
-              Open on the web
+              {open.track !== null ? "Open song on the web" : "Open on the web"}
               <IconArrowUpRight aria-hidden />
             </Button>
             <ErrorLine error={error} />

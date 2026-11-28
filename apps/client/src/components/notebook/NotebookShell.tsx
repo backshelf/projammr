@@ -49,7 +49,7 @@ export function NotebookShell({
     <NotebookContext value={notebook}>
       <div
         className={
-          "grid h-full min-h-0 grid-cols-1 pb-(--dock) md:grid-cols-[18rem_minmax(0,1fr)]"
+          "grid h-full min-h-0 grid-cols-1 pb-(--dock) md:grid-cols-[20rem_minmax(0,1fr)]"
         }
       >
         <ScrollRoot

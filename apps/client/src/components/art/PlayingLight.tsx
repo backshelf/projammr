@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useAudibleSide,
   useCurrentTrack,
@@ -58,6 +58,7 @@ export function PlayingLight({ owner }: { owner: PlaybackOwner }) {
   const { artBreathes } = useVisualsPolicy();
   const state = playbackState(current, isPlaying, owner);
   const markerRef = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
     const container = markerRef.current?.parentElement;
@@ -67,16 +68,63 @@ export function PlayingLight({ owner }: { owner: PlaybackOwner }) {
     return () => container.removeAttribute("data-playing");
   }, [state]);
 
-  const breathing = state === "playing" && !reduced && artBreathes;
+  // Gate the breathing rAF loop when the masthead art has scrolled off-screen.
+  useEffect(() => {
+    const container = markerRef.current?.parentElement;
+    const artTarget =
+      container?.querySelector<HTMLElement>(".masthead__art") ?? container;
+    if (!artTarget || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setVisible(entry.isIntersecting);
+    });
+    observer.observe(artTarget);
+    return () => observer.disconnect();
+  }, []);
+
+  const breathing = state === "playing" && !reduced && artBreathes && visible;
   // Starts mid-swing, at the rest level, so the breath begins where the
   // stylesheet's playing brightness already is.
   const levelsRef = useRef({ art: 0.5, haze: 0.5 });
-  // The two elements the breath writes, looked up once rather than on every
-  // loudness frame, and again only when a remount has swapped either out.
+  // The two elements the breath writes, and the theme's swing curve, looked up
+  // outside the per-frame callback rather than traversing the DOM at 60fps.
   const targetsRef = useRef<{
     art: HTMLElement | null;
     haze: HTMLElement | null;
   }>({ art: null, haze: null });
+  const swingRef = useRef(SWING.light);
+
+  useEffect(() => {
+    const container = markerRef.current?.parentElement;
+    if (!container) return;
+    const syncSwing = () => {
+      swingRef.current = container.closest(".dark") ? SWING.dark : SWING.light;
+    };
+    syncSwing();
+    if (typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(syncSwing);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!breathing) return;
+    const container = markerRef.current?.parentElement;
+    if (!container) return;
+    const art = container.querySelector<HTMLElement>(".masthead__tone");
+    const haze = container.querySelector<HTMLElement>(".wash__lobe--deep");
+    targetsRef.current = { art, haze };
+    // Set the smoothing transitions once per active breathing window instead
+    // of writing style properties every frame.
+    art?.style.setProperty("transition", "opacity 200ms linear");
+    // The lobe keeps this transition after the breath stops, so it eases back
+    // to full as slowly as it moved.
+    haze?.style.setProperty("transition", "opacity 1.2s linear");
+  }, [breathing]);
 
   useLoudnessFrames(breathing, (sides, dt, active) => {
     const container = markerRef.current?.parentElement;
@@ -88,6 +136,10 @@ export function PlayingLight({ owner }: { owner: PlaybackOwner }) {
     ) {
       targets.art = container.querySelector<HTMLElement>(".masthead__tone");
       targets.haze = container.querySelector<HTMLElement>(".wash__lobe--deep");
+      if (active) {
+        targets.art?.style.setProperty("transition", "opacity 200ms linear");
+        targets.haze?.style.setProperty("transition", "opacity 1.2s linear");
+      }
     }
     const { art, haze } = targets;
     if (!art) return false;
@@ -107,16 +159,9 @@ export function PlayingLight({ owner }: { owner: PlaybackOwner }) {
     l.art = follow(l.art, energy, dt, ART);
     l.haze = follow(l.haze, energy, dt, HAZE);
 
-    const swing = container.closest(".dark") ? SWING.dark : SWING.light;
-    // Centred on the rest level, near the stylesheet's own playing
-    // brightness; the short linear transition absorbs the step between them
-    // and smooths the 10 ms frames into one continuous swell.
+    const swing = swingRef.current;
     const opacity = swing.rest + (l.art - 0.5) * swing.range;
-    art.style.setProperty("transition", "opacity 200ms linear");
     art.style.setProperty("opacity", opacity.toFixed(3));
-    // The lobe keeps this transition after the breath stops, so it eases back
-    // to full as slowly as it moved.
-    haze?.style.setProperty("transition", "opacity 1.2s linear");
     haze?.style.setProperty(
       "opacity",
       (1 - swing.haze + l.haze * swing.haze).toFixed(3)

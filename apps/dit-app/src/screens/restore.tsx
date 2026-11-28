@@ -9,7 +9,7 @@ import {
 import { IconCheck } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { Field, FieldLabel } from "@workspace/ui/components/field";
-import { Spinner } from "@workspace/ui/components/spinner";
+import { Progress } from "@workspace/ui/components/progress";
 
 import { call } from "../bridge";
 import { ErrorLine } from "../error-line";
@@ -40,26 +40,45 @@ export function Restore({
   const title =
     pending.problem !== null
       ? "Can't restore this commit"
-      : pending.message === null
-        ? "Restore this commit as a new branch"
-        : `Restore '${pending.message}' as a new branch`;
+      : "Restore as a new branch";
   const lede = pending.set === null ? undefined : `In ${pending.set}.`;
+  const lookingUp = pending.problem === null && pending.message === null;
 
   return (
     <div className="flex flex-col gap-4">
-      <PanelHead title={title} lede={lede} />
+      <PanelHead title={title} lede={lede} blocking />
       {pending.problem !== null ? (
         <Closed line={pending.problem} label="Close" />
-      ) : restore.state === "opened" ? (
-        <Opened file={restore.file} note={restore.note} />
-      ) : isRestoring(restore) ? (
-        <Running restore={restore} />
       ) : (
-        <BranchForm
-          pending={pending}
-          failed={restore.state === "failed" ? restore : null}
-          liveOpen={liveOpen}
-        />
+        <>
+          {lookingUp ? (
+            <div className="flex flex-col gap-1.5">
+              <Progress
+                value={30}
+                aria-label="Looking up commit"
+                indicatorClassName="bg-art"
+              />
+              <p role="status" className="text-small text-ink-soft">
+                {"Looking up commit\u2026"}
+              </p>
+            </div>
+          ) : (
+            <blockquote className="border-l-2 border-rule-strong pl-3 text-small text-pretty text-ink">
+              {pending.message}
+            </blockquote>
+          )}
+          {restore.state === "opened" ? (
+            <Opened file={restore.file} note={restore.note} />
+          ) : isRestoring(restore) ? (
+            <Running restore={restore} />
+          ) : (
+            <BranchForm
+              pending={pending}
+              failed={restore.state === "failed" ? restore : null}
+              liveOpen={liveOpen}
+            />
+          )}
+        </>
       )}
     </div>
   );
@@ -237,19 +256,27 @@ function Running({
         : "Fetching the commit\u2026"
       : `Writing ${restore.file}\u2026`;
 
+  const percent =
+    restore.state === "writing"
+      ? 85
+      : Math.min(80, Math.max(15, restore.objects * 10));
+
   return (
     <>
-      <p
-        role="status"
-        className="flex items-center gap-2 text-small [overflow-wrap:anywhere] text-ink"
-      >
-        <Spinner
-          role="presentation"
-          aria-hidden
-          className="size-3.5 shrink-0 text-ink-soft"
+      <div className="flex flex-col gap-1.5">
+        <Progress
+          value={percent}
+          aria-label="Restore progress"
+          aria-valuenow={percent}
+          indicatorClassName="bg-art"
         />
-        {line}
-      </p>
+        <p
+          role="status"
+          className="text-small [overflow-wrap:anywhere] text-ink"
+        >
+          {line}
+        </p>
+      </div>
       <p className="text-small text-pretty text-ink-soft">
         A restore can't be stopped once it has started. Closing this keeps it
         going; the file is still written, it just isn't opened.

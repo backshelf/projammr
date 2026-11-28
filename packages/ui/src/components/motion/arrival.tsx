@@ -1,10 +1,17 @@
 "use client";
 
 import { useHydrated } from "@workspace/ui/hooks/use-hydrated";
-import { FADE, m, type Variants } from "@workspace/ui/lib/motion";
+import {
+  FADE,
+  m,
+  useReducedMotion,
+  type Variants,
+} from "@workspace/ui/lib/motion";
 import {
   createContext,
   use,
+  useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -65,18 +72,39 @@ export function ArrivalRoot({
   style?: CSSProperties;
   children: ReactNode;
 }) {
+  const reduced = useReducedMotion() ?? false;
   const [settled, setSettled] = useState(false);
+  const isSettled = settled || reduced;
+  const hiddenAtRef = useRef<number | null>(null);
   const Root = as === "header" ? m.header : m.div;
 
+  // Effects inside React 19 <Activity> tear down when `mode="hidden"` and
+  // re-run when `mode="visible"`. Settling on reveal (outside synchronous
+  // StrictMode double-invoke) and arming a duration-bounded fallback ensures
+  // children never stall at `opacity: 0` if WAAPI was canceled or skipped.
+  useEffect(() => {
+    if (isSettled) return;
+    if (hiddenAtRef.current !== null && Date.now() - hiddenAtRef.current > 20) {
+      setSettled(true);
+      return;
+    }
+    const fallbackMs = kind === "load" ? 1200 : 350;
+    const timer = window.setTimeout(() => setSettled(true), fallbackMs);
+    return () => {
+      window.clearTimeout(timer);
+      hiddenAtRef.current = Date.now();
+    };
+  }, [isSettled, kind]);
+
   return (
-    <ArrivalContext value={{ kind, settled }}>
+    <ArrivalContext value={{ kind, settled: isSettled }}>
       <Root
         ref={ref as Ref<HTMLDivElement & HTMLElement>}
         className={className}
         style={style}
-        data-arrival={settled ? undefined : kind}
-        initial={"hidden"}
-        animate={"shown"}
+        data-arrival={isSettled ? undefined : kind}
+        initial={isSettled ? false : "hidden"}
+        animate={isSettled ? "settled" : "shown"}
         onAnimationComplete={() => setSettled(true)}
       >
         {children}
@@ -139,10 +167,16 @@ export function arrivalVariants(
             ease: FADE.arrive.ease,
           },
         },
+        settled: {
+          opacity: 1,
+          ...rest,
+          transition: FADE.quick,
+        },
       }
     : {
         hidden: { ...rest, opacity: 0 },
         shown: { ...rest, opacity: 1, transition: FADE.move },
+        settled: { ...rest, opacity: 1, transition: FADE.quick },
       };
 }
 
@@ -161,17 +195,19 @@ export function useArrivalSettled(): boolean {
  * there would make it control its own variants, and Motion would stop it
  * inheriting the root's `animate`, so it would render hidden and never come
  * forward. It inherits `hidden` → `shown` from {@link ArrivalRoot} instead.
- * Once the entrance has settled `initial` is `false`, so a part that remounts
- * later — the title when its editor closes, the audio block on a version
- * change — appears in place.
+ * Once the entrance has settled `initial` is `false` and `animate` resolves to
+ * `settled`, so a remounting part appears in place and an interrupted
+ * animation (such as a React `<Activity>` hide/reveal) never stalls hidden.
  */
 export function useArrival(part: ArrivalPart): {
   initial: false | undefined;
+  animate: "settled" | undefined;
   variants: Variants;
 } {
   const { kind, settled } = use(ArrivalContext);
   return {
     initial: settled ? false : undefined,
+    animate: settled ? "settled" : undefined,
     variants: arrivalVariants(kind, part),
   };
 }

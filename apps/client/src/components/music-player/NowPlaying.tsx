@@ -12,14 +12,13 @@ import {
   useAnalysis,
   useCurrentArt,
   useCurrentTrack,
-  useLabSettings,
+  useLabAltering,
   usePlayerActions,
   useRoutedNotice,
   useUpcoming,
   useVolumeControllable,
 } from "@/components/music-player/player-hooks";
 import { LabView } from "@/components/lab/LabView";
-import { settingsNeedLab } from "@/lib/dsp/lab-settings";
 import {
   MuteButton,
   Transport,
@@ -66,6 +65,11 @@ import {
   SheetTitle,
 } from "@workspace/ui/components/sheet";
 import { Spinner } from "@workspace/ui/components/spinner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@workspace/ui/components/tooltip";
 import { AnimatePresence, LEAVE, m, OPTICAL } from "@workspace/ui/lib/motion";
 import { LABEL } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
@@ -105,7 +109,7 @@ const SHEET =
  */
 const CONTENT = cn(
   "mx-auto flex h-full min-h-0 w-full flex-col gap-3 px-(--gutter)",
-  "pb-[calc(env(safe-area-inset-bottom)+1rem)] md:max-w-lg md:px-4 md:pb-4"
+  "pb-[calc(env(safe-area-inset-bottom)+1rem)] md:max-w-lg md:px-4 md:pb-4 lg:max-w-4xl"
 );
 
 /** The page the playing item came from, when it has one to go back to. */
@@ -156,7 +160,7 @@ function Cover({ cover }: { cover: string | undefined }) {
   return (
     <div
       className={
-        "mx-auto aspect-square w-full max-w-[42dvh] shrink-0 md:max-w-[26rem]"
+        "mx-auto aspect-square w-full max-w-[42dvh] shrink-0 md:max-w-[26rem] lg:max-w-none"
       }
     >
       {url ? (
@@ -168,7 +172,7 @@ function Cover({ cover }: { cover: string | undefined }) {
             src={url}
             alt={""}
             className={cn(
-              "size-full rounded-lg object-cover shadow-[0_12px_32px_oklch(0_0_0/24%)]",
+              "size-full rounded-lg object-cover shadow-float",
               isPhone && !coverInSheet && "invisible"
             )}
           />
@@ -287,11 +291,10 @@ function PlayingLoudness({
  * attachment or a session render has no version to have been measured, so it
  * draws the live line alone.
  *
- * The sheet only has room for it on a tall window: cover, identity and both
- * meters with their captions open need about 62.5rem of viewport, so below
- * that the spectrum is left out rather than squeezing the art or pushing the
- * pane over the header. Hidden, it is out of view, so its frame loop never
- * runs; the rails still show the spectrum at every size.
+ * Below `lg:` in a single-column stack, the spectrum is hidden when viewport
+ * height is under 62.5rem so it does not squeeze the art; at `lg:` and above
+ * the two-column layout places the meters beside the cover so both fit on
+ * standard laptop screens.
  */
 function PlayingSpectrum({
   current,
@@ -321,7 +324,7 @@ function PlayingSpectrum({
       owner={"any"}
       tone={bare ? "paper" : "art"}
       caption={"Spectrum"}
-      className={"shrink-0 [@media(height<62.5rem)]:hidden"}
+      className={"shrink-0 max-lg:[@media(height<62.5rem)]:hidden"}
       curves={curves}
       window={spectrumWindow(curves.map((curve) => curve.db))}
       label={
@@ -334,9 +337,9 @@ function PlayingSpectrum({
 }
 
 /**
- * The playing track at rest: its artwork, what it is and how loud. The pane
- * centres itself in whatever height the sheet has left between the header and
- * the transport, so the art sits in the middle of the screen at every size.
+ * The playing track at rest: its artwork, what it is and how loud. Stacks in
+ * one column on narrower viewports and sits in two columns at `lg:` so the
+ * art and both meters share the height cleanly.
  */
 function PlayerPane({
   current,
@@ -350,10 +353,15 @@ function PlayerPane({
   bare: boolean;
 }) {
   return (
-    <div className={"flex min-h-0 flex-1 flex-col justify-center gap-4"}>
+    <div
+      className={cn(
+        "grid min-h-0 flex-1 grid-cols-1 content-center gap-4",
+        "lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] lg:items-center lg:gap-10"
+      )}
+    >
       <Cover cover={current?.cover} />
       {current ? (
-        <>
+        <div className={"flex min-w-0 flex-col gap-4"}>
           <Identity
             current={current}
             href={href}
@@ -362,7 +370,7 @@ function PlayerPane({
           />
           <PlayingLoudness current={current} bare={bare} />
           <PlayingSpectrum current={current} bare={bare} />
-        </>
+        </div>
       ) : (
         <p className={"shrink-0 text-lead text-ink-soft"}>Nothing playing</p>
       )}
@@ -389,7 +397,7 @@ function QueueView({ current }: { current: MusicPlayerTrack | null }) {
     >
       <div className={"flex shrink-0 items-center justify-between"}>
         <span className={cn(LABEL, "text-ink-soft")}>
-          Queue ({upcoming.length})
+          Up next ({upcoming.length})
         </span>
         <Button
           variant={"ghost"}
@@ -440,9 +448,9 @@ function SecondaryRow({
 
   const showingQueue = view === "queue";
   const showingLab = view === "lab";
-  // Anything in the Lab changing the sound marks its button, so the player
-  // pane says the record is not playing as mixed without opening the Lab.
-  const labAltering = settingsNeedLab(useLabSettings());
+  // Anything actively altering the sound marks its button, so the player pane
+  // says the record is not playing as mixed without opening the Lab.
+  const labAltering = useLabAltering();
 
   return (
     <div className={"flex shrink-0 items-center justify-between gap-2"}>
@@ -452,44 +460,61 @@ function SecondaryRow({
       </div>
 
       <div className={"flex items-center gap-1"}>
-        <IconButton
-          size={"touch"}
-          aria-label={labAltering ? "Lab, changing the sound" : "Lab"}
-          aria-pressed={showingLab}
-          className={showingLab ? "text-art" : undefined}
-          onClick={() => setView(showingLab ? "player" : "lab")}
-        >
-          <IconAdjustmentsHorizontal />
-          <span
-            aria-hidden
-            data-on={labAltering ? "" : undefined}
-            className={
-              "absolute top-2.5 right-2.5 size-1.5 scale-0 rounded-full bg-art opacity-0 motion-settle data-on:scale-100 data-on:opacity-100"
-            }
-          />
-        </IconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton
+              size={"touch"}
+              aria-label={labAltering ? "Lab, changing the sound" : "Lab"}
+              aria-pressed={showingLab}
+              className={showingLab ? "text-art" : undefined}
+              onClick={() => setView(showingLab ? "player" : "lab")}
+            >
+              <IconAdjustmentsHorizontal />
+              <span
+                aria-hidden
+                data-on={labAltering ? "" : undefined}
+                className={
+                  "absolute top-2.5 right-2.5 size-1.5 scale-0 rounded-full bg-art opacity-0 motion-settle data-on:scale-100 data-on:opacity-100"
+                }
+              />
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>
+            {labAltering ? "Lab (active)" : "Lab"}
+          </TooltipContent>
+        </Tooltip>
 
-        <IconButton
-          size={"touch"}
-          aria-label={"Queue"}
-          aria-pressed={showingQueue}
-          className={showingQueue ? "text-art" : undefined}
-          onClick={() => setView(showingQueue ? "player" : "queue")}
-        >
-          <IconPlaylist />
-        </IconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton
+              size={"touch"}
+              aria-label={"Up next"}
+              aria-pressed={showingQueue}
+              className={showingQueue ? "text-art" : undefined}
+              onClick={() => setView(showingQueue ? "player" : "queue")}
+            >
+              <IconPlaylist />
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>Up next</TooltipContent>
+        </Tooltip>
 
         {available && audios && current?.trackAudio && (
-          <TrackAudioDropdown
-            audios={audios}
-            selectedAudioId={current.trackAudio.id}
-            onSelect={onSelectVersion}
-            onManage={onManageVersions}
-          >
-            <IconButton size={"touch"} aria-label={"Versions"}>
-              <IconVersions />
-            </IconButton>
-          </TrackAudioDropdown>
+          <Tooltip>
+            <TrackAudioDropdown
+              audios={audios}
+              selectedAudioId={current.trackAudio.id}
+              onSelect={onSelectVersion}
+              onManage={onManageVersions}
+            >
+              <TooltipTrigger asChild>
+                <IconButton size={"touch"} aria-label={"Versions"}>
+                  <IconVersions />
+                </IconButton>
+              </TooltipTrigger>
+            </TrackAudioDropdown>
+            <TooltipContent>Versions</TooltipContent>
+          </Tooltip>
         )}
       </div>
     </div>

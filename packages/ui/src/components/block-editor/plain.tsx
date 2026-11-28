@@ -5,7 +5,7 @@ import { useCreateBlockNote, useEditorChange } from "@blocknote/react";
 import { EditorFrame } from "./frame";
 import { textBlockSpecs } from "./text-blocks";
 import { useBlockDocument } from "./use-document";
-import type { VariantProps } from "./variants";
+import { editorDomAttributes, type VariantProps } from "./variants";
 
 export const plainSchema = BlockNoteSchema.create({
   blockSpecs: textBlockSpecs(),
@@ -22,6 +22,7 @@ export default function PlainEditor({
   onChange,
   editable,
   placeholder,
+  ariaLabel,
   theme,
 }: VariantProps) {
   const { initialContent, onDocumentChange } = useBlockDocument(
@@ -32,6 +33,7 @@ export default function PlainEditor({
   const editor = useCreateBlockNote({
     schema: plainSchema,
     initialContent,
+    domAttributes: editorDomAttributes(ariaLabel),
     // Both keys, as the lyrics editor sets them: `default` shows only on the
     // line holding the caret, so without `emptyDocument` a blank note reads
     // as nothing at all until it is clicked into.

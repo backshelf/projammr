@@ -140,18 +140,13 @@ export function factsOf(
 }
 
 /**
- * Why the engine offered the file, in the spec's words and order: "named like the set", "in its folder", "4 min
- * after your last save". Only what the daemon says held is listed; nothing when none did.
+ * Why the engine offered the file, in the spec's words and order: "named like the set", "in its folder".
+ * Save-distance timing is already shown in {@link factsOf} so it is not repeated here.
  */
-export function reasonsOf(
-  card: RenderCard,
-  format: Pick<RenderFormat, "timeInSet">
-): string[] {
-  const { named, inFolder, nearSave } = card.reasonKinds;
+export function reasonsOf(card: RenderCard): string[] {
+  const { named, inFolder } = card.reasonKinds;
   const reasons: string[] = [];
   if (named) reasons.push("named like the set");
   if (inFolder) reasons.push("in its folder");
-  const distance = nearSave ? saveDistance(card.bouncedAfterMs, format) : null;
-  if (distance !== null) reasons.push(distance);
   return reasons;
 }

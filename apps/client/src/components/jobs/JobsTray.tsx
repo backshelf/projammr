@@ -178,6 +178,7 @@ function TrayButton({
         indicator === "failed" ? "Failed background jobs" : "Background jobs"
       }
       className={cn(
+        count > 1 && "inline-flex w-auto items-center gap-1 px-1.5",
         indicator === "failed" && "text-danger hover:text-danger",
         className
       )}
@@ -198,13 +199,7 @@ function TrayButton({
         </m.span>
       </AnimatePresence>
       {count > 1 && (
-        <span
-          className={
-            "absolute -top-1 -right-1 text-micro leading-none tabular-nums"
-          }
-        >
-          {count}
-        </span>
+        <span className={"text-micro leading-none tabular-nums"}>{count}</span>
       )}
     </IconButton>
   );

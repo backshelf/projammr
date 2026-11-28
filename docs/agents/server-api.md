@@ -1,6 +1,6 @@
 # Reference: Hono API server (`apps/server`)
 
-_Updated 2026-11-27._
+_Updated 2026-11-28._
 
 Hono ^4.13 on `Bun.serve`, port 8080, basePath `/api`, hono-openapi ^1.5, zod ^4.6,
 drizzle-orm 1.0.0-rc.4, better-auth ^1.7, tests on `bun test`.
@@ -484,7 +484,12 @@ assets) reads the registry rather than switching on a kind by name.
   `{id, name, image}` or `null` when the asset has no uploading user, including once the uploader has
   deleted their account. The reads pass `attachmentsWithUploadedBy`
   (same file) as the `with` clause for the relation. The unpaginated `getSessionsInProject` listing keeps
-  bare `assetSchema` rows.
+  bare `assetSchema` rows. `getTrack` (`GET /tracks/:id`) also computes `studio: trackStudioSummarySchema`
+  (`{ sessionCount, commitCount, saveCount, lastSaveAt, openOn, openSessionId, mainSession }`, via
+  `trackStudioSummary` in `entities/track/queries.ts`): `mainSession` is the track's `main` session (or most
+  recently updated when none is `main`, with `{ id, name, daw, dawName, dawVersion, repoId, main }`), `commitCount`/
+  `saveCount`/`lastSaveAt` aggregate across all of the track's sessions, and `openOn`/`openSessionId` name the
+  newest online non-removed member machine (`MACHINE_OFFLINE_AFTER_MS`) holding one of them open.
 - `src/entities/shared.ts` — `defineEntity(spec)` builds a module from its typed create/edit/row types,
   deriving `projectIdFor` (via `scopedResolver`), `activityTarget`, `assertInProject` (via
   `scopedAssert`) and `assetSources`. `defineList(spec)` does the same for a project-scoped listing
@@ -706,7 +711,7 @@ resources = RESOURCES)` makes one `McpServer` per request, holding the actor by 
   deletes those keys from the loaded detail before merging in `read`'s result, and `schema` must describe
   the _whole_ merged output — the module states its own post-omit schema (`trackDetailSchema.omit(...)
 .extend(...)`) rather than `getTool` calling `.omit()` on the generic `ZodType` it holds, which would lose
-  the literal key types `.omit` needs. Only `track` sets `mcpDetail`: it adds `audioVersions` (id, version,
+  the literal key types `.omit` needs. Only `track` sets `mcpDetail`: it keeps `studio`, adds `audioVersions` (id, version,
   isPrimary, asset name, durationMs) from `getTrackAudios`, and replaces `sessions` with summaries (id,
   name, main, daw, tempo, timeSignature, rootNote, scale, localFileUpdatedAt, updatedAt — no `notes`
   or `structure`, which stay full-size on `get_session` only) built from `getTrackSessions`, the same query
@@ -957,7 +962,7 @@ there — sees the patch. Each consumer's suite has a case under a non-default p
 | GET                         | `/:id/heatmap`                | viewer                                                                                                                                | session-save counts by local calendar day; `from`/`to` epoch ms (any width, no `from < to` check), `tz` IANA (default UTC); only days with saves are returned                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | GET                         | `/:id/saves`                  | viewer                                                                                                                                | project's saves, newest first, each carrying the previous save's metadata; `limit` (default 10, max 100), `day` + `tz`, and the heatmap's filters; no lower time bound; rows carry `meta` twice (~6 KB each on the dev DB)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | GET                         | `/:id/sessions/daws`          | viewer                                                                                                                                | distinct `(daw, dawName)` pairs among the project's sessions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| GET                         | `/:id/today`                  | viewer                                                                                                                                | `{ renders, saves, counts: { renders, saves }, quiet: { tracks, total } }` for the project home (`getProjectToday`, no query parameters); `counts` is every render and save in the window, past the cap (a `count(*) over ()` on `getRecentTrackAudios` and `getProjectSaves`, which return `{ audios, total }` and `{ saves, total }`): renders linked (`getRecentTrackAudios`, cap 12) and saves made (`getProjectSaves`, `liveTracksOnly`, cap 12) within the project policy's `conventions.todayNewHours` (24 h by default), newest first, archived tracks left out; `quiet` is the live tracks untouched for the policy's `conventions.quietAfterDays` (30 d by default; 0 lists none) (`getQuietTracks`, cap 8, `total` counts all). The caps are the `TODAY_*_LIMIT`/`QUIET_LIMIT` constants in `entities/project/queries.ts`; the windows are the project policy's |
+| GET                         | `/:id/today`                  | viewer                                                                                                                                | `{ renders, saves, counts: { renders, saves }, quiet: { tracks, total }, unassignedSets: { sessions, total } }` for the project home (`getProjectToday`, no query parameters); `counts` is every render and save in the window, past the cap (a `count(*) over ()` on `getRecentTrackAudios` and `getProjectSaves`, which return `{ audios, total }` and `{ saves, total }`): renders linked (`getRecentTrackAudios`, cap 12) and saves made (`getProjectSaves`, `liveTracksOnly`, cap 12) within the project policy's `conventions.todayNewHours` (24 h by default), newest first, archived tracks left out; `quiet` is the live tracks untouched for the policy's `conventions.quietAfterDays` (30 d by default; 0 lists none) (`getQuietTracks`, cap 8, `total` counts all); `unassignedSets` (`getUnassignedSets`, cap `UNASSIGNED_SET_LIMIT` 5, `total` counts all) lists project sessions with `trackId IS NULL` and `inboxDismissedAt IS NULL`, ordered newest first by `coalesce(max(saves.fileUpdatedAt), localFileUpdatedAt, updatedAt)` then `id` desc (`unassignedSetSchema` fields plus `inDit`, `saveCount`, `lastSaveAt`). The caps are the `TODAY_*_LIMIT`/`QUIET_LIMIT`/`UNASSIGNED_SET_LIMIT` constants in `entities/project/queries.ts`; the windows are the project policy's |
 | GET                         | `/:id/tracks/artists`         | viewer                                                                                                                                | every artist credited on the project's tracks, archived included, most credited first then by name (`getProjectArtists`, sharing `artistCounts` with the paginated listing's `artist` facet)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | GET                         | `/:id/plugins`                | viewer                                                                                                                                | devices/plugins named by session structure, most used first; each row carries `sessionIds` (the sessions naming it, id order) and `sessionTracks` (each of those sessions' track entries naming it, same order; `tracks` is their sum). The query groups by device and session first, then by device                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | GET                         | `/:id/plugins/sessions`       | viewer                                                                                                                                | sessions naming one device                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
@@ -1026,12 +1031,17 @@ there — sees the patch. Each consumer's suite has a case under a non-default p
 
 The MCP `link_sessions` tool has no route-level check: `bulkMoveSessions(moves, projectId, actorId)`
 (`entities/session/queries.ts`, called by that tool alone) 404s any session or track outside the project itself, under the
-locks `db.md` describes (**move.ts**, Locks), and an empty `moves` writes nothing.
+locks `db.md` describes (**move.ts**, Locks — taking `FOR NO KEY UPDATE` on destination tracks gaining a `main` and
+clearing prior mains before updating), and an empty `moves` writes nothing. Single-session `PATCH /sessions/:id`
+(`updateSession` → `patchSession`) takes the same `FOR NO KEY UPDATE` track lock when changing `trackId` or promoting
+`main` (using a savepoint retry loop on in-place `main: true` promotions and normalizing an already-`main` session to
+`main: false` when linking onto a track that already has a main), and accepts `inboxDismissedAt` as an ISO 8601
+date-time string or `null` (via `isoDateTime` in `sessionWireFields`).
 
 ### Sessions list (`GET /projects/:id/sessions/paginated`, `list_sessions`)
 
 `getSessionsPage` (`entities/session/queries.ts`) takes `sessionQuerySchema`: the pagination params plus
-`daw`, `track`, `inDit` and `archived`. The listing drops `notes`, `notesText` and `structure` twice by hand, with no shared
+`daw`, `priority`, `track`, `inDit`, `unassigned` and `archived`. The listing drops `notes`, `notesText` and `structure` twice by hand, with no shared
 constant: `listSessionSchema`'s `.omit()` and `getSessionsPage`'s relational `columns` mask; the detail keeps
 `structure`, and `get_session` over MCP returns the full detail since `session` sets no `mcpDetail`.
 
@@ -1039,7 +1049,13 @@ constant: `listSessionSchema`'s `.omit()` and `getSessionsPage`'s relational `co
 `inDit=true|false` (`z.stringbool()`, as tracks' `explicit`), sorts by `inDit` and returns an `inDit` facet
 (`{true: n, false: n}` through `facetCounts`, which takes a column or an expression) that leaves its own filter out like
 the others. `inDitFilterSql` feeds the page, its facets, `sessionsWhere` (bulk writes and summaries) and an `all: true`
-selection (`inDitFilterValue`). `list_sessions` over MCP takes the field and the filter with no tool code.
+selection (`booleanFilterValue`). `list_sessions` over MCP takes the field and the filter with no tool code.
+
+**`unassigned`.** `unassigned=true|false` (`z.stringbool().optional()` in `entities/session/filters.ts`) filters to
+unassigned (`trackId IS NULL`) or assigned (`trackId IS NOT NULL`) sessions via `unassignedFilterSql`, feeding
+`getSessionsPage` (rows, `rowCount`, and all four facets `daw`, `priority`, `track`, `inDit`), `sessionsWhere` (bulk
+writes and `selectSessionIds`), and `all: true` bulk selections (`booleanFilterValue`). Unlike `inDit`, `unassigned`
+has no facet of its own.
 
 **Backfill candidates (`GET /projects/:id/sessions/dit-candidates`, viewer; `getDitCandidates`, mounted in
 `entities/project/routes.ts` beside `/sessions/daws`).** `{sessions: [{id, name, trackId, trackTitle, localFilepath,
@@ -1603,7 +1619,8 @@ cross-project move) do not subtract per row — they call `recomputeUsage` for t
 delete has committed.
 
 `STORAGE_DIR` (`src/lib/storage.ts`) also names an `"analysis"` directory the analysis funnel writes to
-directly rather than through `storeUpload` — `lib/spectrogram.ts`'s `writeSpectrogramPng` is the only
+directly rather than through `storeUpload` — `lib/spectrogram.ts`'s `writeSpectrogramPng` (single-channel
+grayscale PNG, `SPECTROGRAM_BANDS` 160 px tall in `"b-w"` colourspace via `sharp`, lowest band at row 0) is the only
 writer, keyed by `newStorageKey("analysis", "png")` the same way an upload's key is built. The file is
 served by the same gated `/static/*` route as an asset or an image (below). The
 `static/{assets,images}` skeleton in the Dockerfile, CI and `.claude/hooks/worktree-setup.sh` carries
@@ -1759,7 +1776,7 @@ Poll with `waitFor` from `@workspace/test/wait-for` and make the delay env-overr
 
 ## Tests
 
-**149 files**, one per concern, no single `api.test.ts`. The `test` script runs `bun test --timeout=30000` twice: first
+**158 files** under `src/` (plus 3 under `scripts/`), one per concern, no single `api.test.ts`. The `test` script runs `bun test --timeout=30000` twice: first
 `--parallel` over everything except a serial list (`--path-ignore-patterns`), then that list one
 file at a time (`--isolate`) — `db/migrator.test.ts`, `db/queries/jobs.test.ts`,
 `jobs-outstanding.test.ts`, `storage-audit.test.ts`, `storage-limits.test.ts`, `save-retention.test.ts`,
@@ -1906,10 +1923,11 @@ sessions actually carry.
 10. Bulk session endpoints are idempotent by design: `bulkAttachToSessions` is `onConflictDoNothing`, so a
     retried call must be a no-op, not a duplicate or an error.
 11. `epochDate` (`db/schema/sessions.ts`) is `z.preprocess(v => new Date(Number(v)), z.date())`, and
+    `isoDateTime` (same file, for `inboxDismissedAt`) is `z.preprocess` over ISO 8601 strings or `Date`s;
     `preprocess` erases a schema's _input_ type for OpenAPI generation purposes — without the `.meta({
-type: "integer", format: "int64" })` override already applied to it, a generated request body for
-    any field using it would type as the `z.date()` output (an ISO string) instead of the epoch-ms
-    number the wire format actually is. Apply the same `.meta()` treatment to any future
+    type: "integer", format: "int64" })` / `.meta({ type: "string", format: "date-time" })` overrides already
+    applied to them, generated request bodies for fields using them would type as the `z.date()` output instead
+    of the wire formats they actually accept. Apply the same `.meta()` treatment to any future
     `preprocess`/`transform` schema whose generated type looks wrong. One residual gap: `fileUpdatedAt`
     still generates as optional in the client types, because the override doesn't reach the `required`
     array.

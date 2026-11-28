@@ -172,9 +172,10 @@ describe("Panel", () => {
       );
       expect(
         await screen.findByRole("heading", {
-          name: "Restore 'added strings' as a new branch",
+          name: "Restore as a new branch",
         })
       ).toBeTruthy();
+      expect(screen.getByText("added strings")).toBeTruthy();
 
       await act(() => emit(STATE_EVENT, signedIn({ pendingRestore: null })));
       expect(
@@ -248,7 +249,7 @@ describe("Panel", () => {
   });
 
   describe("the renders waiting", () => {
-    test("show under the set's saves and not at all when none waits", async () => {
+    test("show above the set's saves and not at all when none waits", async () => {
       mockApp(signedIn({ renders: [card()] }));
       showPanel();
 
@@ -256,7 +257,7 @@ describe("Panel", () => {
         await screen.findByRole("heading", { name: /New bounce/ })
       ).toBeTruthy();
       expect(
-        screen.getByRole("option", { name: "science123 v4.wav" })
+        screen.getByRole("listitem", { name: "science123 v4.wav" })
       ).toBeTruthy();
 
       await act(() => emit(STATE_EVENT, signedIn({ renders: [] })));
@@ -273,7 +274,7 @@ describe("Panel", () => {
         await screen.findByRole("heading", { name: "Repos" })
       ).toBeTruthy();
       expect(
-        screen.getByRole("option", { name: "science123 v4.wav" })
+        screen.getByRole("listitem", { name: "science123 v4.wav" })
       ).toBeTruthy();
     });
   });
@@ -587,16 +588,61 @@ describe("Panel", () => {
       expect(argsOf(calls, "hide_panel")).toHaveLength(0);
     });
 
+    test("omits current screen from menu, hides unreachable items on blocking screens, and shows attention dot", async () => {
+      mockApp(
+        signedIn({
+          update: { state: "available", version: "0.10.0" },
+          backfill: { state: "paused" },
+        })
+      );
+      showPanel();
+      await screen.findByRole("heading", { name: "science123" });
+
+      const menuBtn = screen.getByRole("button", { name: "Menu" });
+      expect(menuBtn.querySelector(".bg-art")).not.toBeNull();
+
+      await openMenuItem("Settings");
+      await screen.findByRole("heading", { name: "Settings" });
+      fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+      await screen.findByRole("menuitem", { name: "Repos" });
+      expect(screen.queryByRole("menuitem", { name: "Settings" })).toBeNull();
+      fireEvent.keyDown(window, { key: "Escape" });
+
+      await act(() =>
+        emit(
+          STATE_EVENT,
+          signedIn({ machine: { name: null, refused: "Studio Mac" } })
+        )
+      );
+      await screen.findByRole("heading", { name: "Name this computer" });
+      fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+      await screen.findByRole("menuitem", { name: /^Quit/ });
+      expect(screen.queryByRole("menuitem", { name: "Settings" })).toBeNull();
+      expect(screen.queryByRole("menuitem", { name: "Repos" })).toBeNull();
+      expect(
+        screen.queryByRole("menuitem", { name: /Track a folder/ })
+      ).toBeNull();
+    });
+
     test("Esc hides the panel from a repo list that is the home screen, and backs out of one navigated to first", async () => {
       const calls = mockApp(signedIn({ open: null }));
       showPanel();
       await screen.findByRole("heading", { name: "Repos" });
 
+      fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+      await screen.findByRole("menuitem", { name: /^Settings/ });
+      expect(screen.queryByRole("menuitem", { name: /^Repos/ })).toBeNull();
+
       fireEvent.keyDown(window, { key: "Escape" });
       expect(argsOf(calls, "hide_panel")).toHaveLength(1);
 
+      await act(() => emit(STATE_EVENT, signedIn()));
+      await screen.findByRole("heading", { name: "science123" });
+
       await openMenuItem("Repos");
+      await screen.findByRole("heading", { name: "Repos" });
       fireEvent.keyDown(window, { key: "Escape" });
+      await screen.findByRole("heading", { name: "science123" });
       expect(argsOf(calls, "hide_panel")).toHaveLength(1);
       fireEvent.keyDown(window, { key: "Escape" });
       expect(argsOf(calls, "hide_panel")).toHaveLength(2);
@@ -631,9 +677,44 @@ describe("Panel", () => {
       expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
       expect(argsOf(calls, "hide_panel")).toHaveLength(0);
     });
+
+    test("defaults Settings to General after visiting Bounces via Raise limit", async () => {
+      mockApp(
+        signedIn({
+          renders: [
+            card({
+              id: 9,
+              state: "over-limit",
+              message: "No file of it fits 40 MB.",
+            }),
+          ],
+        })
+      );
+      showPanel();
+      await screen.findByRole("heading", { name: "science123" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Raise limit" }));
+      await screen.findByRole("heading", { name: "Settings" });
+      expect(
+        screen
+          .getByRole("tab", { name: "Bounces" })
+          .getAttribute("aria-selected")
+      ).toBe("true");
+
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+      await screen.findByRole("heading", { name: "science123" });
+
+      fireEvent.keyDown(window, { key: ",", metaKey: true });
+      await screen.findByRole("heading", { name: "Settings" });
+      expect(
+        screen
+          .getByRole("tab", { name: "General" })
+          .getAttribute("aria-selected")
+      ).toBe("true");
+    });
   });
 
-  test("focuses the repo filter each time the panel is shown", async () => {
+  test("focuses the repo filter each time the panel is shown and transfers focus across screen transitions", async () => {
     mockApp(signedIn({ open: null }));
     showPanel();
     const filter = await screen.findByLabelText("Filter repos");
@@ -642,5 +723,11 @@ describe("Panel", () => {
       await emit(TauriEvent.WINDOW_FOCUS);
       expect(document.activeElement).toBe(filter);
     });
+
+    await act(() => emit(STATE_EVENT, signedIn()));
+    const commitBox = await screen.findByRole("textbox", {
+      name: "Commit message",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(commitBox));
   });
 });

@@ -18,15 +18,18 @@ import {
   type LoudnessUnitKind,
 } from "./loudness-unit-copy";
 
+const UNDERLINE_CLASS =
+  "underline decoration-ink-faint/40 decoration-dotted underline-offset-4";
+
 // An inline box ignores `min-height`; the flex display under `coarse:` is what
 // lets the 44px floor apply without moving the text.
-const ABBR_CLASS =
-  "underline decoration-ink-faint/40 decoration-dotted underline-offset-4 coarse:inline-flex coarse:min-h-11 coarse:items-center coarse:px-1 coarse:-mx-1";
+const TARGET_CLASS =
+  "coarse:inline-flex coarse:min-h-11 coarse:items-center coarse:px-1 coarse:-mx-1";
 
 // The same 44px target, taken out of the line box: the `::after` overlay grows
 // over what sits above and below instead of setting the row's height.
-const COMPACT_ABBR_CLASS =
-  "underline decoration-ink-faint/40 decoration-dotted underline-offset-4 coarse:relative coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-4 coarse:after:content-['']";
+const COMPACT_TARGET_CLASS =
+  "coarse:relative coarse:after:absolute coarse:after:inset-x-0 coarse:after:-inset-y-4 coarse:after:content-['']";
 
 /**
  * A loudness unit ("LUFS", "TP") or live reading ("M", "S") as an `<abbr>`
@@ -34,7 +37,7 @@ const COMPACT_ABBR_CLASS =
  * explanation without repeating it as caption text. A fine pointer opens the
  * explanation on hover or keyboard focus, in the app's root
  * `TooltipProvider`. A coarse pointer has no hover, so it gets a `Popover`
- * instead — the same `<abbr>` as its trigger, opened by a tap.
+ * instead — a native `<button>` wrapping the `<abbr>`, opened by a tap.
  */
 export function LoudnessUnit({
   unit,
@@ -52,19 +55,23 @@ export function LoudnessUnit({
   className?: string;
 }) {
   const coarse = useCoarsePointer();
-  const abbr = (
-    <abbr
-      tabIndex={compact ? undefined : 0}
-      className={cn(compact ? COMPACT_ABBR_CLASS : ABBR_CLASS, className)}
-    >
-      {unit}
-    </abbr>
-  );
 
   if (coarse) {
     return (
       <Popover>
-        <PopoverTrigger asChild>{abbr}</PopoverTrigger>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            tabIndex={compact ? -1 : undefined}
+            className={cn(
+              "inline cursor-pointer border-0 bg-transparent p-0 text-inherit [font:inherit]",
+              compact ? COMPACT_TARGET_CLASS : TARGET_CLASS,
+              className
+            )}
+          >
+            <abbr className={UNDERLINE_CLASS}>{unit}</abbr>
+          </button>
+        </PopoverTrigger>
         <PopoverContent>{LOUDNESS_UNIT_COPY[unit]}</PopoverContent>
       </Popover>
     );
@@ -72,7 +79,18 @@ export function LoudnessUnit({
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{abbr}</TooltipTrigger>
+      <TooltipTrigger asChild>
+        <abbr
+          tabIndex={compact ? undefined : 0}
+          className={cn(
+            UNDERLINE_CLASS,
+            compact ? COMPACT_TARGET_CLASS : TARGET_CLASS,
+            className
+          )}
+        >
+          {unit}
+        </abbr>
+      </TooltipTrigger>
       <TooltipContent>{LOUDNESS_UNIT_COPY[unit]}</TooltipContent>
     </Tooltip>
   );

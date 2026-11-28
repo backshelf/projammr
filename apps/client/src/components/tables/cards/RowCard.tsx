@@ -1,15 +1,23 @@
 "use client";
 
 import { AppLink } from "@/components/navigation/AppLink";
-import { IconDotsVertical } from "@tabler/icons-react";
+import type { DraggableAttributes } from "@dnd-kit/core";
+import type { SyntheticListenerMap } from "@dnd-kit/core/dist/hooks/utilities";
+import { IconDotsVertical, IconGripVertical } from "@tabler/icons-react";
 import { CollapsibleChevron } from "@workspace/ui/components/collapsible";
 import { IconButton } from "@workspace/ui/components/icon-button";
 import { StatusChip } from "@workspace/ui/components/status-chip";
 import { TrackCell } from "@workspace/ui/components/table";
 import { cn } from "@workspace/ui/lib/utils";
-import { memo, useCallback, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+} from "react";
 
-import { PriorityBadge } from "../Priority";
+import { isSuppressedPriority, PriorityBadge } from "../Priority";
 import { StatusDisplay } from "@/components/status/StatusDisplay";
 import { imageUrl } from "@/lib/utils";
 import { CardPlayButton } from "./CardPlay";
@@ -43,7 +51,10 @@ function MetaText({ row }: { row: RowCardModel }) {
  * rhythm on narrow screens.
  */
 function ChipRow({ row }: { row: RowCardModel }) {
-  if (!row.status && !row.priority) return null;
+  const showPriority = Boolean(
+    row.priority && !isSuppressedPriority(row.priority)
+  );
+  if (!row.status && !showPriority) return null;
 
   return (
     <div className="mt-1 flex min-w-0 items-center gap-1.5">
@@ -54,7 +65,9 @@ function ChipRow({ row }: { row: RowCardModel }) {
           className="max-w-36 min-w-0 truncate"
         />
       ) : null}
-      {row.priority ? <PriorityBadge level={row.priority} /> : null}
+      {showPriority && row.priority ? (
+        <PriorityBadge level={row.priority} hideDefault />
+      ) : null}
     </div>
   );
 }
@@ -64,6 +77,11 @@ function Identity({ row }: { row: RowCardModel }) {
   return (
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-1.5">
+        {row.trackNumber != null ? (
+          <span className="shrink-0 font-mono text-micro text-ink-soft tabular-nums">
+            #{row.trackNumber}
+          </span>
+        ) : null}
         <span className="truncate text-body font-medium text-ink">
           {row.title}
         </span>
@@ -123,6 +141,10 @@ export const RowCard = memo(function RowCard({
   onToggleSelect,
   expanded,
   onToggleExpand,
+  cardRef,
+  style,
+  isDragging,
+  dragHandle,
 }: {
   row: RowCardModel;
   entityLabel: string;
@@ -133,6 +155,13 @@ export const RowCard = memo(function RowCard({
   expanded?: boolean;
   /** Absent when the table has no hierarchy to disclose. */
   onToggleExpand?: (id: number) => void;
+  cardRef?: Ref<HTMLDivElement>;
+  style?: CSSProperties;
+  isDragging?: boolean;
+  dragHandle?: {
+    attributes: DraggableAttributes;
+    listeners: SyntheticListenerMap | undefined;
+  };
 }) {
   const openActions = useCallback(
     () => onOpenActions?.(row.id),
@@ -141,7 +170,8 @@ export const RowCard = memo(function RowCard({
   const { handlers: longPress, pressing } = useLongPress(openActions);
   const thumb = imageUrl(row.image, 256);
   const children = row.children ?? [];
-  const canExpand = onToggleExpand != null && children.length > 0;
+  const canExpand =
+    !dragHandle && onToggleExpand != null && children.length > 0;
   // A row with no artwork and nothing to put on it — a session, say — would
   // lead with an empty tile, so the identity takes the head of the card
   // instead. The checkbox needs the tile back while the list is selecting.
@@ -149,11 +179,14 @@ export const RowCard = memo(function RowCard({
 
   return (
     <div
+      ref={cardRef}
+      style={style}
       role="listitem"
       className={cn(
-        "border-b border-rule",
+        "border-b border-rule bg-paper",
         "select-none [-webkit-touch-callout:none]",
-        "[contain-intrinsic-size:auto_76px] [content-visibility:auto]"
+        "[contain-intrinsic-size:auto_76px] [content-visibility:auto]",
+        isDragging && "opacity-40"
       )}
     >
       <div
@@ -161,7 +194,7 @@ export const RowCard = memo(function RowCard({
         // the action sheet is visible rather than a silent 450 ms.
         data-pressing={pressing || undefined}
         className="flex min-h-14 items-center gap-3 px-(--gutter) py-2.5 motion-settle data-pressing:scale-[0.985]"
-        {...(onOpenActions ? longPress : {})}
+        {...(onOpenActions && !dragHandle ? longPress : {})}
       >
         {showThumb ? (
           <TrackCell image={thumb} size="xl" className="relative size-11">
@@ -206,7 +239,18 @@ export const RowCard = memo(function RowCard({
             <CollapsibleChevron />
           </IconButton>
         ) : null}
-        {onOpenActions ? (
+        {dragHandle ? (
+          <button
+            type="button"
+            aria-label={`Drag to reorder ${row.title}`}
+            style={{ touchAction: "none" }}
+            className="inline-flex size-11 shrink-0 cursor-grab items-center justify-center rounded-md text-ink-soft active:cursor-grabbing"
+            {...dragHandle.attributes}
+            {...dragHandle.listeners}
+          >
+            <IconGripVertical className="size-5" aria-hidden />
+          </button>
+        ) : onOpenActions ? (
           <IconButton
             size="touch"
             aria-label={`Actions for ${entityLabel} ${row.title}`}

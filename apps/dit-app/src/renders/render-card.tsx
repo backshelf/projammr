@@ -1,22 +1,38 @@
-import { Fragment, memo, type JSX } from "react";
+import { Fragment, memo, useRef, useState, type JSX } from "react";
 import {
   IconCheck,
+  IconChevronDown,
   IconClockPause,
   IconPlayerPause,
   IconPlayerPlay,
 } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
 import { useFormat } from "@workspace/ui/components/format-provider";
 import { IconButton } from "@workspace/ui/components/icon-button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+} from "@workspace/ui/components/popover";
 import { Progress } from "@workspace/ui/components/progress";
 import { cn } from "@workspace/ui/lib/utils";
 
 import { ErrorLine } from "../error-line";
 import type { RenderCard } from "../ipc";
+import { useOptionalPanelActions } from "../panel-actions";
 import { NotThisSet } from "./not-this-set";
-import { toggleAudition, usePreviewOf } from "./preview";
+import { previewPlayer, toggleAudition, usePreviewOf } from "./preview";
 import {
   factsOf,
+  fileName,
   folderOf,
   isDecidable,
   isPair,
@@ -62,26 +78,37 @@ export const RenderCardView = memo(function RenderCardView({
   onDecide: (card: RenderCard, decision: CardDecision) => void;
 }): JSX.Element {
   const format = useFormat();
+  const panelActions = useOptionalPanelActions();
   const main = mainFile(card);
   const path = main?.path ?? null;
   const preview = usePreviewOf(path);
   const names = namesOf(card);
   const folder = path === null ? "" : folderOf(path);
+  const folderLabel = folder === "" ? "" : fileName(folder);
   const facts = factsOf(card, format, preview?.length);
-  const reasons = reasonsOf(card, format);
+  const reasons = reasonsOf(card);
   const decidable = isDecidable(card);
+  const mutedTone = active ? "text-ink-soft" : "text-ink-faint";
+  const scrubFraction =
+    preview && preview.length > 0
+      ? Math.min(1, Math.max(0, preview.at / preview.length))
+      : 0;
 
   return (
     <div
       id={optionId(card.id)}
-      role="option"
-      aria-selected={active}
+      role="listitem"
       aria-label={names}
       tabIndex={active ? 0 : -1}
       data-render={card.id}
       data-state={card.state}
       data-cursor={active || undefined}
       onClick={() => onCursor(card.id)}
+      onFocus={(event) => {
+        if (!active && event.currentTarget.contains(event.target)) {
+          onCursor(card.id);
+        }
+      }}
       className={cn(
         "relative -mx-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 border-t border-rule px-4 py-3 motion-ink outline-none",
         "focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset",
@@ -112,7 +139,12 @@ export const RenderCardView = memo(function RenderCardView({
           {names}
         </p>
         {folder !== "" && (
-          <p className="text-small/snug [overflow-wrap:anywhere] text-ink-faint">
+          <p
+            className={cn(
+              "text-small/snug [overflow-wrap:anywhere]",
+              mutedTone
+            )}
+          >
             {folder}
           </p>
         )}
@@ -121,7 +153,7 @@ export const RenderCardView = memo(function RenderCardView({
             {facts.map((fact, index) => (
               <Fragment key={fact}>
                 {index > 0 && (
-                  <span aria-hidden className="text-ink-faint">
+                  <span aria-hidden className={mutedTone}>
                     {"\u00b7"}
                   </span>
                 )}
@@ -136,6 +168,34 @@ export const RenderCardView = memo(function RenderCardView({
             )}
           </p>
         )}
+        {preview && (
+          <div
+            role="slider"
+            aria-label="Seek bounce preview"
+            aria-valuemin={0}
+            aria-valuemax={Math.max(0, Math.round(preview.length))}
+            aria-valuenow={Math.round(preview.at)}
+            tabIndex={0}
+            onClick={(event) => {
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              if (rect.width <= 0) return;
+              const fraction = Math.max(
+                0,
+                Math.min(1, (event.clientX - rect.left) / rect.width)
+              );
+              previewPlayer.seekFraction(fraction);
+            }}
+            className="relative -my-1 cursor-pointer rounded-xs py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+          >
+            <div className="h-0.5 w-full overflow-hidden rounded-full bg-rule">
+              <div
+                className="h-full bg-art"
+                style={{ width: `${scrubFraction * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
         {decidable && (reasons.length > 0 || card.set !== null) && (
           <p className="text-small/snug text-pretty text-ink-soft">
             {card.set !== null && (
@@ -148,22 +208,28 @@ export const RenderCardView = memo(function RenderCardView({
           </p>
         )}
         {card.state === "proposed" && isPair(card) && (
-          <p className="text-small/snug text-pretty text-ink-faint">
+          <p className={cn("text-small/snug text-pretty", mutedTone)}>
             Only the largest file under your size limit is uploaded.
           </p>
         )}
-        <StateLine card={card} />
-        {card.message !== null && card.state !== "added" && (
-          <p
-            role="status"
-            className="text-small/snug text-pretty text-ink-soft"
-          >
-            {card.message}
-          </p>
-        )}
+        <StateLine
+          card={card}
+          onRaiseLimit={() => panelActions?.go("settings", "bounces")}
+        />
+        {card.message !== null &&
+          card.state !== "added" &&
+          card.state !== "over-limit" && (
+            <p
+              role="status"
+              className="text-small/snug text-pretty text-ink-soft"
+            >
+              {card.message}
+            </p>
+          )}
         {decidable && (
           <Decisions
             card={card}
+            folderLabel={folderLabel}
             busy={busy}
             onDecide={(decision) => onDecide(card, decision)}
           />
@@ -175,7 +241,13 @@ export const RenderCardView = memo(function RenderCardView({
 });
 
 /** What the card says of where it stands, below its facts: nothing while it waits on a decision. */
-function StateLine({ card }: { card: RenderCard }): JSX.Element | null {
+function StateLine({
+  card,
+  onRaiseLimit,
+}: {
+  card: RenderCard;
+  onRaiseLimit: () => void;
+}): JSX.Element | null {
   const format = useFormat();
   switch (card.state) {
     case "uploading": {
@@ -219,63 +291,130 @@ function StateLine({ card }: { card: RenderCard }): JSX.Element | null {
         </p>
       );
     case "over-limit":
-      return <p className="text-small/snug text-ink">Over your size limit</p>;
+      return (
+        <p className="flex flex-wrap items-baseline gap-x-2 text-small/snug text-ink">
+          <span role="status">{card.message ?? "Over your size limit"}</span>
+          <Button
+            variant="link"
+            className="h-auto p-0 text-small text-ink-soft"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRaiseLimit();
+            }}
+          >
+            Raise limit
+          </Button>
+        </p>
+      );
     case "proposed":
     case "waiting":
       return null;
   }
 }
 
-/** The four decisions of a card waiting on one; the first is "Add anyway" past the size limit. */
+/** The decisions of a card waiting on one: primary accept, Not a bounce, and Other ▾ (Wrong set… / Never watch <folder>/). */
 function Decisions({
   card,
+  folderLabel,
   busy,
   onDecide,
 }: {
   card: RenderCard;
+  folderLabel: string;
   busy: boolean;
   onDecide: (decision: CardDecision) => void;
 }): JSX.Element {
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const [otherOverlay, setOtherOverlay] = useState<
+    "wrong-set" | "never-watch" | null
+  >(null);
+  const neverWatchLabel =
+    folderLabel === ""
+      ? "Never watch this folder"
+      : `Never watch ${folderLabel}/`;
+
   return (
-    <div className="flex flex-wrap items-center gap-x-1 gap-y-1 pt-1">
-      <div className="flex items-center gap-1">
-        <Button
-          disabled={busy}
-          onClick={(event) => {
-            event.stopPropagation();
-            onDecide({ kind: "accept" });
-          }}
-        >
-          {card.state === "over-limit" ? "Add anyway" : "Add as version"}
-        </Button>
-        <NotThisSet
-          sets={card.otherSets}
-          disabled={busy}
-          onPick={(session) => onDecide({ kind: "accept", session })}
-        />
-      </div>
-      <div className="-ml-2 flex items-center gap-1">
-        <Button
-          variant="ghost"
-          disabled={busy}
-          onClick={(event) => {
-            event.stopPropagation();
-            onDecide({ kind: "reject", mode: "not-a-bounce" });
-          }}
-        >
-          Not a bounce
-        </Button>
-        <Button
-          variant="ghost"
-          disabled={busy}
-          onClick={(event) => {
-            event.stopPropagation();
-            onDecide({ kind: "reject", mode: "never-here" });
-          }}
-        >
-          Never here
-        </Button>
-      </div>
+    <div
+      ref={anchorRef}
+      className="flex flex-wrap items-center gap-x-1 gap-y-1 pt-1"
+    >
+      <Button
+        disabled={busy}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDecide({ kind: "accept" });
+        }}
+      >
+        {card.state === "over-limit" ? "Add anyway" : "Add as version"}
+      </Button>
+      <Button
+        variant="ghost"
+        disabled={busy}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDecide({ kind: "reject", mode: "not-a-bounce" });
+        }}
+      >
+        Not a bounce
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={(event) => event.stopPropagation()}
+          >
+            Other
+            <IconChevronDown aria-hidden className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuItem onSelect={() => setOtherOverlay("wrong-set")}>
+            {"Wrong set\u2026"}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setOtherOverlay("never-watch")}>
+            {neverWatchLabel}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <NotThisSet
+        sets={card.otherSets}
+        open={otherOverlay === "wrong-set"}
+        anchor={anchorRef}
+        onOpenChange={(open) => setOtherOverlay(open ? "wrong-set" : null)}
+        onPick={(session) => onDecide({ kind: "accept", session })}
+      />
+
+      <Popover
+        open={otherOverlay === "never-watch"}
+        onOpenChange={(open) => setOtherOverlay(open ? "never-watch" : null)}
+      >
+        <PopoverContent align="end" anchor={anchorRef} className="w-64 gap-3">
+          <PopoverHeader>
+            <PopoverTitle>{`${neverWatchLabel}?`}</PopoverTitle>
+            <PopoverDescription>
+              {
+                "Future exports here won\u2019t show up as bounces. You can undo this in Settings."
+              }
+            </PopoverDescription>
+          </PopoverHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setOtherOverlay(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setOtherOverlay(null);
+                onDecide({ kind: "reject", mode: "never-here" });
+              }}
+            >
+              Never watch
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

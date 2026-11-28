@@ -12,14 +12,9 @@ import { IconPencil } from "@tabler/icons-react";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Input } from "@workspace/ui/components/input";
+import { ResponsivePicker } from "@workspace/ui/components/responsive-picker";
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
 import { AnimatePresence, m, OPTICAL, SPRING } from "@workspace/ui/lib/motion";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@workspace/ui/components/select";
 import {
   Tooltip,
   TooltipContent,
@@ -133,7 +128,7 @@ function LinkValue({
         onClick={onEdit}
         aria-label={`Edit ${label}`}
         className={cn(
-          "shrink-0 rounded-sm text-ink-faint hover:text-ink focus-visible:text-ink focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-none coarse:after:absolute coarse:after:-inset-2",
+          "relative shrink-0 rounded-sm text-ink-faint hover:text-ink focus-visible:text-ink focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden coarse:after:absolute coarse:after:-inset-2",
           REVEAL_ON_HOVER
         )}
       >
@@ -202,18 +197,16 @@ function ReadOnlyProperty({
           </span>
         ) : (
           <span
-            className="line-clamp-1 text-ink-soft"
+            className={cn(
+              "line-clamp-1 text-ink-soft",
+              copyable && "phone:line-clamp-none phone:break-all"
+            )}
             title={copyable ? String(value) : undefined}
           >
             {readableText({ value, options, displayValue })}
           </span>
         )}
       </div>
-      {copyable && !isEmpty && (
-        <p className="hidden w-full font-mono text-micro break-all text-ink-soft phone:block">
-          {String(value)}
-        </p>
-      )}
       {hint != null && !isEmpty && (
         <p className="mt-0.5 text-micro text-ink-soft">{hint}</p>
       )}
@@ -269,17 +262,32 @@ function DraftPropertyEditor({
     prepare,
   });
 
-  const isEmpty = value === undefined || value === null || value === "";
+  const isMobile = useIsMobile();
+  const [optimisticSelect, setOptimisticSelect] = useOptimistic(
+    value === undefined || value === null ? "" : String(value)
+  );
+  const [selectPending, startSelectTransition] = useTransition();
+
+  const effectiveValue = type === "select" ? optimisticSelect : value;
+  const isEmpty =
+    effectiveValue === undefined ||
+    effectiveValue === null ||
+    effectiveValue === "";
   // A select's value is an option's; it reads as that option's label, or as
   // itself once the option is gone.
   const displayValue = isEmpty
     ? `Add ${label.toLowerCase()}`
-    : readableText({ value, options, displayValue: readableValue });
+    : readableText({
+        value: effectiveValue,
+        options,
+        displayValue: readableValue,
+      });
   const isLink = type === "url" && typeof value === "string" && value !== "";
   const valueClassName = cn(
     "-mx-1 line-clamp-1 h-fit w-full rounded-md px-1 py-0.5 text-left font-mono text-small motion-ink",
-    "hover:bg-ink/4 focus-visible:bg-ink/4 focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-none",
-    "coarse:min-h-11",
+    "hover:bg-ink/4 focus-visible:bg-ink/4 focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden",
+    "coarse:min-h-11 coarse:pr-6",
+    copyable && "phone:line-clamp-none phone:break-all",
     isEmpty
       ? "text-ink-faint italic group-hover:text-ink-soft"
       : "text-ink-soft group-hover:text-ink"
@@ -289,51 +297,48 @@ function DraftPropertyEditor({
     <CopyButton value={String(value)} label={`Copy ${label.toLowerCase()}`} />
   );
 
+  const handleSelectOption = (next: string) => {
+    if (next === String(value ?? "")) return;
+    startSelectTransition(async () => {
+      setOptimisticSelect(next);
+      const result = await patchField(entityType, entityId, fieldName, next);
+      if (isActionError(result)) toast.error(result.error);
+    });
+  };
+
+  const handleClearSelect = () => {
+    startSelectTransition(async () => {
+      setOptimisticSelect("");
+      const result = await patchField(entityType, entityId, fieldName, null);
+      if (isActionError(result)) toast.error(result.error);
+    });
+  };
+
   const valueButton = (
     <button
       type={"button"}
-      onClick={edit.begin}
-      aria-label={`Edit ${label}`}
+      onClick={type === "select" ? undefined : edit.begin}
+      disabled={type === "select" ? selectPending : undefined}
+      aria-label={`${displayValue} — Edit ${label}`}
       className={valueClassName}
     >
       {displayValue}
     </button>
   );
 
-  const inputEl =
-    type === "select" ? (
-      <Select
-        value={edit.draft}
-        onValueChange={(next) => edit.setDraft(String(next ?? ""))}
-        items={options}
-      >
-        <SelectTrigger
-          className="w-full md:text-small fine:h-6 coarse:h-11"
-          aria-label={label}
-        >
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {options?.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    ) : (
-      <Input
-        type={type}
-        value={edit.draft}
-        onChange={(e) => edit.setDraft(e.target.value)}
-        onKeyDown={edit.onKeyDown}
-        placeholder={placeholder}
-        aria-label={label}
-        aria-invalid={edit.error != null}
-        className="w-full md:text-small fine:h-6 coarse:h-11"
-        autoFocus
-      />
-    );
+  const inputEl = (
+    <Input
+      type={type}
+      value={edit.draft}
+      onChange={(e) => edit.setDraft(e.target.value)}
+      onKeyDown={edit.onKeyDown}
+      placeholder={placeholder}
+      aria-label={label}
+      aria-invalid={edit.error != null}
+      className="w-full md:text-small fine:h-6 coarse:h-11"
+      autoFocus={!isMobile}
+    />
+  );
 
   return (
     <m.div
@@ -382,6 +387,32 @@ function DraftPropertyEditor({
             <RailLabel action={copyAction || undefined}>{label}</RailLabel>
             {isLink ? (
               <LinkValue href={value} label={label} onEdit={edit.begin} />
+            ) : type === "select" ? (
+              <div className="relative w-full">
+                <ResponsivePicker
+                  title={label}
+                  options={
+                    options?.map((opt) => ({
+                      value: opt.value,
+                      label: opt.label,
+                    })) ?? []
+                  }
+                  value={optimisticSelect || undefined}
+                  onSelect={handleSelectOption}
+                  showClear={clearable && optimisticSelect !== ""}
+                  onClear={handleClearSelect}
+                  clearLabel="Clear"
+                  trigger={valueButton}
+                />
+                <IconPencil
+                  size={14}
+                  aria-hidden={"true"}
+                  className={cn(
+                    "pointer-events-none absolute right-0 bottom-0.5 text-ink-faint",
+                    REVEAL_ON_HOVER
+                  )}
+                />
+              </div>
             ) : (
               <div className="relative w-full">
                 {copyable && !isEmpty ? (
@@ -403,11 +434,6 @@ function DraftPropertyEditor({
                   )}
                 />
               </div>
-            )}
-            {copyable && !isEmpty && (
-              <p className="hidden w-full font-mono text-micro break-all text-ink-soft phone:block">
-                {String(value)}
-              </p>
             )}
             {hint != null && !isEmpty && (
               <p className="mt-0.5 text-micro text-ink-soft">{hint}</p>

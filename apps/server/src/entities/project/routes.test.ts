@@ -3774,6 +3774,10 @@ describe("project today", () => {
     saves: { sessionId: number }[];
     counts: { renders: number; saves: number };
     quiet: { tracks: { id: number }[]; total: number };
+    unassignedSets: {
+      sessions: { id: number; name: string; saveCount: number }[];
+      total: number;
+    };
   };
 
   async function readToday(caller: "viewer" | "owner" = "viewer") {
@@ -3841,7 +3845,39 @@ describe("project today", () => {
       saves: [],
       counts: { renders: 0, saves: 0 },
       quiet: { tracks: [], total: 0 },
+      unassignedSets: { sessions: [], total: 0 },
     });
+  });
+
+  it("lists unassigned undismissed DAW sets newest-saved first, capped at 5 with total", async () => {
+    today.requireProject();
+    const trackId = await today.mkTrack("Assigned Track");
+    await today.mkSession({ trackId, name: "Assigned Set" });
+    const dismissed = await today.mkSession({ name: "Dismissed Set" });
+    await db
+      .update(sessions)
+      .set({ inboxDismissedAt: new Date() })
+      .where(eq(sessions.id, dismissed.id));
+
+    const createdIds: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const s = await today.mkSession({ name: `Inbox ${i}` });
+      createdIds.push(s.id);
+      await db.insert(saves).values({
+        sessionId: s.id,
+        projectId: today.projectId,
+        fileUpdatedAt: ago((6 - i) * HOUR_MS),
+        source: "scan",
+      });
+    }
+
+    const body = await readToday("owner");
+    expect(body.unassignedSets.total).toBe(6);
+    expect(body.unassignedSets.sessions).toHaveLength(5);
+    expect(body.unassignedSets.sessions.map((s) => s.id)).toEqual(
+      createdIds.slice(1).reverse()
+    );
+    expect(body.unassignedSets.sessions[0]?.saveCount).toBe(1);
   });
 
   it("lists a render linked now and leaves out one linked 25 hours ago", async () => {

@@ -18,9 +18,9 @@ use dit_daemon::{RenderEvent, RenderState};
 
 use crate::snapshot::{
     AdoptOffer, Adopting, AdoptingSet, AdoptingState, Artwork, Auth, BackfillState, Connection,
-    HeadCommit, HubProject, LastCommit, OpenSet, PendingRestore, PushPhase, PushProgress,
-    PushState, RenderCard, RenderSet, RepoRow, RestoreState, SavePush, SaveRow, ScriptPhase,
-    Settings, Snapshot, TrackChoice, TrackProposal, UpdateState,
+    HeadCommit, HubProject, LastCommit, OpenSet, OpenTrack, PendingRestore, PushPhase,
+    PushProgress, PushState, RenderCard, RenderSet, RepoRow, RestoreState, SavePush, SaveRow,
+    ScriptPhase, Settings, Snapshot, TrackChoice, TrackProposal, UpdateState,
 };
 
 /// How many notices the panel keeps: the newest.
@@ -66,6 +66,8 @@ pub struct HubSet {
     pub artwork: Option<Artwork>,
     /// The session already has a track.
     pub has_track: bool,
+    /// The track the session is linked to, when assigned.
+    pub track: Option<OpenTrack>,
     /// The hub's tracks the set may be, best first; read while the session has none.
     pub choices: Vec<TrackChoice>,
 }
@@ -78,8 +80,6 @@ pub struct HubTarget {
     /// The set's name, and its folder's without ` Project`: what a track is matched to.
     pub set_name: String,
     pub folder_name: String,
-    /// The set has no commit of the user's, so its track is still to be chosen.
-    pub wants_track: bool,
 }
 
 /// A repo's hub repo: the instance it was bound on and its id there.
@@ -663,7 +663,6 @@ impl Reducer {
             session_id: self.read.session_id?,
             set_name: open.name.clone(),
             folder_name: new_track_title(open.repo.as_deref(), &open.name),
-            wants_track: self.read.first_commit,
         })
     }
 
@@ -815,6 +814,7 @@ impl Reducer {
             branch: info.branch.clone(),
             signal: info.signal.into(),
             web_path: None,
+            track: None,
         });
         if let Some(offer) = &self.snapshot.adopt_offer {
             let still_inside = info.is_some_and(|info| info.path.starts_with(&offer.folder));
@@ -834,7 +834,7 @@ impl Reducer {
             .filter(|set| self.hub && open.is_some_and(|open| open.path == set.path))
             .filter(|set| self.read.session_id == Some(set.session_id));
         let proposal = hub_set
-            .filter(|set| !set.has_track && self.read.first_commit)
+            .filter(|set| !set.has_track)
             .zip(open)
             .map(|(set, open)| TrackProposal {
                 choices: set.choices.clone(),
@@ -842,14 +842,18 @@ impl Reducer {
             });
         self.snapshot.artwork = hub_set.and_then(|set| set.artwork.clone());
         self.snapshot.track_proposal = proposal;
-        let web_path =
-            hub_set.map(|set| format!("/project/{}/session/{}", set.project_id, set.session_id));
+        let track = hub_set.and_then(|set| set.track.clone());
+        let web_path = hub_set.map(|set| match &set.track {
+            Some(track) => format!("/project/{}/track/{}", set.project_id, track.id),
+            None => format!("/project/{}/session/{}", set.project_id, set.session_id),
+        });
         self.snapshot.live_tracks = self
             .live
             .clone()
             .filter(|_| open.is_some_and(|open| open.signal == crate::snapshot::Signal::Script));
         if let Some(open) = &mut self.snapshot.open {
             open.web_path = web_path;
+            open.track = track;
         }
     }
 
@@ -1139,6 +1143,8 @@ mod tests {
             built_in_excluded: Vec::new(),
             rejected_files: Vec::new(),
             never_here_folders: Vec::new(),
+            home: "/Users/me".to_string(),
+            app_version: "1.0.0".to_string(),
         }
     }
 
@@ -1224,6 +1230,7 @@ mod tests {
                 branch: Some("main".to_string()),
                 signal: crate::snapshot::Signal::Script,
                 web_path: None,
+                track: None,
             })
         );
         assert_eq!(
@@ -2031,6 +2038,10 @@ mod tests {
                 accent_chroma: None,
             }),
             has_track,
+            track: has_track.then(|| OpenTrack {
+                id: 12,
+                title: "science".to_string(),
+            }),
             choices: choices
                 .iter()
                 .map(|(label, track)| TrackChoice {
@@ -2058,6 +2069,7 @@ mod tests {
         let (_, mut reducer) = opened_session(false);
         assert_eq!(reducer.snapshot().artwork, None);
         assert_eq!(reducer.snapshot().open.as_ref().unwrap().web_path, None);
+        assert_eq!(reducer.snapshot().open.as_ref().unwrap().track, None);
         assert_eq!(
             reducer.hub_target().map(|target| target.session_id),
             Some(812)
@@ -2072,13 +2084,20 @@ mod tests {
         );
         assert_eq!(
             snapshot.open.as_ref().unwrap().web_path.as_deref(),
-            Some("/project/4/session/812")
+            Some("/project/4/track/12")
+        );
+        assert_eq!(
+            snapshot.open.as_ref().unwrap().track,
+            Some(OpenTrack {
+                id: 12,
+                title: "science".to_string()
+            })
         );
         assert_eq!(snapshot.track_proposal, None, "the session has a track");
     }
 
     #[test]
-    fn a_session_without_a_track_proposes_one_until_the_set_has_a_commit_of_the_users() {
+    fn a_session_without_a_track_proposes_one_even_after_the_first_commit() {
         let (fake, mut reducer) = opened_session(true);
         reducer.set_hub_set(session(812, false, &[("science", "12"), ("Canopy", "31")]));
 
@@ -2086,17 +2105,28 @@ mod tests {
         assert_eq!(proposal.new_track, "science");
         assert_eq!(proposal.choices.len(), 2);
         assert_eq!(proposal.choices[0].track, "12");
-        assert!(reducer.hub_target().unwrap().wants_track);
+        assert_eq!(
+            reducer
+                .snapshot()
+                .open
+                .as_ref()
+                .unwrap()
+                .web_path
+                .as_deref(),
+            Some("/project/4/session/812")
+        );
 
-        // The first commit is made: the readout no longer says first.
+        // The first commit is made: track assignment remains reachable until the session has a track.
         *fake.0.lock().unwrap() = SetReadout {
             first_commit: false,
             session_id: Some(812),
             ..SetReadout::default()
         };
         reducer.refresh();
+        assert!(reducer.snapshot().track_proposal.is_some());
+
+        reducer.set_hub_set(session(812, true, &[]));
         assert_eq!(reducer.snapshot().track_proposal, None);
-        assert!(!reducer.hub_target().unwrap().wants_track);
     }
 
     #[test]

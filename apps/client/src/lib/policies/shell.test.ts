@@ -8,8 +8,10 @@ import {
   shownSections,
 } from "./shell";
 
-const shown = <const Id extends string>(ids: readonly Id[]) =>
-  ids.map((id) => ({ id, shown: true }));
+const shown = <const Id extends string>(
+  ids: readonly Id[],
+  hidden: readonly Id[] = []
+) => ids.map((id) => ({ id, shown: !hidden.includes(id) }));
 
 describe("DEFAULT_SHELL", () => {
   it("is the shell as it has always been laid out", () => {
@@ -20,35 +22,37 @@ describe("DEFAULT_SHELL", () => {
       sidebarSections: [
         { id: "collections", shown: true, collapsed: false },
         { id: "tracks", shown: true, collapsed: false },
+        { id: "studio", shown: true, collapsed: true },
         { id: "notebook", shown: true, collapsed: false },
-        { id: "sessions", shown: true, collapsed: false },
       ],
       sidebarCollectionOrder: "release",
-      dockTabs: ["collections", "tracks", "notes", "sessions", "search"],
+      dockTabs: ["home", "collections", "tracks", "notes", "search"],
       paletteResultCap: 5,
       paletteAliases: {},
       paletteEmptyGroups: ["actions", "recent-tracks", "recent-sessions"],
-      projectHomeSections: shown([
-        "new",
-        "quiet",
-        "jobs",
-        "recent-activity",
-        "overview",
-        "collections",
-        "plugins",
-        "samples",
-        "heatmap",
-        "links",
-        "attachments",
-        "comments",
-        "add",
-        "activity",
-      ]),
+      projectHomeSections: shown(
+        [
+          "new",
+          "unassigned-sets",
+          "quiet",
+          "jobs",
+          "overview",
+          "collections",
+          "plugins",
+          "samples",
+          "heatmap",
+          "links",
+          "attachments",
+          "comments",
+          "add",
+          "activity",
+        ],
+        ["plugins", "samples", "heatmap"]
+      ),
       entityPageSections: {
         collection: shown([
           "overview",
           "tracks",
-          "repositories",
           "attachments",
           "comments",
           "add",
@@ -57,8 +61,6 @@ describe("DEFAULT_SHELL", () => {
         track: shown([
           "overview",
           "lyrics",
-          "sessions",
-          "repositories",
           "relations",
           "attachments",
           "comments",

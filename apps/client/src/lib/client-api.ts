@@ -23,15 +23,22 @@ import {
   Asset,
   CollectionPrimaryAudios,
   CollectionTrackSummary,
+  GetSession,
   HeatmapDay,
   Job,
   MachineList,
+  MachinePresence,
   MyProject,
   PlayableTrackAudio,
   ProjectSave,
+  Repo,
+  SampleUsage,
   Session,
+  SessionCommit,
+  SessionSave,
   TableEntityKind,
   TrackAudioDiff,
+  TrackSummary,
   UserHeatmapDay,
 } from "@workspace/api/api";
 import type { MeasureName } from "@workspace/api/lib/enums";
@@ -316,3 +323,89 @@ export const clientGetMyHeatmap = async (range: {
   to: number;
   tz: string;
 }): Promise<UserHeatmapDay[] | ActionError> => myHeatmap(browserApi, range);
+
+/** Full detail for one session, lazy-loaded when the track Studio drawer opens. */
+export const clientGetSession = async (
+  sessionId: number
+): Promise<GetSession | ActionError> => {
+  const res = await browserApi.GET("/api/sessions/{id}", {
+    params: { path: { id: String(sessionId) } },
+  });
+
+  return toActionResult(res, "Failed to load session");
+};
+
+/** Recorded saves for one session, newest first. */
+export const clientGetSessionSaves = async (
+  sessionId: number,
+  limit?: number
+): Promise<SessionSave[] | ActionError> => {
+  const res = await browserApi.GET("/api/sessions/{id}/saves", {
+    params: { path: { id: String(sessionId) }, query: { limit } },
+  });
+
+  return toActionResult(res, "Failed to load session saves");
+};
+
+/** dit commits for one session on a branch, newest first. */
+export const clientGetSessionCommits = async (
+  sessionId: number,
+  options: { branch?: string; limit?: number } = {}
+): Promise<SessionCommit[] | ActionError> => {
+  const res = await browserApi.GET("/api/sessions/{id}/commits", {
+    params: {
+      path: { id: String(sessionId) },
+      query: { branch: options.branch, limit: options.limit },
+    },
+  });
+
+  return toActionResult(res, "Failed to load session commits");
+};
+
+/** Online machines of the caller tracking/opening a session. */
+export const clientGetSessionPresence = async (
+  sessionId: number
+): Promise<MachinePresence[]> => {
+  const res = await browserApi.GET("/api/sessions/{id}/presence", {
+    params: { path: { id: String(sessionId) } },
+  });
+
+  const result = await toActionResult<{ machines: MachinePresence[] }>(
+    res,
+    "Failed to load session presence"
+  );
+  return isActionError(result) ? [] : result.machines;
+};
+
+/** dit repositories linked to a track's sessions. */
+export const clientGetTrackRepos = async (
+  trackId: number
+): Promise<Repo[] | ActionError> => {
+  const res = await browserApi.GET("/api/tracks/{id}/repos", {
+    params: { path: { id: String(trackId) } },
+  });
+
+  return toActionResult(res, "Failed to load track repositories");
+};
+
+/** Project-wide sample usage inventory, lazy-loaded for Gear & Samples. */
+export const clientGetProjectSamples = async (
+  projectId: number
+): Promise<SampleUsage[] | ActionError> => {
+  const res = await browserApi.GET("/api/projects/{id}/samples", {
+    params: { path: { id: String(projectId) } },
+  });
+
+  return toActionResult(res, "Failed to load project samples");
+};
+
+/** Project track summaries (for unassigned set triage). */
+export const clientGetTrackSummaries = async (
+  projectId: number
+): Promise<TrackSummary[] | ActionError> => {
+  const res = await browserApi.GET("/api/projects/{id}/tracks/summary", {
+    params: { path: { id: String(projectId) } },
+  });
+
+  return toActionResult(res, "Failed to load tracks");
+};

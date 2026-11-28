@@ -13,7 +13,9 @@ export const sessionRoutes = {
       const session = await cachedSession(sessionId);
       return isActionError(session) ? undefined : session.name;
     },
-    Page: ({ route }) => <SessionPage {...route} />,
+    Page: ({ route, searchParams }) => (
+      <SessionPage {...route} searchParams={searchParams} />
+    ),
   }),
   "session-new": routeModule<"session-new">({
     title: "New session",

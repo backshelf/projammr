@@ -8,6 +8,7 @@ import { entityModule } from "@/entities";
 import type { EntityTableRow, EntityTableScope } from "@/entities/table-types";
 import { entityTable } from "@/entities/tables";
 import { useEntityMutations } from "@/hooks/use-entity-mutations";
+import { useProjectRole } from "@/hooks/use-project-role";
 import type { TableSearchParams } from "@/lib/table-params";
 import type { Status, TableEntityKind } from "@workspace/api/api";
 import { useCallback } from "react";
@@ -40,6 +41,16 @@ export function EntityBoard<K extends TableEntityKind>({
   if (!board) throw new Error(`The ${kind} kind has no board`);
 
   const mutations = useEntityMutations(kind, projectId);
+  const canEdit = useProjectRole()?.can("editor") ?? true;
+
+  const toPlay = useCallback(
+    (row: EntityTableRow[K]) => {
+      if (kind !== "track") return null;
+      const track = row as { id: number; title?: string };
+      return { kind: "track" as const, id: track.id, title: track.title };
+    },
+    [kind]
+  );
 
   const fetchColumn = useCallback(
     (statusId: number, page: number) =>
@@ -70,6 +81,8 @@ export function EntityBoard<K extends TableEntityKind>({
       toPeekRow={definition.toPeekRow}
       href={href}
       onMoveCard={onMoveCard}
+      canEdit={canEdit}
+      toPlay={kind === "track" ? toPlay : undefined}
       entityLabel={entityModule(kind).nouns.singular}
     />
   );

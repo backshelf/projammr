@@ -62,14 +62,15 @@ async function settle(): Promise<void> {
 }
 
 describe("ready", () => {
-  test("names the commit and the set, and starts on the branch the app suggests", () => {
+  test("names the commit in a quote block and the set, and starts on the branch the app suggests", () => {
     show(ready, idle);
 
     expect(
       screen.getByRole("heading", {
-        name: "Restore 'added strings' as a new branch",
+        name: "Restore as a new branch",
       })
     ).toBeTruthy();
+    expect(screen.getByText("added strings")).toBeTruthy();
     expect(screen.getByText("In science.")).toBeTruthy();
     expect(field().value).toBe("restore-a1b2c3d");
     expect(
@@ -78,14 +79,18 @@ describe("ready", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
 
-  test("says what it can while the hub has not answered, and waits to restore", () => {
+  test("shows a lookup progress bar while the hub has not answered, and waits to restore", () => {
     show({ ...ready, message: null, set: null, branch: null }, idle);
 
     expect(
       screen.getByRole("heading", {
-        name: "Restore this commit as a new branch",
+        name: "Restore as a new branch",
       })
     ).toBeTruthy();
+    expect(
+      screen.getByRole("progressbar", { name: "Looking up commit" })
+    ).toBeTruthy();
+    expect(screen.getByText("Looking up commit…")).toBeTruthy();
     expect(
       (
         screen.getByRole("button", {
@@ -181,9 +186,12 @@ describe("ready", () => {
 });
 
 describe("the restore running", () => {
-  test("fetching says so, counts what has come, and shows no form", () => {
+  test("fetching says so, counts what has come, shows progress, and hides the form", () => {
     show(ready, { state: "fetching", objects: 12 });
 
+    expect(
+      screen.getByRole("progressbar", { name: "Restore progress" })
+    ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe(
       "Fetching the commit\u2026 12 objects"
     );

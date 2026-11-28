@@ -11,12 +11,13 @@ import { uploadImage } from "@/components/uploads/upload-client";
 import { useTrackedJob } from "@/components/uploads/use-tracked-job";
 import { useUploadLimit } from "@/components/uploads/use-upload-limit";
 import { uploadRowPhase, uploadRowText } from "@/components/uploads/upload-row";
-import { useProject } from "@/hooks/use-project-role";
+import { useProject, useProjectRole } from "@/hooks/use-project-role";
 import { imageUrl } from "@/lib/utils";
 import { useFormat } from "@workspace/ui/components/format-provider";
 import { IconLoader2, IconPhoto, IconX } from "@tabler/icons-react";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { IMAGE_ACCEPT } from "@workspace/api/lib/upload";
+import { ConfirmDeleteDialog } from "@workspace/ui/components/confirm-delete-dialog";
 import { DropZone, dropZoneLabel } from "@workspace/ui/components/drop-zone";
 import { useCoarsePointer } from "@workspace/ui/hooks/use-coarse-pointer";
 import { useFileDrop } from "@workspace/ui/hooks/use-file-drop";
@@ -45,8 +46,10 @@ export function ImageUploader({
   currentImage?: string | null;
 }) {
   const { id: projectId } = useProject();
+  const canEdit = useProjectRole()?.can?.("editor") ?? true;
   const [progress, setProgress] = useState<number | null>(null);
   const [jobId, setJobId] = useState<number | undefined>(undefined);
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
   const coarsePointer = useCoarsePointer();
   const maxBytes = useUploadLimit();
   const format = useFormat();
@@ -102,19 +105,38 @@ export function ImageUploader({
     }
   };
 
-  const handleRemove = async (event: React.MouseEvent) => {
-    event.stopPropagation();
+  const removeCover = async () => {
     const result = await removeImageFromParent(kind, parentId);
     if (result && isActionError(result)) {
       toast.error(`Failed to remove image: ${result.error}`);
-      return;
     }
   };
 
-  const { open, inputProps } = useFileDrop({
+  const handleRemove = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    void removeCover();
+  };
+
+  const { dragging, open, rootProps, inputProps } = useFileDrop({
     onFiles: ([file]) => file && void handleUpload(file),
     disabled: uploading,
   });
+
+  if (!canEdit) {
+    if (!currentImage) return null;
+    return (
+      <div className="relative aspect-square w-full max-w-56 overflow-hidden rounded-lg">
+        <Image
+          src={imageUrl(currentImage, 1024)}
+          alt={`${kind} image`}
+          fill
+          sizes="14rem"
+          style={{ objectFit: "cover" }}
+          priority
+        />
+      </div>
+    );
+  }
 
   if (coarsePointer && currentImage) {
     return (
@@ -150,7 +172,10 @@ export function ImageUploader({
                 "bg-[color-mix(in_oklab,var(--ink)_45%,transparent)] text-paper",
                 "outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
               )}
-              onClick={handleRemove}
+              onClick={(event) => {
+                event.stopPropagation();
+                setConfirmRemoveOpen(true);
+              }}
               aria-label="Remove image"
             >
               <IconX className="size-4" />
@@ -163,6 +188,14 @@ export function ImageUploader({
           </button>
         )}
         <input {...inputProps} accept={IMAGE_ACCEPT} />
+        <ConfirmDeleteDialog
+          open={confirmRemoveOpen}
+          onOpenChange={setConfirmRemoveOpen}
+          title={`Remove ${kind} cover?`}
+          description="The artwork will be unlinked from this page."
+          confirmLabel="Remove"
+          onConfirm={removeCover}
+        />
       </div>
     );
   }
@@ -193,6 +226,77 @@ export function ImageUploader({
     );
   }
 
+  if (currentImage) {
+    return (
+      <div
+        data-state={uploading ? "uploading" : undefined}
+        data-drag={dragging || undefined}
+        onDragOver={rootProps.onDragOver}
+        onDragLeave={rootProps.onDragLeave}
+        onDrop={rootProps.onDrop}
+        className={cn(
+          "group/art relative aspect-square w-full max-w-56 overflow-hidden rounded-lg border border-dashed border-rule-strong text-ink-soft motion-ink",
+          "hover:border-[color-mix(in_oklab,var(--art)_55%,var(--rule-strong))]",
+          "data-[drag]:border-[color-mix(in_oklab,var(--art)_55%,var(--rule-strong))]",
+          "data-[state=uploading]:shimmer-surface"
+        )}
+      >
+        <button
+          type="button"
+          onClick={open}
+          disabled={uploading}
+          aria-label={
+            uploading
+              ? (label ?? `Uploading ${kind} image`)
+              : `Replace ${kind} image`
+          }
+          className="group/replace relative block size-full cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-default"
+        >
+          <Image
+            src={imageUrl(currentImage, 1024)}
+            alt={`${kind} image`}
+            fill
+            sizes="14rem"
+            style={{ objectFit: "cover" }}
+            priority
+          />
+          <span
+            className={cn(
+              "absolute inset-0 z-1 flex items-center justify-center opacity-0 motion-reveal",
+              "bg-[color-mix(in_oklab,var(--ink)_55%,transparent)] text-paper",
+              "font-sub text-small tracking-[0.1em] uppercase",
+              "group-hover/art:opacity-100 group-focus-visible/replace:opacity-100 group-data-[drag]/art:opacity-100",
+              uploading && "opacity-100"
+            )}
+          >
+            {uploading ? (
+              <IconLoader2 className="size-5 animate-spin" />
+            ) : (
+              <span>Replace</span>
+            )}
+          </span>
+        </button>
+        {!uploading && (
+          <button
+            type="button"
+            className={cn(
+              "absolute top-1.5 right-1.5 z-2 flex size-6 items-center justify-center rounded-full",
+              "bg-[color-mix(in_oklab,var(--ink)_45%,transparent)] text-paper opacity-0 motion-reveal",
+              "hover:bg-[color-mix(in_oklab,var(--ink)_65%,transparent)]",
+              "outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+              "group-focus-within/art:opacity-100 group-hover/art:opacity-100"
+            )}
+            onClick={handleRemove}
+            aria-label="Remove image"
+          >
+            <IconX className="size-3.5" aria-hidden />
+          </button>
+        )}
+        <input {...inputProps} accept={IMAGE_ACCEPT} />
+      </div>
+    );
+  }
+
   return (
     <DropZone
       onFiles={([file]) => file && void handleUpload(file)}
@@ -204,49 +308,7 @@ export function ImageUploader({
         "data-[state=uploading]:shimmer-surface"
       )}
     >
-      {currentImage ? (
-        <>
-          <Image
-            src={imageUrl(currentImage, 1024)}
-            alt={`${kind} image`}
-            fill
-            sizes="14rem"
-            style={{ objectFit: "cover" }}
-            priority
-          />
-          <div
-            className={cn(
-              "absolute inset-0 z-1 flex items-center justify-center opacity-0 motion-reveal",
-              "bg-[color-mix(in_oklab,var(--ink)_55%,transparent)] text-paper",
-              "font-sub text-small tracking-[0.1em] uppercase",
-              "group-hover/art:opacity-100 group-focus-visible/art:opacity-100 group-data-[drag]/art:opacity-100",
-              uploading && "opacity-100"
-            )}
-          >
-            {uploading ? (
-              <IconLoader2 className="size-5 animate-spin" />
-            ) : (
-              <span>Replace</span>
-            )}
-          </div>
-          {!uploading && (
-            <button
-              type="button"
-              className={cn(
-                "absolute top-1.5 right-1.5 z-2 flex size-6 items-center justify-center rounded-full",
-                "bg-[color-mix(in_oklab,var(--ink)_45%,transparent)] text-paper opacity-0 motion-reveal",
-                "hover:bg-[color-mix(in_oklab,var(--ink)_65%,transparent)]",
-                "outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
-                "group-focus-within/art:opacity-100 group-hover/art:opacity-100"
-              )}
-              onClick={handleRemove}
-              aria-label="Remove image"
-            >
-              <IconX className="size-3.5" />
-            </button>
-          )}
-        </>
-      ) : uploading ? (
+      {uploading ? (
         <>
           <IconLoader2 className="size-5 animate-spin" />
           <span className={dropZoneLabel}>{label}</span>

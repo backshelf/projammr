@@ -99,6 +99,7 @@ export function DataTable<TData extends RowData, TChild = never>(
 
   const enableSelection = canEdit && (props.enableSelection ?? false);
   const moveToProject = canEdit ? props.moveToProject : undefined;
+  const reorder = canEdit ? props.reorder : undefined;
   const rowActions = useMemo(
     () =>
       rowActionsProp && !canEdit
@@ -244,12 +245,17 @@ export function DataTable<TData extends RowData, TChild = never>(
     clearSelection: selection.clearSelection,
     orderedStatuses: selection.orderedStatuses,
     bulkCollections: props.bulkCollections,
+    bulkLabels: selection.config.bulkLabels,
+    bulkPriorityLevels: selection.config.bulkPriorityLevels,
     onBulkPatch: selection.onBulkPatch,
     onBulkAddToCollection: selection.onBulkAddToCollection,
+    onBulkSetLabels: selection.config.onBulkSetLabels,
     onBulkMove: selection.onBulkMove,
     onBulkDelete: selection.onBulkDelete,
     requestDelete: deletion.requestDelete,
     handleCellSave: editing.handleCellSave,
+    editableCells: editing.editableCells,
+    reorder,
     moveToProject,
     setMoveTarget,
     rowActions,
@@ -328,6 +334,7 @@ export function DataTable<TData extends RowData, TChild = never>(
       drillInFor,
       requestDelete: deletion.requestDelete,
       rowActions,
+      reorder,
       firstNavigableColumnId,
       cellGrid,
       gridRef,
@@ -353,6 +360,7 @@ export function DataTable<TData extends RowData, TChild = never>(
       drillInFor,
       deletion.requestDelete,
       rowActions,
+      reorder,
       firstNavigableColumnId,
       cellGrid,
       gridHandlers,

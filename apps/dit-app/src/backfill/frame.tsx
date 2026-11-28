@@ -1,4 +1,5 @@
 import type { JSX, ReactNode } from "react";
+import { LABEL } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
 
 import { ErrorLine } from "../error-line";
@@ -18,7 +19,7 @@ function Steps({ current }: { current: FrameStep }): JSX.Element {
   return (
     <ol
       aria-label="Steps"
-      className="flex items-center gap-2 font-sub text-micro tracking-[0.12em] text-ink-soft uppercase"
+      className={cn(LABEL, "flex items-center gap-2 text-ink-soft")}
     >
       {STEPS.map((step, index) => (
         <li key={step.id} className="flex items-center gap-2">

@@ -9,4 +9,4 @@
  * decode sample rate or channel count, a different spectrum band table,
  * different rounding, or a new column the funnel starts writing.
  */
-export const ANALYSIS_VERSION = 4;
+export const ANALYSIS_VERSION = 5;

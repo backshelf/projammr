@@ -36,6 +36,7 @@ const DEFAULT_DELETE_HINT = "Make another level the default first";
 /** A row's icon controls: revealed with the row, dimmed by colour when inert. */
 const ROW_CONTROL = cn(
   REVEAL_ON_HOVER,
+  "coarse:size-11 coarse:after:inset-0",
   "disabled:text-ink-faint aria-disabled:cursor-default aria-disabled:text-ink-faint"
 );
 
@@ -147,7 +148,7 @@ export function PriorityLevelItem({
       ) : (
         <div
           className={cn(
-            "group flex min-h-11 items-center gap-2 rounded-md px-2 py-1 motion-ink",
+            "group flex min-h-11 items-center gap-2 rounded-md px-2 py-1 motion-ink phone:flex-wrap phone:gap-y-1.5",
             "hover:bg-[color-mix(in_oklab,var(--ink)_4%,transparent)]",
             isDragging && "bg-paper-sunk"
           )}
@@ -190,7 +191,7 @@ export function PriorityLevelItem({
                 className={cn(
                   LABEL,
                   "relative shrink-0 cursor-pointer rounded-sm text-ink-soft hover:text-ink",
-                  "focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-none",
+                  "focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-hidden",
                   "coarse:after:absolute coarse:after:-inset-3 coarse:after:content-['']",
                   REVEAL_ON_HOVER
                 )}
@@ -200,7 +201,7 @@ export function PriorityLevelItem({
             )
           )}
           {canEdit && (
-            <span className="flex shrink-0 items-center">
+            <span className="flex shrink-0 items-center gap-0.5 phone:basis-full phone:justify-end coarse:gap-1.5">
               <IconButton ref={upRef} {...arrow(-1)}>
                 <IconChevronUp />
               </IconButton>

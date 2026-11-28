@@ -121,4 +121,33 @@ describe("LabEqControl", () => {
     screen.getByRole("button", { name: "Reset" }).click();
     expect(onChange).toHaveBeenCalledWith(RACK_DEFAULT);
   });
+
+  it("uses responsive width and folds the 8 bands behind a disclosure on mobile", () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 390,
+    });
+    try {
+      renderControl({ ...DEFAULT_LAB.rack.eq, on: true });
+      const group = screen.getByRole("group");
+      expect(group.className).toContain("w-full");
+      expect(group.className).toContain("max-w-80");
+
+      const disclosure = screen.getByRole("button", { name: "Bands (8)" });
+      expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+
+      fireEvent.click(disclosure);
+      expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getAllByRole("spinbutton").length).toBeGreaterThan(0);
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        writable: true,
+        value: originalWidth,
+      });
+    }
+  });
 });

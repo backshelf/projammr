@@ -10,6 +10,8 @@ import type {
 } from "@blocknote/core";
 import { BlockNoteView } from "@blocknote/shadcn";
 import type { ReactNode } from "react";
+import { EditorAccessoryBar } from "./accessory-bar";
+import type { LyricsPrefixes } from "./lyrics/context";
 
 export type EditorFrameProps<
   B extends BlockSchema,
@@ -22,6 +24,8 @@ export type EditorFrameProps<
   /** Off for a variant that mounts its own slash-menu controller, whose items
    * come from that variant's schema rather than BlockNote's defaults. */
   slashMenu?: boolean;
+  /** Rhyme and synonym trigger prefixes when the lyrics variant is active. */
+  lyricsPrefixes?: LyricsPrefixes | null;
   /** Controllers a variant mounts alongside the editor — suggestion menus. */
   children?: ReactNode;
 };
@@ -36,24 +40,32 @@ export function EditorFrame<
   editable = true,
   theme,
   slashMenu = true,
+  lyricsPrefixes,
   children,
 }: EditorFrameProps<B, I, S>) {
   return (
-    <BlockNoteView
-      editor={editor}
-      editable={editable}
-      theme={theme}
-      slashMenu={slashMenu}
-      formattingToolbar={false}
-      linkToolbar={false}
-      filePanel={false}
-      sideMenu={false}
-      tableHandles={false}
-      className={
-        "h-full bg-transparent p-0 text-primary [&_.ProseMirror]:!bg-transparent [&_.bn-container]:!bg-transparent [&_.bn-editor]:!bg-transparent [&_.bn-editor]:!px-0"
-      }
-    >
-      {children}
-    </BlockNoteView>
+    <>
+      <BlockNoteView
+        editor={editor}
+        editable={editable}
+        theme={theme}
+        slashMenu={slashMenu}
+        formattingToolbar={false}
+        linkToolbar={false}
+        filePanel={false}
+        sideMenu={false}
+        tableHandles={false}
+        className={
+          "h-full bg-transparent p-0 text-primary [&_.ProseMirror]:!bg-transparent [&_.bn-container]:!bg-transparent [&_.bn-editor]:!bg-transparent [&_.bn-editor]:!px-0"
+        }
+      >
+        {children}
+      </BlockNoteView>
+      <EditorAccessoryBar
+        editor={editor}
+        editable={editable}
+        lyricsPrefixes={lyricsPrefixes}
+      />
+    </>
   );
 }

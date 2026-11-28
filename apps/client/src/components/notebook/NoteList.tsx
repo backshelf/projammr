@@ -219,29 +219,31 @@ function NoteRow({ note, selected }: { note: NoteSummary; selected: boolean }) {
             {noteTitle(note.title)}
           </RowTitle>
         </AppLink>
-        <RowMeta>
-          {format.relative(note.updatedAt)}
-          {note.preview && ` · ${note.preview}`}
-        </RowMeta>
+        <div className={"mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1"}>
+          <RowMeta className={"min-w-0 flex-1"}>
+            {format.relative(note.updatedAt)}
+            {note.preview && ` · ${note.preview}`}
+          </RowMeta>
+          {note.track && (
+            <StatusChip
+              flag
+              colour={"var(--ink-soft)"}
+              className={"relative z-10 max-w-36 shrink-0"}
+            >
+              <AppLink
+                href={hrefFromParsedRoute(
+                  { kind: "track", trackId: note.track.id },
+                  note.track.projectId
+                )}
+                title={note.track.title}
+                className={"min-w-0 truncate hover:underline"}
+              >
+                {note.track.title}
+              </AppLink>
+            </StatusChip>
+          )}
+        </div>
       </RowMain>
-      {note.track && (
-        <StatusChip
-          flag
-          colour={"var(--ink-soft)"}
-          className={"relative z-10 max-w-24 shrink-0"}
-        >
-          <AppLink
-            href={hrefFromParsedRoute(
-              { kind: "track", trackId: note.track.id },
-              note.track.projectId
-            )}
-            title={note.track.title}
-            className={"min-w-0 truncate hover:underline"}
-          >
-            {note.track.title}
-          </AppLink>
-        </StatusChip>
-      )}
     </Row>
   );
 }

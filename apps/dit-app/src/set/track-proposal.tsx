@@ -1,7 +1,6 @@
 import { useId, type JSX } from "react";
 import { Button } from "@workspace/ui/components/button";
 import { sectionTitle } from "@workspace/ui/components/layout/section-head";
-import { cn } from "@workspace/ui/lib/utils";
 
 import { call } from "../bridge";
 import { ErrorLine } from "../error-line";
@@ -30,7 +29,7 @@ export function TrackProposalCard({
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2">
-      <h2 id={headingId} className={cn(sectionTitle(), "normal-case")}>
+      <h2 id={headingId} className={sectionTitle()}>
         Which track is this?
       </h2>
       <div className="flex flex-wrap gap-1.5">

@@ -141,7 +141,7 @@ function AvatarUploader({ currentImage }: { currentImage?: string | null }) {
       <div
         {...rootProps}
         aria-label="Upload a new profile photo"
-        className="group relative block cursor-pointer rounded-full focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-none"
+        className="group relative block cursor-pointer rounded-full focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-hidden"
       >
         <Avatar size="lg" className="size-20">
           {displayUrl ? <AvatarImage src={displayUrl} alt="avatar" /> : null}

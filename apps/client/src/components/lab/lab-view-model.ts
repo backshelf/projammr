@@ -7,7 +7,8 @@
 
 import type { LabSource } from "@/components/music-player/player-engine";
 import type { LabState } from "@/components/music-player/player-store";
-import type { SpeedPitchMode } from "@/lib/dsp/lab-settings";
+import type { LabSettings, SpeedPitchMode } from "@/lib/dsp/lab-settings";
+import { labSettingsFrom, type LabPolicy } from "@/lib/policies/lab";
 
 const PREPARING_LABEL: Record<LabSource, string> = {
   original: "Preparing the Lab",
@@ -103,3 +104,62 @@ export function matchEqAvailable(references: MatchEqReference[]): boolean {
 
 /** Normalise is only offered once the version has a stored loudness figure. */
 export const normaliseAvailable = (lufs: number | null) => lufs != null;
+
+/** Whether any Lab setting differs from the policy's starting defaults. */
+export function labHasChanges(
+  settings: LabSettings,
+  policy: LabPolicy
+): boolean {
+  const base = labSettingsFrom(policy);
+  if (
+    settings.mode !== base.mode ||
+    settings.speed !== base.speed ||
+    settings.pitch !== base.pitch
+  ) {
+    return true;
+  }
+  const { eq, comp, reverb } = settings.rack;
+  if (
+    eq.on !== base.rack.eq.on ||
+    comp.on !== base.rack.comp.on ||
+    comp.thresholdDb !== base.rack.comp.thresholdDb ||
+    comp.ratio !== base.rack.comp.ratio ||
+    comp.attackMs !== base.rack.comp.attackMs ||
+    comp.releaseMs !== base.rack.comp.releaseMs ||
+    comp.makeupDb !== base.rack.comp.makeupDb ||
+    reverb.on !== base.rack.reverb.on ||
+    reverb.preset !== base.rack.reverb.preset ||
+    reverb.wet !== base.rack.reverb.wet ||
+    reverb.preDelayMs !== base.rack.reverb.preDelayMs
+  ) {
+    return true;
+  }
+  if (
+    eq.bands.length !== base.rack.eq.bands.length ||
+    eq.bands.some((band, i) => {
+      const def = base.rack.eq.bands[i];
+      return (
+        !def ||
+        band.kind !== def.kind ||
+        band.hz !== def.hz ||
+        band.gainDb !== def.gainDb ||
+        band.q !== def.q
+      );
+    })
+  ) {
+    return true;
+  }
+  const a = settings.auditions;
+  const b = base.auditions;
+  return (
+    a.stereo !== b.stereo ||
+    a.width !== b.width ||
+    a.polarityRight !== b.polarityRight ||
+    a.crossfeed !== b.crossfeed ||
+    a.bands.length > 0 ||
+    a.device !== b.device ||
+    a.dim !== b.dim ||
+    a.normalise !== b.normalise ||
+    a.matchEq !== b.matchEq
+  );
+}

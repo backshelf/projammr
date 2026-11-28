@@ -26,24 +26,26 @@ describe("TABS", () => {
     ["track/all", "tracks"],
     ["track/12", "tracks"],
     ["track/new", "tracks"],
-    ["session/all", "sessions"],
-    ["session/7", "sessions"],
+    ["session/all", "studio"],
+    ["session/7", "studio"],
+    ["plugins", "studio"],
+    ["samples", "studio"],
   ])("lights one tab for /%s", (path, expected) => {
     expect(activeTabs(ctxAt(path))).toEqual([expected]);
   });
 
-  it("lights nothing on the project root (Project moved into the switcher)", () => {
+  it("lights Home on the project root", () => {
     expect(
       activeTabs({
         projectId: 7,
         route: { kind: "project" },
         pathname: "/project/7",
       })
-    ).toEqual([]);
+    ).toEqual(["home"]);
   });
 
   it("lights nothing on a project page no tab covers", () => {
-    expect(activeTabs(ctxAt("plugins"))).toEqual([]);
+    expect(activeTabs(ctxAt("repo/1"))).toEqual([]);
   });
 
   it("lights nothing on a route it does not recognise", () => {
@@ -65,11 +67,12 @@ describe("TABS", () => {
       tab.kind === "link" ? tab.href(ctx) : null
     );
     expect(hrefs).toEqual([
+      "/project/7",
       "/project/7/collection/all",
       "/project/7/track/all",
       NOTES_HREF,
-      "/project/7/session/all",
       null,
+      "/project/7/session/all",
     ]);
   });
 
@@ -82,7 +85,23 @@ describe("TABS", () => {
     const hrefs = TABS.map((tab) =>
       tab.kind === "link" ? tab.href(ctx) : null
     );
-    expect(hrefs).toEqual([null, null, NOTES_HREF, null, null]);
+    expect(hrefs).toEqual([null, null, null, NOTES_HREF, null, null]);
+  });
+
+  it("gates collection and track long-press shortcuts to editors", () => {
+    const viewerCtx = ctxAt("collection/all", { canEdit: false });
+    const editorCtx = ctxAt("collection/all", { canEdit: true });
+    const collections = TABS.find((t) => t.id === "collections")!;
+    const tracks = TABS.find((t) => t.id === "tracks")!;
+    if (collections.kind !== "link" || tracks.kind !== "link") {
+      throw new Error("expected link tabs");
+    }
+    expect(collections.longPressHref?.(viewerCtx)).toBeNull();
+    expect(tracks.longPressHref?.(viewerCtx)).toBeNull();
+    expect(collections.longPressHref?.(editorCtx)).toBe(
+      "/project/7/collection/new"
+    );
+    expect(tracks.longPressHref?.(editorCtx)).toBe("/project/7/track/new");
   });
 
   it("Search is the only palette tab", () => {
@@ -96,8 +115,14 @@ describe("dockTabs", () => {
   const ids = (list: readonly DockTabId[]) =>
     dockTabs(list).map((tab) => tab.id);
 
-  it("is every tab in the order it has always stood, by default", () => {
-    expect(ids(DEFAULT_SHELL.dockTabs)).toEqual(TABS.map((tab) => tab.id));
+  it("shows Home, Collections, Tracks, Notes, Search by default (leaving opt-in studio off)", () => {
+    expect(ids(DEFAULT_SHELL.dockTabs)).toEqual([
+      "home",
+      "collections",
+      "tracks",
+      "notes",
+      "search",
+    ]);
   });
 
   it("orders the tabs as listed and leaves out any not listed", () => {

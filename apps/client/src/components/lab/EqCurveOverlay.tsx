@@ -1,18 +1,24 @@
 "use client";
 
-import { bandReadout, readoutPlacement } from "@/components/lab/eq-bands";
+import {
+  bandReadout,
+  freeBandIndex,
+  readoutPlacement,
+} from "@/components/lab/eq-bands";
 import { eqResponseDb } from "@/components/lab/eq-response";
 import {
   bandFraction,
   dragToBand,
   EQ_GAIN_WINDOW,
+  EQ_GRID_LEVELS,
   hzAtFraction,
   qDragStep,
   type QDragOrigin,
   stepGain,
   stepHz,
+  stepQFromWheel,
 } from "@/components/lab/eq-curve-geometry";
-import type { EqBand } from "@/lib/dsp/lab-settings";
+import { DEFAULT_LAB, type EqBand } from "@/lib/dsp/lab-settings";
 import {
   SPECTRUM_DRAWING_HEIGHT,
   type SpectrumSize,
@@ -22,10 +28,12 @@ import {
   fillToLevelPath,
   VIEW_HEIGHT,
   VIEW_WIDTH,
+  yOf,
 } from "@/components/spectrum/spectrum-geometry";
+import { useLatestRef } from "@workspace/ui/hooks/use-latest-ref";
 import { LABEL } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /** Points sampled across the log axis for a smooth response curve. */
 const CURVE_POINTS = 129;
@@ -69,8 +77,35 @@ export function EqCurveOverlay({
   /** Draws the curve and handles without any way to move them. */
   disabled?: boolean;
 }) {
+  const overlayRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<Drag | null>(null);
   const [engaged, setEngaged] = useState<number | null>(null);
+  const wheelStateRef = useLatestRef({ bands, onChangeBand, disabled });
+
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const {
+        bands: currentBands,
+        onChangeBand: change,
+        disabled: isDisabled,
+      } = wheelStateRef.current;
+      if (isDisabled) return;
+      const handle = (e.target as Element | null)?.closest<HTMLElement>(
+        "[data-band-index]"
+      );
+      if (!handle) return;
+      const index = Number(handle.dataset.bandIndex);
+      const band = currentBands[index];
+      if (!band || band.kind === "off") return;
+      e.preventDefault();
+      setEngaged(index);
+      change(index, { q: stepQFromWheel(band.q, e.deltaY, e.shiftKey) });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [wheelStateRef]);
 
   const responseDb = useMemo(() => eqResponseDb(bands, CURVE_HZ), [bands]);
   const path = useMemo(
@@ -119,6 +154,23 @@ export function EqCurveOverlay({
     if (document.activeElement !== e.currentTarget) setEngaged(null);
   }
 
+  function onOverlayDoubleClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (disabled) return;
+    const free = freeBandIndex(bands);
+    if (free == null) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const { hz, gainDb } = dragToBand(
+      (e.clientX - rect.left) / rect.width,
+      (e.clientY - rect.top) / rect.height
+    );
+    onChangeBand(free, {
+      kind: "peaking",
+      hz: Math.round(hz),
+      gainDb: Math.round(gainDb * 10) / 10,
+    });
+    setEngaged(free);
+  }
+
   function onKeyDown(index: number, e: React.KeyboardEvent<HTMLDivElement>) {
     const band = bands[index]!;
     const fine = e.shiftKey;
@@ -147,8 +199,11 @@ export function EqCurveOverlay({
     // the svg, and `inset-0` would stretch this to that instead of lining up
     // with the axis both drawings share.
     <div
+      ref={overlayRef}
+      onDoubleClick={onOverlayDoubleClick}
       className={cn(
-        "pointer-events-none absolute inset-x-0 top-0",
+        "absolute inset-x-0 top-0",
+        disabled ? "pointer-events-none" : "pointer-events-auto",
         SPECTRUM_DRAWING_HEIGHT[EQ_DRAWING_SIZE]
       )}
     >
@@ -158,6 +213,23 @@ export function EqCurveOverlay({
         preserveAspectRatio="none"
         className="block h-full w-full overflow-visible"
       >
+        <g strokeWidth={1}>
+          {EQ_GRID_LEVELS.map((db) => {
+            const y = yOf(db, EQ_GAIN_WINDOW);
+            return (
+              <line
+                key={db}
+                x1={0}
+                x2={VIEW_WIDTH}
+                y1={y}
+                y2={y}
+                strokeDasharray={db === 0 ? undefined : "2 3"}
+                vectorEffect="non-scaling-stroke"
+                className={db === 0 ? "stroke-rule-strong" : "stroke-rule"}
+              />
+            );
+          })}
+        </g>
         <path d={fill} className="fill-art/15" />
         <path
           d={path}
@@ -168,6 +240,20 @@ export function EqCurveOverlay({
           className="stroke-art"
         />
       </svg>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-1 select-none"
+      >
+        {EQ_GRID_LEVELS.map((db) => (
+          <span
+            key={db}
+            className="absolute right-0 -translate-y-1/2 font-mono text-micro/none text-ink-faint/75 tabular-nums"
+            style={{ top: `${(yOf(db, EQ_GAIN_WINDOW) / VIEW_HEIGHT) * 100}%` }}
+          >
+            {db > 0 ? `+${db}` : db < 0 ? `−${-db}` : "0"}
+          </span>
+        ))}
+      </div>
       {bands.map((band, index) => {
         if (band.kind === "off") return null;
         const pos = bandFraction(band);
@@ -188,8 +274,8 @@ export function EqCurveOverlay({
             data-band-index={index}
             data-engaged={shown ? "" : undefined}
             className={cn(
-              "absolute grid size-4 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full",
-              "border border-art bg-paper text-ink motion-press outline-none",
+              "absolute grid size-4 -translate-x-1/2 -translate-y-1/2 touch-none place-items-center rounded-full",
+              "border border-art bg-paper text-ink outline-hidden motion-press",
               disabled
                 ? "pointer-events-none opacity-50"
                 : "pointer-events-auto cursor-grab focus-visible:ring-2 focus-visible:ring-art/40 active:cursor-grabbing data-engaged:bg-art data-engaged:text-paper",
@@ -204,6 +290,17 @@ export function EqCurveOverlay({
             onPointerMove={disabled ? undefined : onPointerMove}
             onPointerUp={disabled ? undefined : onPointerUp}
             onPointerCancel={disabled ? undefined : onPointerUp}
+            onDoubleClick={
+              disabled
+                ? undefined
+                : (e) => {
+                    e.stopPropagation();
+                    onChangeBand(index, {
+                      gainDb: 0,
+                      q: DEFAULT_LAB.rack.eq.bands[index]!.q,
+                    });
+                  }
+            }
             onKeyDown={disabled ? undefined : (e) => onKeyDown(index, e)}
             onFocus={disabled ? undefined : () => setEngaged(index)}
             onBlur={

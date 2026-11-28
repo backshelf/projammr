@@ -40,7 +40,11 @@ const patchEntity = mock();
 const patchField = mock();
 mock.module("@/actions/patch-field", () => ({ patchEntity, patchField }));
 const setEntityLabels = mock();
-mock.module("@/entities/mutations", () => ({ setEntityLabels }));
+const linkTracksToCollection = mock();
+mock.module("@/entities/mutations", () => ({
+  setEntityLabels,
+  linkTracksToCollection,
+}));
 const toastError = mock();
 mock.module("sonner", () => ({ toast: { error: toastError } }));
 

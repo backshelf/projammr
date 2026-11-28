@@ -1,6 +1,6 @@
 # Reference: Next.js client app (`apps/client`)
 
-_Updated 2026-11-27._ Next.js 16.4, React 19.3, App Router, RSC-first. Read `node_modules/next/dist/docs/` before
+_Updated 2026-11-28._ Next.js 16.4, React 19.3, App Router, RSC-first. Read `node_modules/next/dist/docs/` before
 writing Next.js code. Design language: `DESIGN.md`. Work tracking is Jira project PROJ
 (`.claude/docs/jira.md`).
 
@@ -112,7 +112,7 @@ devices/page.tsx                  One `HubPage` each; Instance is `notFound()` f
 (app)/invite/[token]/page.tsx     Public; session + getInvitePreview + cachedInstance (the password rule) → InviteFlow; a 401 preview (guest access off) → SignInPrompt.
 (app)/notes/layout.tsx            Redirects signed-out to "/"; cachedMyNotes →
                                   LyricsProvider > NotebookShell(list=<NoteList/>); TopStrip.
-(app)/notes/page.tsx              "Select a note" placeholder (desktop right pane).
+(app)/notes/page.tsx              `DesktopNoteIndex`: auto-redirects desktop to the latest note or prompts "Start a note" (hidden below `md:`).
 (app)/notes/new/page.tsx          Blank NotebookNote (static segment so `/notes/new` never hits `[id]` as NaN).
 (app)/notes/[id]/page.tsx         cachedNote(id) → notFound() on error → NotebookNote.
 (app)/project/new/page.tsx        Renders modules/project/new directly; TopStrip back.
@@ -135,8 +135,8 @@ devices/page.tsx                  One `HubPage` each; Instance is `notFound()` f
 (app)/project/[projectId]/page.tsx
                                   projectRoutes.project.Page({route:{kind:"project"}, searchParams}) — forwards
                                   searchParams, so `?view=board` works on the project root. The page is the today
-                                  page: `TodayReadout` in the masthead, then the NEW, GONE QUIET, JOBS and ACTIVITY
-                                  blocks (`components/project-home/`) ahead of DESCRIPTION.
+                                  page: `TodayReadout` in the masthead, then `NEW`, `UNASSIGNED DAW SETS`
+                                  (`UnassignedSetsSection`), `GONE QUIET`, `JOBS`, and `DESCRIPTION` ahead of the remaining sections (`components/project-home/`).
 (app)/project/[projectId]/[...route]/page.tsx
                                   CUSTOM ROUTER: parseRoute(segments) → routeModuleFor(kind) → entry.Page({route,
                                   searchParams}); no module → notFound(). generateMetadata: title ?? loadTitle(route).
@@ -234,7 +234,7 @@ and skips it entirely — an API or discovery request needs no redirect, and the
 build argument: the instance's upload limit is a server setting; the module imports nothing, since Next loads a
 config's imports with plain `require`, which cannot follow the settings package's `.js` specifiers),
 `experimental.useOffline` (holds and retries framework requests over a dead network, and gives `useOffline` from
-`next/offline` its value), a `headers()` rule sending `securityHeaders({ scriptHashes })` from
+`next/offline` its value), `experimental.optimizePackageImports: ["@tabler/icons-react"]`, a `headers()` rule sending `securityHeaders({ scriptHashes })` from
 `@workspace/security-headers` (the set the API's `securityHeaders` middleware sends, with `script-src` allowing
 `THEME_SCRIPT` by the sha256 the config computes from it at load; `next.config.test.ts` checks it) on `/:path*` in
 every build but `next dev` (React's dev build evals,
@@ -1063,7 +1063,7 @@ value, onChange, disabled, id }`; the row labels the control by `id`, `labelIdOf
   is non-empty) writes `{}` after a `ConfirmDeleteDialog`. `disabled` renders the map with no actions. `lab-speed-range` and
   `lab-pitch-range` (one `lab-range-control.tsx`) are a two-thumb `Slider` inside `SPEED_*`/`PITCH_*`, the
   rack default (`RACK_DEFAULT`, `{ rack: true }`, from `@workspace/settings/groups/lab`) shown as the whole
-  range with a Reset that writes it back. `lab-compressor`, `lab-reverb` and `lab-eq` edit a rack
+  range with a Reset that writes it back. `lab-compressor`, `lab-reverb` and `lab-eq` (`LabEqControl`, folding its 8 rack bands behind a `"Bands (8)"` disclosure on phones) edit a rack
   part's default from the Lab's own pieces (`RackSliderRow`, `RackComp`'s `ROWS`, `RackReverb`'s `PRESETS`,
   `EqCurveOverlay`, `RackBand`), the rack default shown as `DEFAULT_LAB.rack.<part>` marked "Rack default" and Reset writing
   it back; the first edit writes the whole part. `from-settings.ts` maps the rack default to the Lab's own
@@ -1124,9 +1124,7 @@ id="machine-<id>">`, `lib/settings/href.ts`'s `machineAnchor`): the name, a fact
 - **Instance → Machines** (`panes/MachinesPane.tsx`, order 25, `/settings/instance/machines`) — every account's
   machines for the instance admin, read-only: `getAdminMachines(page, 20)` (`GET /api/admin/machines`) into
   `components/admin/AdminMachinesTable` (Owner, Machine, Platform, Version, Last seen; `PageLinks` over `total`).
-- **Search and nav** — `HubShell` puts `HubSearchField` and `HubNav` in a sticky column beside the page (stacked
-  above it on a phone, where the nav is `SettingsTabNav`: the sections, then the current section's entries when it
-  has a pane). While the box holds a query, `HubSearchResults` stands in for the page (kept alive under
+- **Search and nav** — `HubShell` (`max-w-[68rem]`) puts `HubSearchField` and `HubNav` in a sticky column beside the page (desktop `HubNav` expands/collapses group lists; phones show `SettingsTabNav` plus a `"Jump to section"` `ResponsivePicker` whenever the active scope has entries). While the box holds a query, `HubSearchResults` stands in for the page (kept alive under
   `<Activity>`): `search.ts`'s `searchSettings` matches every word against a setting's label, description and
   keywords, and the matches render as live rows under their group and section, or "No settings match" with a
   way to clear it. On arrival the shell scrolls to the `#<key>` row (marking it for a moment) or the group the URL
@@ -1157,8 +1155,7 @@ Feature folders: `activity`, `art` (ArtProvider — `"use client"`, the page's `
 (`@workspace/ui/components/motion/arrival`) and, since it is the element the page scrolls in, the
 `CanvasRootProvider` its children read and the `CanvasScrollProvider` that publishes its offset;
 takes an optional `playing: PlaybackOwner` and renders
-`PlayingLight` (also the room's breath: live loudness → the art tone layer's inline `opacity` and the deep
-wash lobe's opacity while the page's own record plays), ArtSwatch, MastheadArt, PageWash, `playing-light.ts` pure `belongsTo`/`playbackState`),
+`PlayingLight` (also the room's breath: gates the rAF loop via `IntersectionObserver` on `.masthead__art`, caches the `.dark` theme swing via `MutationObserver`, sets transition durations once per breathing window, and drives the art tone layer's inline `opacity` and the deep wash lobe's opacity while the page's own record plays), ArtSwatch, MastheadArt, PageWash, `playing-light.ts` pure `belongsTo`/`playbackState`),
 `attachments`, `auth`,
 `collection`, `command-palette`, `commands` (the command registry; see Command palette and Hotkeys below),
 `comments`, `copy-text` (`CopyTextProvider`/`useCopyText`), `dock`, `editing`,
@@ -1198,10 +1195,10 @@ and the note-text copy (`notebook/copy-note-text.ts`), which have their own gest
 `navigator.clipboard` directly.
 
 **Page frame.** `layout/shell.ts` exports `CANVAS` (the scroll container: named-area grid `head/rail` over
-`body/rail`, `stack:` collapses to `head`→`rail`→`body`; `overscroll-y-contain pb-(--dock)`), `MASTHEAD_AREA`,
+`body/rail`, `stack:` collapses to `grid-rows-[max-content_max-content_1fr]` and `head`→`rail`→`body`; `overscroll-y-contain pb-(--dock)`), `MASTHEAD_AREA`,
 `BODY`, `SPLIT` (notes beside artwork). `COLUMN`, `PAGE`, `PAGE_WIDE`, `EYEBROW`, `SIDEBAR_EYEBROW`,
 `SECTION_TITLE`, `CAPPED_CHILDREN`, `SCROLL`, `REVEAL_ON_HOVER` live in `@workspace/ui/lib/shell`. `Masthead`
-(accepts `className`; renders `children` after `byline` inside the one element `useMastheadScroll("head")`
+(accepts `className`, `<h1>` styled with `leading-[1.02] text-balance wrap-break-word` and `.on-art`/`.on-art-soft`; renders `children` after `byline` inside the one element `useMastheadScroll("head")`
 binds, so a row placed there recedes with the byline and needs no scroll or arrival wiring of its own — the
 collection page's hero `PlayAffordance` sits there), `RightSideBlur` (`RailColumn` > `Rail`; `more={<>…</>}` holds the tail `RailMore` folds
 on phones; `RailBlock`s are direct children), `packages/ui/src/components/layout/rail.tsx` (`RailIdentity`,
@@ -1210,13 +1207,11 @@ blocks is transparent to it),
 `MetadataItem` (`pending` = quiet italic), `Breadcrumbs` (renders a `Crumb[]` — `{label, href}` a caller already
 built, never derived from the pathname; takes its left edge from its container — `PageHead`'s column, or the
 `COLUMN` `Masthead` wraps it in — so it lines up with the `h1`), `masthead/NowPlayingFlag` (client leaf in the
-byline; `StatusChip flag colour="var(--art)"` reading `Playing`/`Paused` for a track page's own audio, or
-`Playing · <track>` linking into the collection for a collection page; renders nothing when the player holds
-something else).
+byline; quiet `text-micro text-ink-soft` inline indicator with a 6px dot — `bg-art` when playing, `bg-ink-soft` when paused — reading `Playing`/`Paused` for a track page's own audio, or `Playing · <track>` linking into the collection for a collection page, without repeating a status chip; renders nothing when the player holds something else).
 
 **Editing** (`editing/`): `Description` (BlockNote via `next/dynamic` ssr:false, document in a ref, 1.5 s
 debounced `saveRichText`, unmount flush; `variant="lyrics"` reads `LyricsContext`), `InlineTitleEditor` (masthead
-h1) and `InlinePropertyEditor` (rail scalar fields, optional copy/hint; a member below editor, or a render outside a
+h1; on phones renders full-width 44px Save / Cancel buttons below the input instead of icon actions and disables `autoFocus`) and `InlinePropertyEditor` (rail scalar fields, optional copy/hint; `type="select"` uses `ResponsivePicker` + `useOptimistic`; a member below editor, or a render outside a
 project route, gets the value as plain text with a read-only `CheckboxDisplay` for a checkbox) on `hooks/use-inline-edit.ts` +
 `InlineEditActions` (✓/✕ pair). `LyricsProvider` supplies `browserLyricsDictionary` (`lib/lyrics-dictionary.ts`:
 batched `POST /api/lyrics/analyze` with module-level caches, memoised rhymes/synonyms with abort) and the caller's
@@ -1251,11 +1246,8 @@ panel, the share page). A root row with `canResolve` gets a `Resolve`/`Reopen` b
 the share page, with no policies provider, it always asks. `AudioCommentSection` starts a new comment pinned to the
 playhead when the shell policy's `audioCommentPinned` holds and its audio is the one loaded. A resolved thread's author
 names go to `text-ink-soft` (replies take it from a `parentResolved` prop) and the root row gains a `<span>` chip
-on `compose-ui.tsx`'s `STAMP_SHAPE`, `Resolved · <resolver or "Unknown"> · <relative time>`. `ActivityFeed` (RSC)
-owns the read (`getProjectActivity` with `limit` default 15, folding to `null` on error or no rows) and the
-`CollapsibleSection` around the list. The rows are `ActivityList.tsx`, which the project page's
-`RecentActivitySection` renders too: create/update/delete/comment/resolve/reopen rows with before→after diffs,
-hiding `notes`/`description`/timestamps, through the pure row-text helpers `headline`/`detail`. `ActivityList`'s
+on `compose-ui.tsx`'s `STAMP_SHAPE`, `Resolved · <resolver or "Unknown"> · <relative time>`. `ActivityFeed` (RSC) owns the read (`getProjectActivity` with `limit` default 15, folding to `null` on error or no rows) and the
+`CollapsibleSection` around the list (`TrackCommentsSection` unifies track body comments into `All`, `vN Mix notes`, and `General` tabs synced to `TrackAudioProvider`). The rows are `ActivityList.tsx`: create/update/delete/comment/resolve/reopen rows with before→after diffs, hiding `notes`/`description`/timestamps, through the pure row-text helpers `headline`/`detail`. `ActivityList`'s
 `ACTION_VERB` is an exhaustive `Record` over the generated action enum, so a new server action fails the client
 typecheck until it has a verb. A `statusId` or `priorityId` change prints the status or level name from the
 `vocabularies` prop (`ActivityVocabularies`), which both callers read through `activity-vocabularies.ts`
@@ -1409,7 +1401,7 @@ row, and "select all N" is offered once they are all ticked and the server match
 
 The parts, each in `tables/parts/`:
 
-- `Toolbar.tsx`: a desktop row of search, filter, group, saved-view and column menus and a phone row of search and a
+- `Toolbar.tsx`: a desktop row of `filterPresets` pills (e.g., Session table's `All`, `Unassigned`, `Not in dit`), search, active/revealed filters (with `IconX` clear buttons), an `+ Filter` `DropdownMenu` revealing remaining filter columns, group, saved-view and column menus, plus a phone row of search and a
   "Filter" button; both are always rendered and CSS shows one. Its `children` sit between group-by and the column
   menu. `cards/FilterSheet.tsx` is the sheet the button opens, loaded with `next/dynamic` (`ssr: false`) behind the
   `filterSheetLoaded` latch.
@@ -1478,7 +1470,7 @@ virtualised"` describe block in `GridSections.test.tsx`. A `serverPage.load`'s a
   `defaults` from the project's `project-defaults.*` settings (a status the project no longer has is left blank,
   through `defaultStatusRaw`), and `TrackForm`/`CollectionForm` start a new entity from the same settings.
 
-`PeekPanel` (`Peek`), `MoveToProjectDialog` (`Move`) and `FilterSheet` (`Toolbar`) are lazy: `next/dynamic` fetches
+`PeekPanel` (`Peek`: supports optional `play` `PlayAffordance` and inline `statusEdit` via `ResponsivePicker`), `MoveToProjectDialog` (`Move`) and `FilterSheet` (`Toolbar`) are lazy: `next/dynamic` fetches
 each on first render, so `Peek` withholds the render until a row opens and `Move` until a row asks to move.
 
 The hooks the root and the parts call, each in `tables/`: `use-table-view.ts` (`useTableView` for leading
@@ -1596,7 +1588,7 @@ and `isFilterParam(key)` adds any custom field's `cf_<id>` key; adoption, the UR
 `filterViewQuery` and `parseTableQuery` all go through it, so a filter the server declares (the Explicit
 filter was the one a hand-kept list had missed) reaches the URL, a saved view and the server. Values are typed
 from the generated query types (`TableFilters`: `status` a number, `priority` the comma-separated level-id list
-the server reads, `explicit` and `inDit` (the sessions' "In dit" column, offered as "Yes"/"No") `"true"`/`"false"`, a `cf_<id>` filter a string); `FILTER_VALUE_PARSERS` drops a
+the server reads, `explicit`, `unassigned`, and `inDit` (the sessions' "In dit" column, offered as "Yes"/"No") `"true"`/`"false"`, a `cf_<id>` filter a string); `FILTER_VALUE_PARSERS` drops a
 raw value the server's schema would refuse (the type forces a parser for every filter whose value is not free
 text), and a `cf_` value passes through, the server being the judge of its encoding. Each kind's `pageQueryOf`
 spreads `declaredFilters(view, <KIND>_FILTER_PARAMS)` and, for tracks and collections, `customFieldFilters(view)`
@@ -1809,8 +1801,7 @@ components. Each kind's definition is `entities/<kind>/table.tsx` (`EntityTableD
 `pageQueryOf`), and a `useParts(ctx)` hook returning the kind's columns,
 editors, filters, new-row config, group-by, sub-rows, cards, hidden columns and mutation options), registered in
 `entities/tables.ts` (`ENTITY_TABLES`, a record total over `TableEntityKind`, so a kind with no definition is a type
-error). `EntityTable` derives the nouns, routes, mutation handlers and saved views from the kind and hands
-the `DataTable` root the assembled props (`assembleEntityTableProps`). The track definition adds session sub-rows with a cache
+error). `useParts` memoised, and the table definition hooks stay client-side. Track lists scoped to a collection (`collectionId`) also pass a `reorder` config calling `updateTrackNumber`, and all three tables hide `"id"` by default (`collectionTable` sets `PriorityBadge hideDefault`, `sessionTable` adds the `unassigned` filter and `filterPresets`). The track definition adds session sub-rows with a cache
 keyed on the identity of the page's rows, the bulk "add to collection" action, and a `saveField` override that saves
 `trackNumber` through the collection (`updateTrackNumber`); its `scope` is `{ collectionId?, collections }`. `AssetsTable`
 is the one hand-written entity table. The definitions build columns from
@@ -1897,13 +1888,13 @@ paginated endpoint (`BOARD_PAGE_SIZE` 50, no board endpoint), dnd-kit `DndContex
 parts. `EntityBoard kind projectId statuses filters? scope?` (`tables/EntityBoard.tsx`, client-only like
 `EntityTable`) looks the definition up, throws if the kind has no `board`, and renders `BoardView` with the
 definition's `toCard`, `toPeekRow` and `href` and `useEntityMutations(kind).onCellSave(id, "statusId", …)` for the
-move. Every list page with a status (through `EntityList`), a collection page's track board and the project page's
+move. `BoardView` leads with a synthetic `NO_STATUS` ("No status") column, renders a mobile `role="tablist"` column switcher below `md:`, attaches dnd-kit drag strictly to each `BoardCard`'s grip handle (`touchAction: "none"`) paired with `DragOverlay` travel and a `⋯` move menu (when `canEdit`), and wires `play` + `statusEdit` into its `PeekPanel`. Every list page with a status (through `EntityList`), a collection page's track board and the project page's
 collection board render `EntityBoard`. `ViewSwitcher` (List/Board `Tabs`) navigates by
 writing/removing `?view=board`; the module page picks the surface server-side.
 
 **Phone cards** (`tables/cards/`): `showCards = isPhone && cards && peek` swaps the grid for `RowCardList`
 (`RowCardSection[]`; an ungrouped list is one label-less section; `selection`/`expansion` are optional capability
-objects whose presence _is_ the mode; one shared `RowActionSheet`). `row-card-model.ts` `RowCardModel`
+objects whose presence _is_ the mode; collection track lists gain a `Reorder` mode using `@dnd-kit/sortable` + `DragOverlay` over `updateTrackNumber`; one shared `RowActionSheet` exposing `Set track #`, artists, status, and delete). `row-card-model.ts` `RowCardModel`
 (`fields` ≤ 2 via `card-fields.ts` `cardFieldsFrom(peekRow, keyFields)`, `children` from `cards.childCard`,
 `play`). `RowCard` (`TrackCell` thumb / checkbox in select mode / `CardPlayButton`, three-tier identity: title + flag,
 full-width single-line `MetaText`, separate `ChipRow` of status + priority, `[content-visibility:auto]` with `76px`
@@ -1952,13 +1943,13 @@ receives values already coerced to their kind's type rather than the raw strings
 create it does what the shell policy's `afterCreate` says: `open` pushes `createdHref(record)`; `stay` goes
 `router.back()`; `add-another` resets the form to `defaultValues` and focuses its first field (in an effect,
 since `reset` drops the refs `setFocus` needs); the last two toast an "Open" action linking to the record.
-`EntityForm({ id, form, onSubmit, fields: FieldSpec[], submitLabel, busyLabel })` renders its own `<form
+`EntityForm({ id, form, onSubmit, onCancel?, fields: FieldSpec[], submitLabel, busyLabel })` renders its own `<form
 noValidate>` — the browser's own constraint validation on an `inputType="url"` (or similarly patterned)
 input blocks the submit event before react-hook-form ever sees it, silently defeating a field-kind's or a
 custom spec's own message, so native validation is off everywhere and the resolver is the only source of
 errors. `FieldSpec` = `FormController` props | `{kind:"field-kind", field: FieldKindName, config?, label,
 hint?, required?, statuses?: Promise<Status[]>}` (`field: "status"` is the pipeline picker) | `{kind:"pair",
-fields}` | `{kind:"custom", key, render, validate?: (value: unknown) => Record<string,string>}`. A
+fields}` | `{kind:"disclosure", key, label, mobileOnly?, fields}` (`FormDisclosure`, folding secondary fields on mobile and opening automatically on error) | `{kind:"custom", key, render, validate?: (value: unknown) => Record<string,string>}`. A
 `field-kind` row is the `Field`/`FieldLabel htmlFor`/`FieldDescription`/`FieldError` wrapper `FormController`
 renders, with the kind's own `DraftInput` (never its `Editor`, which cancels on blur) in place of a
 `FormController` type; the label's own id joins into the input's `aria-labelledby`, and the description's
@@ -2011,7 +2002,7 @@ every kind including project when `attachTo` + `parentId` are given, or the call
 back a job id to follow; with neither, one `router.refresh()`, which is Settings → Files: project files attach to
 nothing. A failed attach marks the row as an error like a failed upload. The in-flight row is a tile of the
 attachment shape, built from `AppAttachment`'s exported `TILE`/`TILE_KIND`/`TILE_NAME`) and `ImageUploader` (→
-`uploadImage` → `setImageOnParent`; coarse pointers get a "Change" pill) both keep their row past the byte transfer
+`uploadImage` → `setImageOnParent`; hidden from viewers without `canEdit`, coarse pointers get a "Change" pill, and cover removal confirms via `ConfirmDeleteDialog`) both keep their row past the byte transfer
 when there is a job to follow (`onUploaded`'s return, or `POST /images/upload`'s `variantsJobId`): `useTrackedJob`
 (`use-tracked-job.ts`) subscribes to it with `JobsProvider`'s `useJob`, falling back to one direct `clientGetJob`
 read (`shouldFetchTrackedJob`) once `useJobsLoaded()` says the map has done its first real read and still does not
@@ -2068,7 +2059,7 @@ track missing from the summaries (just created) counting as live. It also passes
 outside the Project section), each once, at its own group's row (`settingsHref({ …, key })`). `CommandPalette({
 recents, settings })` guards with `should-render-palette.ts` `shouldRenderPalette(projectId, route)`: every
 signed-in page but a URL inside a project that no route resolves; whatever needs a project gates on
-`isInProject` and is absent, not disabled, off one. Its project is the route's, or on a hub Project page the one
+`isInProject` and is absent, not disabled, off one (on track pages, `useTrackStudioActions` adds `inspect-daw-history` (`w`) and `open-in-daw` commands; recent track/session rows show their `ArtSwatch` and search results pair `subtitle` with `snippet`). Its project is the route's, or on a hub Project page the one
 `settingsProjectId` reads from the URL (search, `filter` and the project actions work there as they did on the
 old project settings; recents show only when the cookie names that project). A query matches settings as the hub's search does
 (`matchSettingResults`), listed first under Results as "Setting · <label>" over its group's label, and choosing
@@ -2297,18 +2288,10 @@ grid element's `onKeyDown`. A cell carries `role="gridcell"`; `isActivationTarge
 gridcell claim `Enter`, so `Enter` reaches the keymap, while space on a cell stays inert as on any other role.
 
 **Sidebar** (`sidebar/`, desktop only — `ResponsiveSidebar` = `Sidebar collapsible="offcanvas" mobile="hidden"`):
-`AppSidebar` (RSC) streams two `cachedShellData()` readers — `AppSidebarHeader` (project switcher, then with a
-current project `SidebarSearchTrigger` and View project, then Settings on every page, to `SETTINGS_HREF`) and
-`AppSidebarGroup({ project? })` — plus a footer with `SidebarAccount` (avatar dropdown: Profile, Settings,
-`SignOutDropdownMenuItem`) and a hide trigger; footer clears the
-anchored player card (`--player-card`). `AppSidebarGroup` (RSC) hands
-`SidebarSections({ sections })` (client) each section it has, with whole, unsliced lists; the client lists in
-`SidebarRecents.tsx` (`SidebarCollections`, `SidebarRecentTracks`/`Sessions`/`Notes`) apply the shell policy via
-`useShellPolicy()`, so a setting change re-slices and re-orders without a server render — Collections (`SidebarCollectionItem`, lazy
-`clientGetCollectionTrackSummaries`, ordered by `sidebar-lists.ts`'s `orderCollections(collections,
-sidebarCollectionOrder)`: `release` (newest release first, then undated by title — `collectionSorter`), `title`,
-`edited`), Tracks (`RecentlyEdited` with `ArtSwatch`), Notebook (the newest notes, rendered even without a project),
-Sessions — as `{ label, hrefNew?, newLabel?, hrefAll?, children }` by id. `SidebarSections` shows them in the policy's
+`AppSidebar` (RSC) streams two `cachedShellData()` readers — `AppSidebarHeader` (project switcher, `Home` link with an `--art` dot when `unassignedCount > 0`, and `SidebarSearchTrigger` on project pages) and
+`AppSidebarGroup({ project? })` — plus a footer with `SidebarAccount` (avatar dropdown: Profile, Sign out), a single `IconSettings` link to `SETTINGS_HREF`, and a hide trigger; footer clears the
+anchored player card (`--player-card`). `AppSidebarGroup` (RSC, reading `sidebar-reads.ts`) hands
+`SidebarSections({ sections })` (client) each section in song-first order (`Collections`, `Tracks`, `Studio`, `Notebook`): Collections (`SidebarCollectionItem`, lazy `clientGetCollectionTrackSummaries`, ordered by `sidebar-lists.ts`), Tracks (`RecentlyEdited` with `ArtSwatch`), Studio (`STUDIO` is omitted for viewers without `canEdit` and collapsed by default for editors, linking `DAW Sets` with `unassignedCount`, `Plugins`, `Samples` with a `--warn` dot when `missingSampleCount > 0`, and `Repositories` `#repos`), and Notebook (`separator: true`, `hint: "Personal"`, with `note.track?.title` badges on recents, rendered even without a project). `SidebarSections` shows them in the policy's
 `sidebarSections` order, leaves out those it hides and those the page did not hand over, and starts each collapsed as
 the policy says; a fold the viewer makes is held there for the session. `sidebar-lists.ts`'s `recentTracks`/
 `recentSessions`/`recentNotes(items, policy)` take the policy's `recentItems`, dropping archived tracks and sessions
@@ -2325,18 +2308,17 @@ outlives the menu's content; `LeaveProjectDropdownMenuItem` (every build, only w
 
 **Phone chrome** (`dock/`, `md:hidden`): `Dock` (in `(app)/layout.tsx`, `currentProjectId` from the cookie →
 `CurrentProjectProvider`/`useCurrentProjectId()`) is the fixed bottom container: `MiniPlayer` above `TabBar`,
-safe-area padded; `TabBar`'s `<nav>` carries `data-slot="tabbar"`, which `globals.css` reads with a
+safe-area padded (`hidden` when `hasKeyboard` is true alongside `body[data-keyboard]`); `TabBar`'s `<nav>` carries `data-slot="tabbar"`, which `globals.css` reads with a
 `:has()` selector so the tab bar reserves its share of `--dock` from first paint; `Dock.tsx` still sets
 `body[data-miniplayer]` (track loaded) as an effect, since that state is client-only. Renders nothing when
 neither row has anything to show. `tabs.ts`: `TabContext = { projectId: number
 | null, route: ParsedRoute | null, pathname }`; `Tab` = `{ kind: "link", href(ctx), longPressHref?(ctx), isActive }`
-| `{ kind: "palette" }`; `TABS` = Collections · Tracks · Notes (long-press → new note) · Sessions · Search, each `id` a
-`DockTabId`; `TabBar` shows `dockTabs(useShellPolicy().dockTabs)` — the listed tabs in the listed order, each once,
-however few. A link tab whose `href` is null is skipped; no tab lights on the project root or in the settings hub.
+| `{ kind: "palette" }`; `TABS` = Home · Collections · Tracks · Notes (long-press → new note, `canEdit`-gated on entity creates) · Search (+ opt-in `Studio`), each `id` a
+`DockTabId`; `TabBar` shows `dockTabs(useShellPolicy().dockTabs)` with `tracking-[0.04em]` labels — the listed tabs in the listed order, each once,
+however few. A link tab whose `href` is null is skipped; no tab lights in the settings hub.
 `hooks/use-tab-context.ts` widens `hooks/use-current-route.ts` (`{ projectId, route } | null`, `/project/:id` only) to
 `/notes` using the cookie project, and to `/settings` using the project its Project section names, else the cookie's. `TopStrip` (async RSC, `min-h-11` + top safe area, mounted by the project layout, notes layout, `/`, and
-with `back` on `/profile` and `/project/new`; always inside `Suspense`): `ProjectSwitcherSheet` or a back link,
-plus `JobsTraySheet` and `AccountSheet` (Profile, Settings → `SETTINGS_HREF`, theme, Sign out). `BottomSheet({ title, trigger, open?,
+with `back` on `/profile` and `/project/new`; always inside `Suspense`): `ProjectSwitcherSheet` or a back link on the left, `+` `QuickCreateSheet` trigger (New Track / New Collection / New Session / New Note, gated by role/project), `JobsTraySheet`, and `AccountSheet` (Profile, Settings → `SETTINGS_HREF`, theme, Sign out) on the right. `BottomSheet({ title, trigger, open?,
 onOpenChange? })` + `SHEET_ROW` (48 px
 rows) back both sheets and `RowActionSheet`.
 
@@ -2400,9 +2382,7 @@ default. `shell.ts` holds two more. `ShellPolicy`/`DEFAULT_SHELL` lays the shell
 `sidebarCollectionOrder: "release"|"title"|"edited"`, `dockTabs` (`DOCK_TABS` ids, in order), `paletteResultCap`,
 `paletteAliases` (word → prefix command id), `paletteEmptyGroups` (`PALETTE_EMPTY_GROUPS`),
 `projectHomeSections` and `entityPageSections.{collection,track,session}` (`PageSection<Id> = { id, shown }` lists
-over `PROJECT_HOME_SECTIONS`, `COLLECTION_PAGE_SECTIONS`, `TRACK_PAGE_SECTIONS`, `SESSION_PAGE_SECTIONS`; collection and track pages carry
-a `repositories` id (after `tracks` and `sessions`, labelled "Repositories") that a list stored before it gains at its end, rendered by
-`components/layout/PageSections.tsx` through `shownSections(list)` — listed order, hidden ones out, each id once),
+over `PROJECT_HOME_SECTIONS`, `COLLECTION_PAGE_SECTIONS`, `TRACK_PAGE_SECTIONS`, `SESSION_PAGE_SECTIONS`; `PROJECT_HOME_HIDDEN_SECTIONS` folds `plugins`, `samples`, and `heatmap` to `shown: false` by default while adding `unassigned-sets` and dropping `recent-activity`, `COLLECTION_PAGE_SECTIONS` drops `repositories`, and `TRACK_PAGE_SECTIONS` drops `sessions` and `repositories`, rendered by `components/layout/PageSections.tsx` through `shownSections(list)` — listed order, hidden ones out, each id once),
 `inventoryDefaults` (`plugins: { origin, stock }`, `samples: { show, library, stock }`), `afterCreate: "open"|"stay"|
 "add-another"`, `audioCommentPinned` and `commandBar` (`{ enabled, position: "bottom"|"top", mode: "always"|"pending" }`
 over the `commands` group's `COMMAND_BAR_POSITIONS` and `COMMAND_BAR_MODES`; default off, desktop only). `FeedbackPolicy`/`DEFAULT_FEEDBACK` is how the app answers back: `haptics`,
@@ -2684,7 +2664,7 @@ EntityKind`, `asset`, `trackAudio? { id, version, isPrimary, lufs? }`, accent hu
 `metadataResolved?`), `PlayerSize = "card" | "full"`. UI: `MusicPlayer` (desktop `hidden md:flex` card anchored
 in the sidebar column, floating when the sidebar is collapsed; `ArtField`, `Transport`/`SecondaryControls
 .Volume/.Overflow` at `size="card"`, `QueuePopover` → lazy `QueueList` (dnd-kit), `SidebarReveal`, `Scrub
-size="card" detached`); `MiniPlayer` (dock slot, hairline `Scrub`, `TrackCell size="xl"` identity, tap or upward
+size="card" detached`); `MiniPlayer` (dock slot, hairline `Scrub`, `TrackCell size="xl"` identity, clickable `useLabAltering()` badge opening the Lab, tap or upward
 drag calls `openFromCover`; the strip is an `m.div drag="y"` held to a 48 px stop, started from the identity's
 `onPointerDownCapture` through `useDragControls` on touch only, snapped back by `dragSnapToOrigin`, and committed by
 `flick.ts` `flickCommits(travel, velocityPxPerMs, reach)`; the click after a drag is swallowed);
@@ -2695,10 +2675,8 @@ and keeps it mounted, so the first open can morph; `now-playing-state.ts` is the
 openFromCover, fromCover, coverInSheet, view: "player"|"queue"|"lab", setView }` (closes on route change, adjusted during
 render; closing is a transition, opening from the cover opens the sheet and moves the cover's name one frame
 later, which is the commit the sheet's presence wrapper adds); `CoverMorph` names the dock thumb or the sheet cover `now-playing-cover` on phones, whichever
-`coverInSheet` says, and the sheet fades instead of sliding when `fromCover`; `NowPlaying` = full-screen bottom `Sheet` at every width (`md:max-w-lg`
-column): `ArtField scrim="full"` + `LavaField` (cover palette from `lib/cover-palette.ts` as analyser-driven blobs;
-sim in `lava-field.ts`), cover, `Scrub size="full"`, `Transport size="full"`, mute/volume (hidden when not
-controllable)/speed/queue/`TrackAudioDropdown` via `use-version-switch.ts`; the player and queue panes trade places
+`coverInSheet` says, and the sheet fades instead of sliding when `fromCover`; `NowPlaying` = full-screen bottom `Sheet` at every width (two-column `lg:` grid pairing cover art with identity + meters): `ArtField scrim="full"` + `LavaField` (cover palette from `lib/cover-palette.ts` as `ANALYSER_FFT_SIZE = 512` 256-bin analyser-driven blobs; frame-rate-independent `dt` scaling in `lava-field.ts`), cover, `Scrub size="full"`, `Transport size="full"`, mute/volume (hidden when not
+controllable)/speed/`"Up next"` queue (`QueueView`)/`TrackAudioDropdown` via `use-version-switch.ts` with tooltips on `SecondaryRow` controls; the player and queue panes trade places
 through `AnimatePresence mode="wait"` keyed by `view`. Swipe-to-dismiss is the Drawer's — the haptic fires from
 `onOpenChange` when `details.reason === "swipe"`, and the scrub row and the queue pane carry
 `data-base-ui-swipe-ignore` because they own their own vertical pointers. `Scrub` (`size: card|full|hairline`; `scrub-math.ts`
@@ -2713,7 +2691,7 @@ the transition property mid-flight would cancel it). `ArtField` cross-fades the 
 Download; right-click opens the menu; `data-active` keeps hover-revealed row controls visible).
 
 **The Lab view** (`components/lab/`): `LabView` renders while `view === "lab"`, toggled by an `IconButton` in
-`SecondaryRow` (the speed popover it replaced lives in `SpeedPitch` now). Reads `useCompare()` itself and, while
+`SecondaryRow` (headed by a sticky `Bypass` (`b`) + `Reset all` bar, dimming controls at 60% opacity when bypassed). Reads `useCompare()` itself and, while
 `compare?.unmatched` (a coarse pointer's touch comparison, PROJ-838), shows one line saying the Lab isn't
 available instead of its sections — every one of them needs the Lab, which an unmatched comparison never
 engages, so they are hidden rather than left inert. Otherwise, four sections, each a `LabSection`
@@ -2723,7 +2701,7 @@ engages, so they are hidden rather than left inert. Otherwise, four sections, ea
 every rack module goes through `RackModule` (pill, optional `aside`, body in a `HeightReveal`) and every
 parameter row through `RackSliderRow` (`rack-columns.ts` widths). `RackEq` (`EqCurveOverlay` — a response line
 from `eq-response.ts`'s RBJ biquad magnitude and its fill to 0 dB (`fillToLevelPath` in
-`spectrum-geometry.ts`), plus one numbered, draggable `role="slider"` handle per active band, positioned by
+`spectrum-geometry.ts`), `EQ_GRID_LEVELS`, plus one numbered, draggable `role="slider"` handle per active band, double-click to add a peaking band via `freeBandIndex`, wheel-scroll over a handle to step Q via `stepQFromWheel`, positioned by
 `eq-curve-geometry.ts`'s fraction-space geometry over `LiveSpectrumScale` at `EQ_DRAWING_SIZE`
 (`SPECTRUM_DRAWING_HEIGHT` in `SpectrumScale.tsx` sizes both), sharing its viewBox rather than duplicating its
 live line; the engaged handle's readout and placement come from `eq-bands.ts` — plus a folded "Bands" list of
@@ -2780,18 +2758,9 @@ re-exports the registry's own lookup) and the `open-lab` action; hotkeys `l`, `h
 **Track audio and loudness** (`track-audio/`, `loudness/`): `GET /api/tracks/{id}` returns `audios` +
 `primaryAudio`; `TrackAudioProvider({ audios, primaryAudio })`/`useTrackAudio()` → `selected`,
 `setSelectedAudioId`, `comments`, `reloadComments`, `commentMarks`, `registerScrollTarget`, `scrollToComment`,
-`commentsOpen`. `TrackAudioSection` (masthead): `PlayAffordance` + `TrackWaveform` (comment pins seek + open the
-panel; hovering or keyboard-focusing a pin shows a `FloatingNote` above it with author, timecode and
-excerpt, from `comments/excerpt.ts` `excerptOf`; the pins are `useCommentThread`'s `commentMarks`, derived from
-root comments with a numeric `positionMs`, so a reply never produces a pin, and `ShareRoom` derives its own from
-the same hook; each pin carries `resolved` (`resolvedAt != null`) and `resolvedBy`, and `WaveMarks` draws the
-resolved look itself. The comments pill reads `versionCommentsLabel(count, version, resolvedCount)`: "3 comments
-on v2 · 1 resolved", then "All 3 resolved on v2" once every root is resolved (`isAllResolved`), when its outline
-softens to `border-rule` and the panel head takes the same label and drops the bare count) + meta row (`TrackAudioDropdown` versions/star-primary with LUFS per version, `VersionBadge`,
-`LoudnessLabel`, `AudioAnalysisWatcher` while `analysisOutstanding(selected)` (`analysis-outstanding.ts`: the
+`commentsOpen`. `TrackAudioSection` (masthead): col 1 holds `PlayAffordance` alone while col 2 holds `TrackWaveform`, the 2-zone metadata bar (left zone: `TrackAudioDropdown`, icon-only `IconPinFilled` pin indicator, `DuplicateFlag`, `LoudnessLabel` highlighting `truePeakDb > 0` in `--warn`, compact `FromCommitLink`; right zone: `Analysis` toggle pill · `AudioCompareControls` · `AudioCommentPanel` (`Sheet max-h-[55dvh]` on phones, `Popover` on desktop, short `pillText` label) · overflow menu), and `MeasureStack` nested in `HeightReveal` disclosed by `Analysis`. (`TrackWaveform`: comment pins seek + open the panel; hovering or keyboard-focusing a pin shows a `FloatingNote` above it with author, timecode and excerpt, from `comments/excerpt.ts` `excerptOf`; the pins are `useCommentThread`'s `commentMarks`, derived from root comments with a numeric `positionMs`, so a reply never produces a pin, and `ShareRoom` derives its own from the same hook; each pin carries `resolved` (`resolvedAt != null`) and `resolvedBy`, and `WaveMarks` draws the resolved look itself with an 8px hairline stem and `clusterMarks` count badges. The comments pill reads `versionCommentsLabel(count, version, resolvedCount)`: "3 comments on v2 · 1 resolved", then "All 3 resolved on v2" once every root is resolved (`isAllResolved`), when its outline softens to `border-rule` and the panel head takes the same label and drops the bare count). `AudioAnalysisWatcher` runs while `analysisOutstanding(selected)` (`analysis-outstanding.ts`: the
 version's `analysisVersion` is null or behind `@workspace/dsp/version`'s `ANALYSIS_VERSION`, not just `lufs ==
-null` — a version already carrying loudness can still be due a newer analysis), `AudioCommentPanel` popover → `AudioCommentSection`
-with `CommentCompose positionMs`); switching versions while playing → `playAt(swapVersion(…), store.getProgress())`.
+null` — a version already carrying loudness can still be due a newer analysis); switching versions while playing → `playAt(swapVersion(…), store.getProgress())`.
 `TrackAudioDropdown` (also `NowPlaying` and `AudioCompareControls`) is a `DropdownMenu` under a pointer and a
 `BottomSheet` titled "Versions" below the phone breakpoint (`useIsMobile`), where each row stacks name over meta,
 the star is an `IconButton size="touch"` beside the row, and choosing a version closes the sheet. Both shells share
@@ -2851,7 +2820,7 @@ travels from it), over `@workspace/ui/lib/ruler-scale`'s `positionOf`/`markTitle
 last of the moved half. The client's `loudness/` keeps what needs the app: `TrackLoudness` (track rail: selected version's
 reading + scale of all versions), `CollectionLoudness` (collection rail: median, min–max band, measured count). Both, and the now-playing sheet,
 draw `LiveLoudnessScale` (`LoudnessScale` + `live` slot: momentary bar, hold tick, short-term needle, A/B needles
-while comparing; `M`/`S`/`Peak` figures above the ruler, led by an optional `caption`) for an `owner` (`PlaybackOwner` or `"any"`); it paints from
+while comparing; `M`/`S`/`Peak` figures above the ruler, led by an optional `caption`, paused by an `IntersectionObserver` when scrolled out of view) for an `owner` (`PlaybackOwner` or `"any"`); it paints from
 `loudness/use-loudness-frames.ts` `useLoudnessFrames(active, draw)`, a two-line wrapper over
 `music-player/use-side-frames.ts`'s `useSideFrames`, one rAF loop over the latest frame per side, with
 `lib/meter-ballistics.ts` (`follow`, `holdPeak`, `meterFraction`, `roomEnergy`).
@@ -2880,9 +2849,7 @@ cover, identity and both meters with captions open, so phones and most laptop wi
 `spectrumWindow`, so every curve in a block shares one 48 dB scale.
 `track/TrackWaveform` is the wave's container: `ActiveWave` when its asset is current (progress written to the
 wave's `--played` by `useProgressFrames` through `playedBars`, lit against each bar's `--i` in `motion.css`;
-click/keyboard seek, pins; the elapsed/remaining clock), else `IdleWave` → play. It draws with
-`@workspace/ui/components/waveform`'s parts (`waveSurface`, `WaveBars`, `WaveStack`, `WaveMarks`) and
-`@workspace/ui/lib/waveform-bars` (`barCountFor(width)` — `clamp(24, width/4, 160)`, `MAX_BARS` — plus
+click/touch-drag scrub via `useTimelineScrub` with `touch-pan-y`, `WaveHoverGhost`, `WaveMarks`, keyboard seek; the elapsed/remaining clock), else `IdleWave` (also carries `WaveMarks` + `WaveHoverGhost` and seeks & plays immediately via `playAt`). It draws with `@workspace/ui/components/waveform`'s parts (`waveSurface`, `WaveBars`, `WaveStack`, `WaveMarks`) and `@workspace/ui/lib/waveform-bars` (`barCountFor(width)` — `clamp(24, width/4, 160)`, `MAX_BARS` — plus
 `bucketOf(seconds, durationSeconds, count?)`, the bar a moment lands on and the strips' shared geometry,
 `peakCeiling(...series)` and `toBars(peaks, count, scale?)`); the bar count is resize-observed per instance
 (`useWaveBars`), which is the one thing the static `Waveform` in `@workspace/ui` does not do. The caller always
@@ -2894,24 +2861,17 @@ nothing is read from a ref during render); a mark without an `excerpt` shows no 
 `FloatingNote`'s own `coarse:hidden` keeps tap-to-seek-and-open the only touch behaviour.
 `clientGetTrackAudioMeasure` returns null for the 404 the server sends while analysis is queued.
 
-**Strips** (`track-audio/`): `MeasureStack` renders under `TrackWaveform` in `TrackAudioSection`: a `TogglePill`
+**Strips** (`track-audio/`): `MeasureStack` renders inside `HeightReveal` in col 2 under the version metadata bar (toggled by the `Analysis` pill in `TrackAudioSection`): a `TogglePill`
 legend, each pill wrapped in a `Tooltip` naming what it draws (`STRIP_EXPLAINERS`), for the three strips there
 are — Loudness, Spectrogram, Change — (`strip-legend.ts` `STRIP_IDS`/`STRIP_LABELS`/`STRIP_EXPLAINERS`/
-`DEFAULT_STRIP_IDS`/`knownStrips`/`toggleStrip`, `DEFAULT_STRIP_IDS` all three since that is everything there is)
+`DEFAULT_STRIP_IDS`/`knownStrips`/`toggleStrip`, `DEFAULT_STRIP_IDS = []` so no strip opens until asked)
 read through `use-selected-strips.ts`'s `useSelectedStrips()` — the visuals policy's `strips` (unknown ids dropped by
 `knownStrips`), until the legend is toggled this session, a module-level `useSyncExternalStore` choice shared by
 every track page and kept nowhere — then one `StripRow`
-(the shared 24px caption + click/keyboard seek surface, over `music-player/scrub-math.ts`'s
-`clampPosition`/`keyboardSeek`) per chosen strip. On phones (`useIsMobile()`), `MeasureStack` replaces the multi-strip
-stack with a local `SegmentedPill` switcher (`Loudness | Spectrum | Changes`, filtered to available strips and hidden
-when only one is available) showing Waveform + 1 active strip without mutating `visuals.strips`. `MeasureStack` takes `live` (the player is on this version) and
-writes the playhead fraction to its own `--playhead` from `useProgressFrames`; each `StripRow` translates a 1px
-line by it, shown through `group-data-live/strips`. Each strip is a thin render layer over a pure value-to-geometry
-module tested standalone: `loudness-strip.ts`, `change-strip.ts`. `strip-curve.ts`'s `curveSegments`/`areaSegments`
-turn a fraction series into SVG path segments, one per contiguous run of known values, so a gap in the loudness
-curve breaks the line instead of drawing a false slope across it. `strip-bins.ts`'s `resampleMean` is the shared
-per-bar averaging `LoudnessStrip`/`ChangeStrip` use. `ChangeStrip` takes the change map, the summary and the
-geometry as props with no fetching inside, so PROJ-811's Lab compare draws through the same component.
+(16px caption eyebrow above a `px-2`-aligned seek surface driven by `useTimelineScrub` (`touch-pan-y`), hover ghost + measurement readout, and keyboard seek via `music-player/scrub-math.ts`'s
+`clampPosition`/`keyboardSeek`) per chosen strip (`LoudnessStrip` `h-14 phone:h-12` with `-6`/ref/`-24` gridlines, gradient fill, `measures/clipping` top ticks, and LUFS delta hover; `SpectrogramStrip` `h-24 phone:h-20` / `h-44` expand rendering a DPR `<canvas>` via `spectrogram-lut.ts` (`[-68, -6]` dB, gamma `1.35`, transparent silence, OKLCH `--art` LUT, `0.75 * max + 0.25 * mean`), `100/1k/10k` grid, `50..16k` ticks, and `time · Hz (note) · dB` crosshair; `ChangeStrip` `h-9` with `vs vN` + alignment badge, noise gate `< 0.15`, `Jump:` hotspot chips, and `loudnessDelta` hover). On phones (`useIsMobile()`), `MeasureStack` replaces the multi-strip
+stack with a local `SegmentedPill` switcher (`Loudness | Spectrogram | Changes`, filtered to available strips and hidden
+when only one is available; `handlePhonePress` toggles back to `[]`) showing Waveform + 1 active strip without mutating `visuals.strips`. `MeasureStack` takes `live` (the player is on this version) and iterates `availableStrips`, updating each strip playhead via direct `playhead.style.transform` writes from `useProgressFrames` rather than `--playhead`. Each strip is a thin render layer over a pure value-to-geometry module tested standalone: `loudness-strip.ts`, `change-strip.ts`, `spectrogram-lut.ts`. `strip-curve.ts`'s `curveSegments`/`areaSegments` turn a fraction series into SVG path segments, one per contiguous run of known values, so a gap in the loudness curve breaks the line instead of drawing a false slope across it. `strip-bins.ts`'s `resampleMean` is the shared per-bar averaging `LoudnessStrip`/`ChangeStrip` use. `ChangeStrip` takes the change map, the summary and the geometry as props with no fetching inside, so PROJ-811's Lab compare draws through the same component.
 The server keeps analysers, columns and a measure route for sections, correlation, clipping, silence and
 pitch too; no client strip reads them, since the legend only ever offers the three above.
 `@workspace/session-diff/musical-key`'s `parseMusicalKey`/`circleOfFifthsPosition` back both the rail's Adopt action and
@@ -2943,8 +2903,7 @@ major's spoke; it also takes `tempo` so a dot's `FloatingNote` names the BPM and
 
 **Notebook** (`notebook/`): `NotebookShell` (`NotebookContext { summaries, upsert, remove }` seeded from the
 server list; two `ScrollRoot` panes from `md:`, named `pane="notes"`/`"note"` so they keep separate scroll
-offsets, below that `usePathname() !== NOTES_HREF` picks list or editor), `NoteList`
-(search via `noteMatches`, pinned/unpinned, linked-track chip), `NoteEditor` (mounted by `NotebookNote`
+offsets, below that `usePathname() !== NOTES_HREF` picks list or editor, while `(app)/notes/page.tsx`'s `DesktopNoteIndex` auto-opens the latest note on desktop or shows `"Start a note"`), `NoteList` (search via `noteMatches`, pinned/unpinned, linked-track chip inside `RowMain` beside the timestamp), `NoteEditor` (mounted by `NotebookNote`
 surface `"notebook"` and `track/TrackLyricsEditor` surface `"track"`; takes `layout({ status, menu, editor })`;
 wraps `NoteEditorSession` keyed by an `epoch` that bumps when the URL names another row or the server `version` is
 ahead — callers pass no `key`; the lyrics toggle is a `⋯` menu checkbox and new notes default to lyrics mode),
@@ -2963,25 +2922,7 @@ order), `TrackLyrics` (RSC: the linked note via `cachedNote` →
 join the add line for editors) around a `CollapsibleSection keepMounted prominence="primary"` around `NoteEditor` — existing note or
 `{ draft: { trackId } }` so the first keystroke creates one; `LinkNoteAction` links an existing unlinked note),
 `TrackRelationsSection` (edges with directional verbs, `RelationSelector`), `TrackLabelsSection` (`LabelsCell` with
-`listHref` = `track/all`, so each badge links to the tracks list filtered to that label), `TrackArtists` (the
-byline's artists, each an `AppLink` to `track/all?artist=<name>`; for editors the page passes `getProjectArtists`'s
-promise as `vocabulary` and a picker popover — a hover pencil, or "Add artists" when none are credited —
-credits and uncredits through `patchEntityFields` with `useOptimistic`; `artist-credits.ts` resolves a typed name to
-the project's existing spelling ignoring case, since the server's `artist` filter is an exact match),
-`TrackPrioritySection` (the track's own level as a `PriorityBadge`, a dropdown of the project's scale, which the
-track page reads beside the labels, → `patchEntityFields({ priorityId })`), `TrackExplicitToggle` (rail checkbox,
-`useOptimistic` → `patchEntityFields`). An explicit track wears an `Explicit` flag chip in the masthead byline and an
-`E` flag beside its title in the tracks table, which also has a hidden-by-default `explicit` checkbox column and filter.
-`TrackLifecycle.tsx` holds the page's write actions, all `SectionAction` text actions shown to editors only.
-`TrackRailActions` is the rail's last block, after CREATED·UPDATED: "Archive track" then "Delete track" for a live
-track, "Delete track" alone for an archived one. `UnarchiveAction` sits in the byline beside the `ArchivedFlag`,
-which every role sees on an archived track. Archive and Unarchive run `archiveTracks`/`unarchiveTracks` on the one id
-and hand the result to `toastActionResult` (Undo included); the refresh brings in the flag and the page stays. Delete
-confirms through `ConfirmDeleteDialog` ("Delete {title}?"), then runs `removeEntity` through `applyMutation` with a
-router whose `refresh` pushes the project's `track-all` route, so the route invalidation is the navigation and the
-deleted track's page never re-renders; it toasts "Deleted {title}", and a failure toasts the error and the page stays. The track's sessions table asks for
-`archived: "include"` (the first page in `modules/track/page.tsx`, later pages through the session kind's
-`pageQueryOf` whenever `scope.trackId` is set), so an archived track still lists its own sessions.
+`listHref` = `track/all`, so each badge links to the tracks list filtered to that label), `TrackArtists` (the byline's artists, each an `AppLink` to `track/all?artist=<name>`; for editors the page passes `getProjectArtists`'s promise as `vocabulary` and a `ResponsivePicker` — a hover pencil, or "Add artists" when none are credited — credits and uncredits through `patchEntityFields` with `useOptimistic`; `artist-credits.ts` resolves a typed name to the project's existing spelling ignoring case, since the server's `artist` filter is an exact match), `TrackPrioritySection` (also using `ResponsivePicker`), `TrackExplicitToggle` (rail checkbox, `useOptimistic` → `patchEntityFields`, hidden for viewers). An explicit track wears an `Explicit` flag chip in the masthead byline and an `E` flag beside its title in the tracks table, which also has a hidden-by-default `explicit` checkbox column and filter. `TrackLifecycle.tsx` holds the page's write actions, all `SectionAction` text actions shown to editors only (`LinkToDialog` hides when `!canEdit`). `TrackStudioRailBlock` (`components/track/TrackStudioRailBlock.tsx`) summarises `track.studio` (`sessionCount`, `commitCount`, `saveCount`, `lastSaveAt`, `openOn`, `openSessionId`, `mainSession`) inside `more` and opens `TrackStudioDrawer` (`?studio=overview|history|gear&session=...`, which registers `track-studio-bridge.ts` commands and fetches studio session details/repos/samples on demand so `modules/track/page.tsx` skips SSR fetches for `sessionsPage`/`daws`/`machines`/`repos`), while `TrackStudioEmptyControl` adds `+ DAW set` to `EmptySection` for editors when `sessionCount === 0`. On `TrackPage`, Key/BPM (`DetectedMeta`) stays promoted in the primary rail while studio summary, loudness, spectrum, `TrackWorkHeatmap` (which owns its `RailBlock` and returns `null` when empty), sharing, release date, ISRC/ISWC, custom fields, timestamps, and `TrackRailActions` tuck into `more`. `CollectionPage` wraps streamed sections in `SafeStreamSection` + `.catch(actionFallback)` on unsettled promises so mid-stream errors never throw React #441, and tucks `CollectionLoudness`, `CollectionSpectrum`, `CollectionTempo`, `CollectionKeys`, `UPC`, and `CustomFieldsBlock` into `more`. Both `TrackPage` and `CollectionPage` omit the duplicate masthead `StatusDisplay` and `RepositoriesSection`. `TrackRailActions` is the rail's last block, after CREATED·UPDATED: "Archive track" then "Delete track" for a live track, "Delete track" alone for an archived one. `UnarchiveAction` sits in the byline beside the `ArchivedFlag`, which every role sees on an archived track. Archive and Unarchive run `archiveTracks`/`unarchiveTracks` on the one id and hand the result to `toastActionResult` (Undo included); the refresh brings in the flag and the page stays. Delete confirms through `ConfirmDeleteDialog` ("Delete {title}?"), then runs `removeEntity` through `applyMutation` with a router whose `refresh` pushes the project's `track-all` route, so the route invalidation is the navigation and the deleted track's page never re-renders; it toasts "Deleted {title}", and a failure toasts the error and the page stays. The track's sessions table asks for `archived: "include"` (through `entities/session/api.ts`'s `pageQueryOf` whenever `scope.trackId` is set), so an archived track still lists its own sessions.
 
 **Project page** (`project/`): `SamplesInventory({ projectId, library })` (async RSC, mounted on the project page in its own Suspense between the plugin
 inventory and the heatmap; `project/index.tsx` reads `?library=1`/`0` with `route-module.ts`'s `flagOr(value,
@@ -3081,14 +3022,14 @@ the open row marked `aria-current`, and under it lists the sessions carrying the
 The empty line is the no-usage copy ("No devices yet. Track a project folder with dit to read what its
 sessions use.") or "Nothing here." on a tab with nothing on it;
 `ProjectStats.tsx` exports only `ProjectByline`;
-`ProjectRailCounts`; `LinkFormDialog` (children = trigger; `edit={{ index, link }}` edits that link)/`LinkItems`
+`ProjectRailCounts` (derives track count from `trackCountPromise.rowCount` alongside collections, sessions, and members); `LinkFormDialog` (children = trigger; `edit={{ index, link }}` edits that link)/`LinkItems`
 (client component; project `links` jsonb via `patchField`, every write sends the whole array built by
 `lib/links.ts` `replaceLinkAt`/`removeLinkAt`, and a link is addressed by its index, never its URL. An editor's row is
 the anchor beside a pencil (edit dialog) and a bin (removes at once, an error toasts), both `REVEAL_ON_HOVER`; a
 viewer's row is the anchor alone);
 `DeleteProjectButton` (named confirmation → `deleteProject` → "/"; rendered by the settings Danger zone tab). `collection/CollectionProgress` (average completion `Meter`).
 
-**History page and the commit log** (`modules/session/history.tsx`, `components/session/`). The page is a `PageHead`
+**History page and the commit log** (`modules/session/history.tsx`, `components/session/`). When a session is linked to a track (`session.trackId != null`) and `!standalone`, `modules/session/{page,history}.tsx` redirect straight to the track page with `?studio=overview|history&session=...` (preserving `from`, `to`, `checkpoints`), and `FromCommitLink` targets the track drawer URL as well; an unassigned standalone `SessionPage` renders an `"Assign to a track"` banner. Otherwise the page is a `PageHead`
 titled with the set's name, the lede counted over the whole history from the session detail's `history`
 (`48 commits · 212 saves · 3 machines · first seen 14 Mar 2026 · 38h in the set`, the last only once time was counted, from `GET /sessions/:id` and never the loaded
 window; "No saves yet." with none),
@@ -3186,16 +3127,16 @@ save through `@workspace/ui/lib/day-label` `lastSaveLabel(since)` (`today`/`yest
 
 **Project home** (`project-home/`, mounted by `modules/project/page.tsx`): `TodayReadout.tsx` (client; the
 `WeekStrip` above one sentence from `today-copy.ts` `todaySentence`, which reads `use(today)` for renders, saves
-and `quiet.total` plus the running jobs of `useProjectJobs`; an `ActionError` counts as zero), `WeekStrip.tsx` +
-`week-strip.ts` (`weekStripCaption`; the trailing seven days as a strip, fetched in the viewer's zone), `NewSection.tsx` (async RSC: the day's renders as `RenderRow`s, then the saves through `saveEntries` into
-`NewSaves.tsx`, a client leaf that draws the `SaveTimeline` in `useFormat()`'s zone against the server
+and `quiet.total` plus the running jobs of `useProjectJobs`; hides raw DAW save counts from viewers and appends `"· N unassigned DAW sets"` `#unassigned-sets` link for editors; an `ActionError` counts as zero), `WeekStrip.tsx` +
+`week-strip.ts` (`weekStripCaption`; the trailing seven days as a strip, fetched in the viewer's zone), `NewSection.tsx` (async RSC: collapses repeated renders for the same track via `render-groups.ts` `groupTodayRenders` into one `RenderRow` carrying the newest playable and version range label, then hands the saves through `saveEntries` into
+`NewSaves.tsx`, a client leaf that folds raw DAW saves behind a `"N DAW saves across M sets"` collapsible wrapping `SaveTimeline` in `useFormat()`'s zone against the server
 render's own clock (`asOf`), so the server's HTML and hydration group the same days),
+`UnassignedSetsSection.tsx` + `UnassignedSetsList.tsx` + `unassigned-helpers.ts` (editor-only inbox above `Gone quiet`: suggests existing track matches via `suggestTrackMatch` + `"Match"` chip for `Link to track`, offers `+ New track` prefilled with `cleanSetTitle` + `Open`/`Undo`, and `Ignore` writing `inboxDismissedAt` + `Undo`),
 `RenderRow.tsx` (one playable render row) + `playable.ts` (`renderToPlayable`, the player's track for exactly
 the version that landed), `QuietSection.tsx`
 (async RSC: the quiet tracks, oldest first, with a trailing link to the sorted track list) + `quiet-copy.ts`
-(the since and more labels; the threshold is `project-conventions.quietAfterDays`, read by the RSC, and the "since yesterday" wording of `TodayReadout`/`NewSection` follows `project-conventions.todayNewHours` through `today-copy.ts` `newWindowLabel`), `JobsSection.tsx` (client; running and queued jobs from the jobs
-stream, no props) + `in-flight.ts` (`inFlightJobs`, `inFlightCount`), `RecentActivitySection.tsx` (async RSC:
-the latest eight activity rows through `ActivityList`). Each block renders nothing when it has nothing to show.
+(the since and more labels; the threshold is `project-conventions.quietAfterDays`, read by the RSC, and the "since yesterday" wording of `TodayReadout`/`NewSection` follows `project-conventions.todayNewHours` through `today-copy.ts` `newWindowLabel`), and `JobsSection.tsx` (client; running and queued jobs from the jobs
+stream, no props) + `in-flight.ts` (`inFlightJobs`, `inFlightCount`). Each block renders nothing when it has nothing to show.
 
 **Sharing** (`sharing/` owner side, `share/` public): `SharingRail` (async RSC, `listSharelinks`) →
 `ShareLinkRows` (copy, convert connected↔snapshot, edit, delete) → `ShareDialog` (`shareType` connected|snapshot,
@@ -3214,8 +3155,8 @@ current `index`/`entry` — the player's queue wins over the reader's pick — `
 art field and scroll container, and wraps its children in a `CommentBackendProvider` on `shareCommentBackend`. The
 page is the room around four parts, top to bottom: `ShareMasthead` (eyebrow of `shareFacts`, title, byline of a
 `VersionBadge` or the audio's date, description, the play control or full `Transport` beside `TrackWaveform` with
-`DurationReadout`, the download link when enabled, "Nothing to play yet." when no track has audio),
-`ShareTrackList` (no props; nothing under two entries; `SectionHead` "Tracks", one hairline row per entry with
+`DurationReadout` — stacked full-width above centered transport on `phone:` — plus desktop `SecondaryControls.Volume`, the download link when enabled, "Nothing to play yet." when no track has audio; plus `ShareStickyTransport` pinning a glass mini-transport once the masthead transport scrolls out of view),
+`ShareTrackList` (no props; nothing under two entries; `SectionHead` "Tracks", picking a row plays immediately via `select` → `playNow`, one hairline row per entry with
 number, title, `VersionBadge` and timecode, the current row marked by a travelling band and `aria-current`),
 `ShareComments` (nothing without an entry; `SectionHead` "Comments", the visibility line from
 `isCommentsPrivate`, then `AudioCommentSection` for a member/guest `viewerId`, else read-only `CommentList`, a
@@ -3337,24 +3278,24 @@ palette hooks in `command-palette/`, hotkey hooks in `hotkeys/`.
 
 Tailwind v4 CSS-first, no config file; `postcss.config.mjs` re-exports `@workspace/ui/postcss.config`. The root
 layout imports `@workspace/ui/styles/globals.css` (the app has no stylesheet of its own; BlockNote `.bn-*`
-overrides live under `.doc` there). Fonts: four `next/font/local` loaders — `--font-heading` (Redaction 35),
+overrides live under `.doc` there, setting proportional `--font-doc: var(--font-system-sans)` prose with `data-font="serif"` override while studio tables, readouts, timestamps, and code keep `Spline Sans Mono`). Fonts: four `next/font/local` loaders — `--font-heading` (Redaction 35),
 `--font-display-clean` (Redaction 0), `--font-sub` (Departure Mono), `--font-mono` (Spline Sans Mono, the document
-default). Tokens, type scale, neutral spine (`paper/ink/rule/glass` — `--color-glass`/`--color-glass-edge` are
+default for furniture/readouts). Tokens, type scale, neutral spine (`paper/ink/rule/glass` — `--color-glass`/`--color-glass-edge` are
 registered), artwork channel (`--art*`), motion: DESIGN.md. Variants: `dark`, `stack` (≤1180px), `phone` (<768px,
 matching `useIsMobile`), `fine`/`coarse` pointer, `rail-seam`. Dock reservation: `--tabbar`/`--miniplayer` are
 `0px` until `body:has([data-slot="tabbar"]):not([data-keyboard])`/`body[data-miniplayer]` under the phone query;
 `--dock` is declared on `body` (a
 `var()` inside a custom property resolves on the declaring element) and `CANVAS`/`PAGE`/`PAGE_WIDE` carry
-`pb-(--dock)`; `--player-card` sizes the desktop card and the sidebar footer clearance. `.on-art` is the
-over-artwork text shadow — never re-spell it. Hover reveals: `REVEAL_ON_HOVER` matches an unnamed `group`; inside
+`pb-(--dock)`; `--player-card` sizes the desktop card and the sidebar footer clearance. `.on-art` (75% paper shadow) and `.on-art-soft` (90% ink) are the
+over-artwork treatments — never re-spell them. Hover reveals: `REVEAL_ON_HOVER` matches an unnamed `group`; inside
 a `Row` (`group/row`) use the `/row` variant with a `fine:` gate. Editors use `md:text-small` so the 16px floor
 wins on phones. Dark mode = `.dark` class, from `appearance.theme` (Settings → The theme).
 
 ## Tests
 
-64 `bun test` files, all `*.test.ts`, co-located (`lib/*`, `tables/*`, `tables/cards/*`, `command-palette/*`,
+429 `bun test` files (`*.test.ts`/`*.test.tsx`), co-located (`lib/*`, `tables/*`, `tables/cards/*`, `command-palette/*`,
 `music-player/*`, `spectrum/spectrum-geometry`, `track-audio/*`, `notebook/save-queue`, `dock/tabs`,
-`jobs/jobs-poll`, `hooks/*`, `app/manifest`). `bun run test` in
+`jobs/jobs-poll`, `hooks/*`, `app/manifest`, etc.). `bun run test` in
 `apps/client` (`bun test --parallel`, each file in its own global; `@` resolves through `tsconfig` paths), or
 `bun run test` at the root for every suite but the server's. `bunfig.toml` preloads
 `packages/test/src/dom.ts` (the same preload `packages/ui` uses) before every file, registering a happy-dom

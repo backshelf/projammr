@@ -47,7 +47,7 @@ export function PeekTitleEditor({
   };
 
   const submit = async () => {
-    if (savingRef.current) return;
+    if (endedRef.current || savingRef.current) return;
     const next = draft.trim();
     if (next === "") {
       setError("Title is required");
@@ -96,7 +96,7 @@ export function PeekTitleEditor({
           setError(null);
         }}
         onKeyDown={onKeyDown}
-        onBlur={end}
+        onBlur={() => void submit()}
         readOnly={saving}
         aria-label="Title"
         aria-invalid={error != null}

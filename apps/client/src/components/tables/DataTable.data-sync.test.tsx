@@ -50,7 +50,7 @@ describe("DataTable optimistic save", () => {
       fireEvent.keyDown(cell("11::status"), { key: "Enter" });
     });
     await act(async () => {
-      fireEvent.click(await screen.findByRole("menuitem", { name: /Mixing/ }));
+      fireEvent.click(await screen.findByRole("option", { name: /Mixing/ }));
     });
   };
 

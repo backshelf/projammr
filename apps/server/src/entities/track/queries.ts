@@ -5,11 +5,13 @@ import {
   desc,
   eq,
   getColumns,
+  gt,
   ilike,
   inArray,
   isNotNull,
   isNull,
   lt,
+  max,
   or,
   type SQL,
   sql,
@@ -102,12 +104,20 @@ import {
   collectionSchema,
   collectionTracks,
 } from "../../db/schema/collections.js";
+import { users } from "../../db/schema/auth.js";
 import { entityLabels, labels, labelSchema } from "../../db/schema/labels.js";
+import {
+  MACHINE_OFFLINE_AFTER_MS,
+  machines,
+  openOnSchema,
+} from "../../db/schema/machines.js";
 import { notes, noteSchema } from "../../db/schema/notes.js";
 import {
   priorityLevels,
   priorityLevelSchema,
 } from "../../db/schema/priority-levels.js";
+import { members } from "../../db/schema/projects.js";
+import { commits } from "../../db/schema/repos.js";
 import { saves } from "../../db/schema/saves.js";
 import {
   type Session,
@@ -145,12 +155,33 @@ const trackNoteSchema = noteSchema.pick({
   lyricsMode: true,
 });
 
+const trackStudioMainSessionSchema = sessionSchema.pick({
+  id: true,
+  name: true,
+  daw: true,
+  dawName: true,
+  dawVersion: true,
+  repoId: true,
+  main: true,
+});
+
+const trackStudioSummarySchema = z.object({
+  sessionCount: z.number(),
+  commitCount: z.number(),
+  saveCount: z.number(),
+  lastSaveAt: z.date().nullable(),
+  openOn: openOnSchema,
+  openSessionId: z.number().nullable(),
+  mainSession: trackStudioMainSessionSchema.nullable(),
+});
+
 const getTrackSchema = withFieldValues(
   trackSchema.extend({
     status: statusSchema,
     priority: priorityLevelSchema,
     attachments: z.array(attachedAssetSchema),
     sessions: z.array(sessionSchema),
+    studio: trackStudioSummarySchema,
     collections: z.array(collectionSchema),
     audios: z.array(trackAudioWithAssetSchema),
     primaryAudio: trackAudioWithAssetSchema.nullable(),
@@ -321,6 +352,90 @@ export async function getSharelinkTrack(
   return nullsToUndefined(result);
 }
 
+async function trackStudioSummary(
+  trackSessions: Session[]
+): Promise<z.infer<typeof trackStudioSummarySchema>> {
+  if (trackSessions.length === 0) {
+    return {
+      sessionCount: 0,
+      commitCount: 0,
+      saveCount: 0,
+      lastSaveAt: null,
+      openOn: null,
+      openSessionId: null,
+      mainSession: null,
+    };
+  }
+
+  const sessionIds = trackSessions.map((s) => s.id);
+  const chosen =
+    trackSessions.find((s) => s.main) ??
+    [...trackSessions].sort(
+      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+    )[0]!;
+
+  const onlineSince = new Date(Date.now() - MACHINE_OFFLINE_AFTER_MS);
+  const [[saveRow], [commitRow], [openRow]] = await Promise.all([
+    db
+      .select({ saveCount: count(), lastSaveAt: max(saves.fileUpdatedAt) })
+      .from(saves)
+      .where(inArray(saves.sessionId, sessionIds)),
+    db
+      .select({ commitCount: count() })
+      .from(commits)
+      .where(inArray(commits.sessionId, sessionIds)),
+    db
+      .select({
+        sessionId: sessions.id,
+        machine: machines.name,
+        ownerId: users.id,
+        ownerName: users.name,
+      })
+      .from(machines)
+      .innerJoin(sessions, eq(sessions.id, machines.openSessionId))
+      .innerJoin(
+        members,
+        and(
+          eq(members.userId, machines.userId),
+          eq(members.projectId, sessions.projectId)
+        )
+      )
+      .innerJoin(users, eq(users.id, machines.userId))
+      .where(
+        and(
+          inArray(machines.openSessionId, sessionIds),
+          isNull(machines.removedAt),
+          gt(machines.lastSeenAt, onlineSince)
+        )
+      )
+      .orderBy(desc(machines.lastSeenAt))
+      .limit(1),
+  ]);
+
+  return {
+    sessionCount: trackSessions.length,
+    commitCount: commitRow?.commitCount ?? 0,
+    saveCount: saveRow?.saveCount ?? 0,
+    lastSaveAt: saveRow?.lastSaveAt ?? null,
+    openOn: openRow
+      ? {
+          machine: openRow.machine,
+          owner: { id: openRow.ownerId, name: openRow.ownerName },
+        }
+      : null,
+    openSessionId: openRow?.sessionId ?? null,
+    mainSession: {
+      id: chosen.id,
+      name: chosen.name,
+      daw: chosen.daw,
+      dawName: chosen.dawName,
+      dawVersion: chosen.dawVersion,
+      repoId: chosen.repoId,
+      main: chosen.main,
+    },
+  };
+}
+
 export async function getTrack(trackId: number): Promise<TrackDetail> {
   const result = await db.query.tracks.findFirst({
     with: {
@@ -348,11 +463,12 @@ export async function getTrack(trackId: number): Promise<TrackDetail> {
 
   if (!result) throw new HTTPException(404);
 
-  const [relations, labels, artwork, fields] = await Promise.all([
+  const [relations, labels, artwork, fields, studio] = await Promise.all([
     getTrackRelationEdges(trackId),
     getEntityLabels("track", trackId),
     artworkForTrack(result),
     fieldBagOf("track", trackId),
+    trackStudioSummary(result.sessions),
   ]);
 
   const [audios, [primary] = []] = await Promise.all([
@@ -362,6 +478,7 @@ export async function getTrack(trackId: number): Promise<TrackDetail> {
 
   return {
     ...result,
+    studio,
     audios,
     primaryAudio: primary ?? null,
     ...deriveTrackMusicMeta(result.sessions),

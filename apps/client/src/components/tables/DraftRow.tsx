@@ -120,7 +120,17 @@ function DraftField({
  * with the create button beside the last field input. Enter in any field
  * submits; a field that fails its kind's parse is marked and says why.
  */
-export function DraftRow({
+type DraftFormOptions = {
+  config: NewRowConfig;
+  columnIds: string[];
+  initialValues?: CoercedDraft;
+  lockedFields?: readonly string[];
+  onCreated?: () => void;
+  onCancel?: () => void;
+  autoFocus?: boolean;
+};
+
+function useDraftForm({
   config,
   columnIds,
   initialValues = {},
@@ -128,31 +138,7 @@ export function DraftRow({
   onCreated,
   onCancel,
   autoFocus = false,
-  pinnedColumnId,
-}: {
-  config: NewRowConfig;
-  /** Visible column ids, in render order. */
-  columnIds: string[];
-  /** Identity column, pinned while the grid scrolls sideways. */
-  pinnedColumnId?: string;
-  /**
-   * Coerced values seeding fields the user has not filled — a group-header
-   * draft row pre-filled with that group's value. A seeded field passes the
-   * required check.
-   */
-  initialValues?: CoercedDraft;
-  /**
-   * Field ids the user cannot edit: the seed always wins and the input renders
-   * disabled. Used for a group-header row's grouping field.
-   */
-  lockedFields?: readonly string[];
-  /** Called after a successful create (a group row collapses itself). */
-  onCreated?: () => void;
-  /** Called when Escape is pressed in a field. */
-  onCancel?: () => void;
-  /** Focus the first field as the row mounts — when it was opened on request. */
-  autoFocus?: boolean;
-}) {
+}: DraftFormOptions) {
   const [draft, setDraft] = useState<DraftValues>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -248,14 +234,14 @@ export function DraftRow({
     [submit, onCancel]
   );
 
-  const lastFieldColumn = useMemo(() => {
-    const fieldColumns = columnIds.filter((id) => config.fields[id]);
-    return fieldColumns[fieldColumns.length - 1];
-  }, [columnIds, config.fields]);
-
-  const firstFieldColumn = columnIds.find(
-    (id) => config.fields[id] && !locked.has(id)
+  const fieldColumns = useMemo(
+    () => columnIds.filter((id) => config.fields[id]),
+    [columnIds, config.fields]
   );
+
+  const lastFieldColumn = fieldColumns[fieldColumns.length - 1];
+
+  const firstFieldColumn = fieldColumns.find((id) => !locked.has(id));
 
   const renderField = (id: string) => {
     const isLocked = locked.has(id);
@@ -279,6 +265,30 @@ export function DraftRow({
       />
     );
   };
+
+  return {
+    fieldColumns,
+    lastFieldColumn,
+    errors,
+    isSaving,
+    submit,
+    renderField,
+  };
+}
+
+/**
+ * The bottom row for creating an entity inline. Renders an
+ * editor in each column named by `config.fields` and an empty cell elsewhere,
+ * with the create button beside the last field input. Enter in any field
+ * submits; a field that fails its kind's parse is marked and says why.
+ */
+export function DraftRow({
+  pinnedColumnId,
+  ...formOptions
+}: DraftFormOptions & { pinnedColumnId?: string }) {
+  const { config, columnIds } = formOptions;
+  const { lastFieldColumn, errors, isSaving, submit, renderField } =
+    useDraftForm(formOptions);
 
   return (
     // A row is a rectangle of text, so it travels by position alone: the rows
@@ -326,5 +336,57 @@ export function DraftRow({
         )
       )}
     </MotionTableRow>
+  );
+}
+
+/**
+ * Phone-tier inline creation card: shares `useDraftForm` validation and state
+ * with `DraftRow`, stacked vertically for narrow touch screens.
+ */
+export function DraftCardForm(formOptions: DraftFormOptions) {
+  const { config, onCancel } = formOptions;
+  const { fieldColumns, isSaving, submit, renderField } =
+    useDraftForm(formOptions);
+
+  return (
+    <div className="mt-2 flex flex-col gap-3 rounded-md border border-rule bg-paper p-3">
+      {fieldColumns.map((id) => (
+        <div key={id} className="min-w-0">
+          {renderField(id)}
+        </div>
+      ))}
+      <div className="flex items-center justify-end gap-2">
+        {onCancel && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="coarse:min-h-11"
+            disabled={isSaving}
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          className="coarse:min-h-11"
+          disabled={isSaving}
+          onClick={submit}
+          aria-label={
+            config.entityLabel ? `Create ${config.entityLabel}` : "Create row"
+          }
+        >
+          {isSaving ? (
+            <Spinner />
+          ) : config.entityLabel ? (
+            `Create ${config.entityLabel}`
+          ) : (
+            "Create"
+          )}
+        </Button>
+      </div>
+    </div>
   );
 }

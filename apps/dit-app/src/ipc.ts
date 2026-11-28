@@ -54,6 +54,11 @@ export type Machine = {
 /** Why nothing reaches the hub, when nothing does. */
 export type Connection = "online" | "offline" | "no-hub" | "refused";
 
+export type OpenTrack = {
+  id: number;
+  title: string;
+};
+
 export type OpenSet = {
   /** The set file's path. */
   path: string;
@@ -66,6 +71,8 @@ export type OpenSet = {
   signal: "script" | "log" | "title" | "saves";
   /** The set's page on the instance, for `open_web`; null until a push has made the set a session there. */
   webPath: string | null;
+  /** The track the set's hub session is linked to; null when unassigned. */
+  track: OpenTrack | null;
 };
 
 /** A track of a set, as the DAW reports it: `diffStructure` and the skyline take this shape. */
@@ -252,6 +259,10 @@ export type Settings = {
   rejectedFiles: RememberedFile[];
   /** Folders marked "Never here", each removable (`forget_never_here`). */
   neverHereFolders: string[];
+  /** The user's home folder, for `~/` shortening and naming the default watch scope. */
+  home: string;
+  /** The running app version. */
+  appVersion: string;
 };
 
 /** A file the person said "Not a bounce" to; the ledger remembers it by `fingerprint`. */
@@ -451,6 +462,7 @@ export type SettingChange = {
 export type Commands = {
   get_snapshot: { args: undefined; result: Snapshot };
   sign_in: { args: { host: string | null }; result: void };
+  cancel_sign_in: { args: undefined; result: void };
   sign_out: { args: undefined; result: void };
   adopt: { args: { folder: string; projectId: number | null }; result: void };
   decline_folder: { args: { folder: string }; result: void };

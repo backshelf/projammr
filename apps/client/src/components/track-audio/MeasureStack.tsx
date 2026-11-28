@@ -1,8 +1,16 @@
 "use client";
 
+import {
+  useProgressFrames,
+  writeAttribute,
+} from "@/components/music-player/player-hooks";
 import { ChangeStrip } from "@/components/track-audio/ChangeStrip";
 import { LoudnessStrip } from "@/components/track-audio/LoudnessStrip";
 import { SpectrogramStrip } from "@/components/track-audio/SpectrogramStrip";
+import {
+  PlayheadRegistryContext,
+  type PlayheadTarget,
+} from "@/components/track-audio/StripRow";
 import {
   STRIP_EXPLAINERS,
   STRIP_IDS,
@@ -13,22 +21,20 @@ import {
   useTrackAudioDiff,
   useTrackAudioMeasure,
 } from "@/components/track-audio/measures";
-import { useProgressFrames } from "@/components/music-player/player-hooks";
-import { useRef, useState } from "react";
-import { SegmentedPill } from "@workspace/ui/components/segmented-pill";
 import { TogglePill } from "@workspace/ui/components/toggle-pill";
-import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
-import { cn } from "@workspace/ui/lib/utils";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip";
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
+import { cn } from "@workspace/ui/lib/utils";
+import { useCallback, useRef, useState } from "react";
 
 /** Compact labels for the phone single-strip switcher so all three fit on one line. */
 const PHONE_STRIP_LABELS: Readonly<Record<StripId, string>> = {
   loudness: "Loudness",
-  spectrogram: "Spectrum",
+  spectrogram: "Spectrogram",
   change: "Changes",
 };
 
@@ -48,10 +54,12 @@ const LEGEND_SWATCH =
  */
 function StripPill({
   id,
+  label = STRIP_LABELS[id],
   pressed,
   onPressedChange,
 }: {
   id: StripId;
+  label?: string;
   pressed: boolean;
   onPressedChange: () => void;
 }) {
@@ -64,7 +72,7 @@ function StripPill({
           className={cn("group/legend", LEGEND_PILL)}
         >
           <i aria-hidden className={LEGEND_SWATCH} />
-          {STRIP_LABELS[id]}
+          {label}
         </TogglePill>
       </TooltipTrigger>
       <TooltipContent>{STRIP_EXPLAINERS[id]}</TooltipContent>
@@ -75,25 +83,20 @@ function StripPill({
 /**
  * The strips under the waveform: a legend of `TogglePill`s choosing which
  * measurements to show (persisted per visitor), then one captioned row per
- * choice, sharing the waveform's own bar grid and click-to-seek gesture.
+ * choice, sharing the waveform's `px-2`-aligned timeline and scrubbing.
  *
- * Each strip's measure is asked for only while its pill is on: the
- * `trackAudioId` a hook receives is null otherwise, and a null id fetches
- * nothing (`components/track-audio/measures.ts`). Toggling a pill on or off
- * only re-renders this stack, never the waveform beside it.
- *
- * Renders as a `grid-cols-subgrid` spanning both of its parent's columns —
- * `TrackAudioSection`'s `[auto_minmax(0,1fr)]` grid, the same one the play
- * affordance and the waveform sit in — so every `StripRow`'s label and seek
- * surface share that grid's column widths down another subgrid level.
+ * Playhead updates write `transform` directly on each strip's registered `<i>`
+ * node so 60fps playback triggers zero subtree CSS variable recalculation.
  */
 export function MeasureStack({
   trackAudioId,
   previousAudioId,
+  previousVersion = null,
   durationSeconds,
   spectrogramKey,
   selectedIds,
   onToggle,
+  onClear,
   getSeconds,
   onSeek,
   live,
@@ -105,10 +108,12 @@ export function MeasureStack({
   /** The version the consecutive change map compares against; null with no
    *  earlier version to diff against. */
   previousAudioId: number | null;
+  previousVersion?: number | null;
   durationSeconds: number;
   spectrogramKey: string | null;
   selectedIds: readonly StripId[];
   onToggle: (id: StripId) => void;
+  onClear?: () => void;
   getSeconds: () => number;
   onSeek: (seconds: number) => void;
 }) {
@@ -122,32 +127,77 @@ export function MeasureStack({
     return true;
   });
 
-  // On phones, keep vertical stack compact: Waveform + 1 active analysis strip
-  // chosen via a local segmented switcher, without overwriting the viewer's
-  // desktop multi-strip preference.
-  const phoneSingleStrip = isPhone && selectedIds.length > 0;
-  const activePhoneStrip: StripId | null = !phoneSingleStrip
-    ? null
-    : phoneStrip !== null && availableStrips.includes(phoneStrip)
-      ? phoneStrip
-      : (availableStrips.find((id) => has(id)) ?? availableStrips[0] ?? null);
+  // On phones, keep vertical stack compact: at most 1 active strip visible at
+  // a time, while still allowing deselecting back to `[]` even with 1 strip.
+  const activePhoneStrip: StripId | null =
+    !isPhone || selectedIds.length === 0
+      ? null
+      : phoneStrip !== null && availableStrips.includes(phoneStrip)
+        ? phoneStrip
+        : (availableStrips.find((id) => has(id)) ?? availableStrips[0] ?? null);
 
-  const show = (id: StripId) =>
-    phoneSingleStrip ? activePhoneStrip === id : has(id);
+  const show = (id: StripId) => (isPhone ? activePhoneStrip === id : has(id));
 
-  // One playhead through every strip: the position is written to the stack
-  // as a fraction, and each strip's line reads it, so a frame costs one
-  // style write however many strips are on.
-  const stackRef = useRef<HTMLDivElement>(null);
+  const handlePhonePress = (id: StripId) => {
+    if (activePhoneStrip === id) {
+      setPhoneStrip(null);
+      if (onClear) {
+        onClear();
+      } else {
+        for (const selected of selectedIds) onToggle(selected);
+      }
+      return;
+    }
+    if (selectedIds.length === 0) {
+      onToggle(id);
+    }
+    setPhoneStrip(id);
+  };
+
+  // Direct-transform playhead writes onto registered strip `<i>` elements
+  // without setting an inherited `--playhead` CSS custom property on the stack.
+  const playheadsRef = useRef(new Set<PlayheadTarget>());
+  const lastSecondsRef = useRef(0);
+
+  const applyPlayhead = useCallback(
+    (target: PlayheadTarget, seconds: number) => {
+      const fraction =
+        live && durationSeconds > 0
+          ? Math.max(0, Math.min(1, seconds / durationSeconds))
+          : 0;
+      const transform = `translateX(${(fraction * 100).toFixed(4)}%)`;
+      if (target.playhead.style.transform !== transform) {
+        target.playhead.style.transform = transform;
+      }
+      const opacity = live ? "1" : "0";
+      if (target.playhead.style.opacity !== opacity) {
+        target.playhead.style.opacity = opacity;
+      }
+      writeAttribute(
+        target.slider,
+        "aria-valuenow",
+        String(Math.round(seconds))
+      );
+    },
+    [live, durationSeconds]
+  );
+
+  const registerPlayhead = useCallback(
+    (target: PlayheadTarget) => {
+      playheadsRef.current.add(target);
+      applyPlayhead(target, lastSecondsRef.current);
+      return () => {
+        playheadsRef.current.delete(target);
+      };
+    },
+    [applyPlayhead]
+  );
+
   useProgressFrames((seconds) => {
-    const stack = stackRef.current;
-    if (!stack) return;
-    const fraction =
-      live && durationSeconds > 0
-        ? Math.max(0, Math.min(1, seconds / durationSeconds)).toFixed(4)
-        : "0";
-    if (stack.style.getPropertyValue("--playhead") !== fraction)
-      stack.style.setProperty("--playhead", fraction);
+    lastSecondsRef.current = seconds;
+    for (const target of playheadsRef.current) {
+      applyPlayhead(target, seconds);
+    }
   });
 
   const loudnessCurve = useTrackAudioMeasure<(number | null)[]>(
@@ -160,66 +210,73 @@ export function MeasureStack({
   );
 
   return (
-    <div
-      ref={stackRef}
-      data-live={live ? "" : undefined}
-      className="group/strips col-span-2 mt-2 grid grid-cols-subgrid"
-    >
-      {phoneSingleStrip ? (
-        availableStrips.length > 1 && activePhoneStrip !== null ? (
-          <div className="col-span-2 pb-2">
-            <SegmentedPill
+    <PlayheadRegistryContext value={registerPlayhead}>
+      <div className="mt-2 flex flex-col">
+        {isPhone ? (
+          availableStrips.length > 0 && (
+            <div
+              className="flex flex-wrap gap-1.5 px-2 pb-2"
+              role="group"
               aria-label="Analysis strip"
-              options={availableStrips.map((id) => ({
-                value: id,
-                label: PHONE_STRIP_LABELS[id],
-              }))}
-              value={activePhoneStrip}
-              onValueChange={setPhoneStrip}
-            />
+            >
+              {availableStrips.map((id) => (
+                <StripPill
+                  key={id}
+                  id={id}
+                  label={PHONE_STRIP_LABELS[id]}
+                  pressed={activePhoneStrip === id}
+                  onPressedChange={() => handlePhonePress(id)}
+                />
+              ))}
+            </div>
+          )
+        ) : (
+          <div
+            className="flex flex-wrap gap-1.5 px-2 pb-2"
+            role="group"
+            aria-label="Strips"
+          >
+            {availableStrips.map((id) => (
+              <StripPill
+                key={id}
+                id={id}
+                pressed={has(id)}
+                onPressedChange={() => onToggle(id)}
+              />
+            ))}
           </div>
-        ) : null
-      ) : (
-        <div
-          className="col-span-2 flex flex-wrap gap-1.5 pb-2"
-          role="group"
-          aria-label="Strips"
-        >
-          {STRIP_IDS.map((id) => (
-            <StripPill
-              key={id}
-              id={id}
-              pressed={has(id)}
-              onPressedChange={() => onToggle(id)}
-            />
-          ))}
-        </div>
-      )}
-      {show("loudness") && loudnessCurve && (
-        <LoudnessStrip
-          curve={loudnessCurve}
-          durationSeconds={durationSeconds}
-          getSeconds={getSeconds}
-          onSeek={onSeek}
-        />
-      )}
-      {show("spectrogram") && spectrogramKey && (
-        <SpectrogramStrip
-          spectrogramKey={spectrogramKey}
-          durationSeconds={durationSeconds}
-          getSeconds={getSeconds}
-          onSeek={onSeek}
-        />
-      )}
-      {show("change") && diff && (
-        <ChangeStrip
-          change={diff.change}
-          summary={diff.summary}
-          durationSeconds={durationSeconds}
-          getSeconds={getSeconds}
-          onSeek={onSeek}
-        />
-      )}
-    </div>
+        )}
+        {show("loudness") && loudnessCurve && (
+          <LoudnessStrip
+            trackAudioId={trackAudioId}
+            curve={loudnessCurve}
+            durationSeconds={durationSeconds}
+            getSeconds={getSeconds}
+            onSeek={onSeek}
+          />
+        )}
+        {show("spectrogram") && spectrogramKey && (
+          <SpectrogramStrip
+            spectrogramKey={spectrogramKey}
+            durationSeconds={durationSeconds}
+            getSeconds={getSeconds}
+            onSeek={onSeek}
+          />
+        )}
+        {show("change") && diff && (
+          <ChangeStrip
+            vsVersion={previousVersion}
+            aligned={diff.aligned}
+            offsetMs={diff.offsetMs}
+            change={diff.change}
+            loudnessDelta={diff.loudnessDelta}
+            summary={diff.summary}
+            durationSeconds={durationSeconds}
+            getSeconds={getSeconds}
+            onSeek={onSeek}
+          />
+        )}
+      </div>
+    </PlayheadRegistryContext>
   );
 }

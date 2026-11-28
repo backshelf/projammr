@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { STRIP_IDS } from "@/components/track-audio/strip-legend";
 import { DEFAULT_VISUALS } from "./visuals";
 
 describe("DEFAULT_VISUALS", () => {
@@ -9,7 +8,7 @@ describe("DEFAULT_VISUALS", () => {
       meterBallistics: 1,
       waveformDetail: 4,
       waveformHeight: "lg",
-      strips: STRIP_IDS,
+      strips: [],
       lavaField: true,
       artBreathes: true,
     });

@@ -1,6 +1,6 @@
 import { useFormat } from "@workspace/ui/components/format-provider";
 import { LoudnessUnit } from "@workspace/ui/components/loudness/loudness-unit";
-import { formatTruePeakValue } from "@workspace/ui/lib/loudness";
+import { formatSignedDecimal } from "@workspace/ui/lib/loudness";
 import { cn } from "@workspace/ui/lib/utils";
 
 export function LoudnessLabel({
@@ -26,10 +26,11 @@ export function LoudnessLabel({
     <span className={cn("shrink-0 tabular-nums", className)}>
       {format.lufs(lufs)} <LoudnessUnit unit="LUFS" />
       {truePeakDb != null && (
-        <>
+        <span className={truePeakDb > 0 ? "text-warn" : undefined}>
           {" · "}
-          <LoudnessUnit unit="TP" /> {formatTruePeakValue(truePeakDb)}
-        </>
+          {formatSignedDecimal(truePeakDb)} dB
+          <LoudnessUnit unit="TP" compact />
+        </span>
       )}
     </span>
   );

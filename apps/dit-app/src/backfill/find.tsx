@@ -1,8 +1,9 @@
-import { useMemo, type JSX } from "react";
+import { useMemo, useState, type JSX } from "react";
 import { IconFolderPlus, IconX } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { useFormat } from "@workspace/ui/components/format-provider";
 import { IconButton } from "@workspace/ui/components/icon-button";
+import { Input } from "@workspace/ui/components/input";
 import { Kbd } from "@workspace/ui/components/kbd";
 
 import type { BackfillView } from "../backfill-ipc";
@@ -86,10 +87,17 @@ export function Find({
   actions: BackfillActions;
 }): JSX.Element {
   const format = useFormat();
+  const [filter, setFilter] = useState("");
+  const tickableFolders = useMemo(
+    () => tickable(view.folders),
+    [view.folders]
+  );
   const ticked = useMemo(
     () => tickedPaths(view.folders, unticked),
     [view.folders, unticked]
   );
+  const allTicked =
+    tickableFolders.length > 0 && ticked.length === tickableFolders.length;
   const rows = useMemo<FolderListRow[]>(
     () =>
       view.folders.map((folder) => ({
@@ -99,6 +107,18 @@ export function Find({
         tickable: !folder.already,
       })),
     [view.folders, format]
+  );
+  const query = filter.trim().toLowerCase();
+  const shownRows = useMemo(
+    () =>
+      query === ""
+        ? rows
+        : rows.filter(
+            (row) =>
+              row.title.toLowerCase().includes(query) ||
+              row.path.toLowerCase().includes(query)
+          ),
+    [rows, query]
   );
   const next = (): void => void actions.check(ticked);
   const notice = emptyNotice(view);
@@ -115,17 +135,49 @@ export function Find({
         <>
           <Roots roots={view.roots} actions={actions} />
           {rows.length > 0 && (
-            <FolderList
-              label="Folders found"
-              rows={rows}
-              chosen={chosen?.folder ?? null}
-              onChoose={(folder) => void actions.choose(folder)}
-              ticks={{
-                unticked,
-                onToggle: (path) => onUnticked(toggled(unticked, path)),
-              }}
-              onPrimary={ticked.length > 0 ? next : undefined}
-            />
+            <>
+              <div className="flex items-center gap-2 border-b border-rule px-3 py-2">
+                <Input
+                  type="search"
+                  aria-label="Filter folders"
+                  placeholder="Filter folders"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  spellCheck={false}
+                  className="min-w-0 flex-1"
+                />
+                <Button
+                  variant="ghost"
+                  disabled={tickableFolders.length === 0}
+                  onClick={() =>
+                    onUnticked(
+                      allTicked
+                        ? new Set(tickableFolders.map((folder) => folder.path))
+                        : new Set()
+                    )
+                  }
+                >
+                  {allTicked ? "Untick all" : "Tick all"}
+                </Button>
+              </div>
+              {shownRows.length === 0 ? (
+                <p className="p-3 text-small text-ink-soft">
+                  No folder matches “{filter.trim()}”.
+                </p>
+              ) : (
+                <FolderList
+                  label="Folders found"
+                  rows={shownRows}
+                  chosen={chosen?.folder ?? null}
+                  onChoose={(folder) => void actions.choose(folder)}
+                  ticks={{
+                    unticked,
+                    onToggle: (path) => onUnticked(toggled(unticked, path)),
+                  }}
+                  onPrimary={ticked.length > 0 ? next : undefined}
+                />
+              )}
+            </>
           )}
         </>
       }

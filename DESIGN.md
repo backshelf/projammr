@@ -23,7 +23,7 @@ colors:
   art-glow-fallback: "oklch(0.65 0 0)"
   art-fallback-dark: "oklch(0.8 0 0)"
   art-glow-fallback-dark: "oklch(0.38 0 0)"
-  warn: "oklch(0.58 0.16 65)"
+  warn: "oklch(0.53 0.16 65)"
   danger: "oklch(0.52 0.22 27)"
   warn-dark: "oklch(0.78 0.15 70)"
   danger-dark: "oklch(0.7 0.19 22)"
@@ -59,7 +59,7 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
   prose:
-    fontFamily: "Spline Sans Mono, ui-monospace, monospace"
+    fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.75
@@ -217,7 +217,7 @@ gradients, glow, synthwave).
 
 - Artwork is the only source of hue; with no artwork the room is pure grayscale.
 - True-neutral paper and ink with a wide range, in light and dark themes.
-- Four self-hosted faces, each with exactly one job; monospace is the document default.
+- Four self-hosted faces plus proportional system prose in `.doc`: monospace (`Spline Sans Mono`) is the document default for furniture, studio tables, readouts, timestamps, and code, while long-form notes and lyrics default to proportional sans (`--font-system-sans`, or `--font-system-serif` via `data-font="serif"`).
 - Flat pages; depth comes from blurred art, the wash, grain and glass. Only overlays lift.
 - Studio-gear readouts (meters, carets, ticks, pies, waveforms) instead of charts and cards.
 - One orchestrated page-load reveal; ambient motion only where the art lives; everything respects
@@ -258,7 +258,7 @@ chroma and the page stays grayscale. `packages/ui/src/lib/art.ts` maps the hue a
 client's `apps/client/src/lib/art.ts` `artVarsFromArtwork` hands it an artwork row:
 
 - `accentFromHue(hue, chroma)` fixes lightness per theme so contrast is predictable whatever the cover looked like:
-  light `oklch(0.55 min(C×1.3, 0.19) H)`, dark `oklch(0.78 min(C×1.25, 0.17) H)`, glow light
+  light `oklch(0.5 min(C×1.3, 0.19) H)`, dark `oklch(0.78 min(C×1.25, 0.17) H)`, glow light
   `oklch(0.72 min(C, 0.14) H)`, glow dark `oklch(0.45 min(C, 0.14) H)`.
 - `artVarsFromAccent(hue, chroma, image?)` returns inline vars `--art-light`, `--art-glow-light`, `--art-dark`,
   `--art-glow-dark` and `--art-image`, grayscale when the hue is null; the client's `artVarsFromArtwork(artwork)` is
@@ -285,9 +285,7 @@ with `artVarsFromAccent`.
 
 ### Tertiary: user colour
 
-Status and label colours come from the user's own pickers (`colourHex`). They appear at **full strength** where
-there is one of them (masthead byline pill, rail status block) and as a **quiet tinted chip** (18% fill, 35%
-border) in tables and menus, where a column of six at full strength would fight the artwork. Text on a user colour
+Status and label colours come from the user's own pickers (`colourHex`). Full-strength user colour appears in **one place** on an entity page — the rail's `StatusDropdown` (`status-block`) — avoiding competing full-strength pills in the masthead above it (`NowPlayingFlag` uses a quiet inline 6px playback dot in `--art`/`--ink-soft` instead). In tables, menus, and peek panels, statuses and labels render as a **quiet tinted chip** (18% fill, 35% border) so a column of six at full strength never fights the artwork. Text on a user colour
 always goes through `getContrastColour()` (`lib/css-utils.ts`). **Priority levels** are user colours too: each
 level of a project's scale carries the colour its editor picked (a new project's five start in neutral greys),
 and `PriorityBadge` wears it as the same tinted chip a status wears in a table, as a flag (no pie), its label in
@@ -365,17 +363,15 @@ requests: `next/font/local` in `apps/client/src/app/layout.tsx` loads `apps/clie
 
 Each role maps to a utility and a CSS variable. Sizes follow a 1.25 ratio from a 0.875rem body.
 
-- **Display** (`{typography.display}`; `font-heading`, `text-display`): the masthead `<h1>` only. The halftone bite
-  is the point; never use it small.
+- **Display** (`{typography.display}`; `font-heading`, `text-display`): the masthead `<h1>` only (`leading-[1.02]`, `text-balance`, `wrap-break-word` / `overflow-wrap: break-word` — never `overflow-wrap: anywhere` which splits words mid-syllable). The halftone bite is the point; never use it small.
 - **Headline** (`{typography.headline}`; `text-title`): a compact page title (`PageHead`, `Masthead compact`, and
   the masthead on phones).
 - **Title** (`{typography.title}`; `text-subtitle`): headings on pages with no entity behind them (sign-in, invite).
 - **Stat** (`{typography.stat}`; `font-display-clean`, `text-section`): the one stat figure in the rail
   (`LoudnessReading`) and the sidebar brand, where halftone would read as noise.
 - **Lead** (`{typography.lead}`; `text-lead`): emphasised body.
-- **Body** (`{typography.body}`; `font-mono`, `text-body`): the document default (`font-mono` on `<html>`), table
-  cells, bylines. Most elements need no font class.
-- **Prose** (`{typography.prose}`): notes and lyrics inside `.doc`, capped at the `{spacing.measure}` measure.
+- **Body** (`{typography.body}`; `font-mono`, `text-body`): the document default (`font-mono` on `<html>`), studio tables, readouts, timestamps, code, and bylines. Most elements need no font class.
+- **Prose** (`{typography.prose}`): notes and lyrics inside `.doc`, capped at the `{spacing.measure}` measure, rendered in `--font-doc` (`--font-system-sans` proportional sans by default, or `--font-system-serif` when `data-font="serif"`). Lyrics gutter counts and inline `<code>` keep `--font-mono`.
 - **Small** (`{typography.small}`; `text-small`): subheads, secondary body, comment bodies.
 - **Section label** (`{typography.section-label}`; `SECTION_TITLE`): uppercase section heads rendered by
   `SectionHead` and `CollapsibleSection`.
@@ -389,8 +385,7 @@ shape in faint ink) from `packages/ui/src/lib/overlay.ts`.
 
 ### Named Rules
 
-**The One Job Rule.** Each face has exactly one job. Redaction 35 is only the page `<h1>`; Departure Mono is only
-labels, always tracked caps and never prose; Spline Sans Mono is everything else.
+**The One Job Rule.** Each face has one clear role: `Redaction 35` is only the page `<h1>`; `Departure Mono` is only tracked-caps labels and never prose; `Spline Sans Mono` owns studio tables, readouts, timestamps, code, and furniture; `.doc` prose owns proportional sans (`--font-system-sans`, or serif under `data-font="serif"`) for long-form writing and lyrics.
 
 **The Scale Only Rule.** Use `text-micro`, `text-small`, `text-body`, `text-lead`, `text-section`, `text-subtitle`,
 `text-title` and `text-display`. Never `text-xs`, `text-sm`, `text-lg` or arbitrary `text-[…]` sizes;
@@ -414,8 +409,8 @@ title and the content on narrower screens.
 | `--radius`                                | `{rounded.lg}`                                       | base; `--radius-sm…4xl` derive from it                                      |
 | `--density`                               | 1                                                    | factor on `--table-row-h` and the vertical padding of `Row`                 |
 | `--table-row-h`                           | `round(calc(2.75rem * var(--density)), 1px)`         | uniform entity-table body row height (44px default)                         |
-| `--masthead-band` / `--masthead-head`     | 82vh / 50vh (52vh / 42vh on phones)                  | an entity masthead's art band and its header's floor                        |
-| `--tabbar-height` / `--miniplayer-height` | 3.5rem / 4rem                                        | phone dock rows                                                             |
+| `--masthead-band` / `--masthead-head`     | 82vh / 50vh (52vh / 30vh on phones)                  | an entity masthead's art band and its header's floor                        |
+| `--tabbar-height` / `--miniplayer-height` | 3.5rem / 4rem                                        | phone dock rows (`--tabbar`, `--miniplayer`, and `--dock` zero on `body[data-keyboard]`) |
 
 Sections on a page are separated by `{spacing.section}` (`gap-11`) from the page's flex gap, never by margins on
 sections. Rail blocks are separated by `{spacing.rail-block}` and a hairline.
@@ -428,7 +423,7 @@ Split across `packages/ui/src/lib/shell.ts` (`COLUMN`, `PAGE`, `PAGE_WIDE`, the 
 
 | Constant             | Purpose                                                                                                                                                                                                                                                                                 |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CANVAS`             | entity-page grid `[minmax(0,1fr) var(--rail)]` with named areas `'head rail' 'body rail'`, `isolate`, `overflow-x-clip` (so masthead blur never bleeds into the sidebar); ≤1180px one column with areas `'head' 'rail' 'body'`. The `ArtProvider` wrapper is also the scroll container. |
+| `CANVAS`             | entity-page grid `[minmax(0,1fr) var(--rail)]` with named areas `'head rail' 'body rail'`, `isolate`, `overflow-x-clip` (so masthead blur never bleeds into the sidebar); ≤1180px (`stack:`) one column with `grid-rows-[max-content_max-content_1fr]` and areas `'head' 'rail' 'body'`. The `ArtProvider` wrapper is also the scroll container, styled with `scrollbar-width: thin` across `@layer base *`. |
 | `BODY`               | the content column below the masthead (area `body`): `flex-col gap-11 px-(--gutter) pb-11`, children capped at `--column` and centred                                                                                                                                                   |
 | `MASTHEAD_AREA`      | the masthead's cell (area `head`), passed to `Masthead` as `className`                                                                                                                                                                                                                  |
 | `COLUMN`             | `mx-auto w-full max-w-(--column)`                                                                                                                                                                                                                                                       |
@@ -452,9 +447,7 @@ ArtProvider image={resolveArtwork(…)}        ← arrival root + art vars + scr
      RailIdentity → RailBlock… (status, progress, property editors, grid pairs)
 ```
 
-**Masthead.** `min-h-(--masthead-head)` (50vh, 42vh on phones), content bottom-aligned inside `COLUMN`. The art
-and scrim are siblings of the columns, not children of the header, so the blur can run under the rail (see
-Elevation & Depth).
+**Masthead.** `min-h-(--masthead-head)` (50vh, 30vh on phones), content bottom-aligned inside `COLUMN`. The art and scrim are siblings of the columns, not children of the header, so the blur can run under the rail (see Elevation & Depth).
 
 **Rail.** Two elements, kept separate for z-index scoping. `RailColumn` (`#rightside`, `relative z-3`) is the grid
 track and runs the full page height because `CANVAS` rows size to content. `Rail` (`.rail`) is `sticky top-0`,
@@ -463,10 +456,7 @@ track and runs the full page height because `CANVAS` rows size to content. `Rail
 **Share page.** Outside the app shell: no sidebar, no rail. The room's `ArtProvider` fills the page behind
 everything with the cover as an art field and is the scroll container; the page is the entity masthead's grammar
 without its chrome. First the masthead (an eyebrow of facts, the title, a byline, the owner's description, then the
-play band: the control, the waveform that plays and scrubs, the timecode); then, in one `COLUMN`, the tracklist
-(hairline rows, drawn only for two or more tracks; the current row wears a band that travels to the next), the
-thread of timestamped comments the share exists to collect, and the footer. Type over the cover takes `on-art` /
-`on-art-soft`; without artwork the field is grayscale and the type keeps its plain colours.
+play band: the control, the waveform with `DurationReadout` — stacked full-width above the transport on `phone:` — plus desktop volume); once the masthead's transport scrolls out of view, `ShareStickyTransport` pins a glass mini-transport at the top; then, in one `COLUMN`, the tracklist (hairline rows, drawn only for two or more tracks; picking a row plays immediately; the current row wears a band that travels to the next), the thread of timestamped comments the share exists to collect, and the footer. Type over the cover takes `on-art` / `on-art-soft`; without artwork the field is grayscale and the type keeps its plain colours.
 
 **Public website.** Outside the app shell, with no sidebar, rail or player: a masthead, then a run of bands, each
 capped at `{spacing.page}` and centred. Its anatomy and breakpoints are in Components → Public website.
@@ -488,7 +478,7 @@ motion.
 | ≥1800px            | `--column` 74rem, `--rail` 24rem                                                                                                                                                                                                                           |
 | 1181–1799px        | default: sticky glass rail, centred column                                                                                                                                                                                                                 |
 | ≤1180px (`stack:`) | `CANVAS` and `SPLIT` collapse to one column; areas reorder to `'head' 'rail' 'body'`; `Rail` unsticks into an `auto-fit minmax(10rem,1fr)` metadata grid on `bg-paper-sunk`; `RailIdentity` hidden; rail-block hairlines dropped                           |
-| <768px (`phone:`)  | masthead 42vh, title drops to `text-title`; `BODY` gap and bottom pad 8; rail blocks past `collapseAfter` fold behind a "More details" toggle (`RailMore`); art 52vh with 48px bleed, blur 32px; the sidebar is absent; the player collapses into the dock |
+| `<768px (`phone:`)`  | masthead 30vh, title drops to `text-title`; `BODY` gap and bottom pad 8; rail blocks past `collapseAfter` fold behind a "More details" toggle (`RailMore`); art 52vh with 48px bleed, blur 32px; the sidebar is absent; the player collapses into the dock |
 
 Tables keep all their real columns at every width and scroll horizontally inside `TableScroll` with the identity
 column pinned.
@@ -512,26 +502,18 @@ under `coarse:`.
 
 ### Phone chrome
 
-Below 768px the sidebar is gone and three pieces replace it. `TopStrip` (project switcher or back affordance, plus
-the account menu, `min-h-11`) sits in normal flow above the page so it never covers a masthead. `TabBar` (five
-sections across the bottom of a project) and `MiniPlayer` (the playing track) share one fixed container, `Dock`,
-so the two never race for the bottom edge, and `Dock` renders nothing when neither has anything to show.
+Below 768px the sidebar is gone and three pieces replace it. `TopStrip` (project switcher or back affordance on the left, `+` `QuickCreateSheet` trigger and account menu on the right, `min-h-11`) sits in normal flow above the page so it never covers a masthead. `TabBar` (five sections across the bottom of a project: `Home · Collections · Tracks · Notes · Search`, plus opt-in `Studio`) and `MiniPlayer` (the playing track) share one fixed container, `Dock`, so the two never race for the bottom edge, and `Dock` renders nothing when neither has anything to show.
 
 Three tokens carry the reservation: `--tabbar` and `--miniplayer` are zero until `Dock` flags their row present on
 `body` (`data-tabbar`, `data-miniplayer`); the rows themselves use the constant `--tabbar-height` and
 `--miniplayer-height`, so they never depend on that flag. `--dock` sums both plus the bottom safe-area inset, the
-one number every phone-width scroll container pads by (`PAGE`, `PAGE_WIDE`, `CANVAS`).
+one number every phone-width scroll container pads by (`PAGE`, `PAGE_WIDE`, `CANVAS`). When the soft keyboard is up (`body[data-keyboard]`), `Dock` hides and `--tabbar`, `--miniplayer`, and `--dock` collapse to `0px`.
 
 ### The panel (dit)
 
 The fourth surface is dit's menu bar panel (`apps/dit-app`): a 400px-wide popover under the bar item, one screen
 at a time, never a window with a rail. It borrows the room's tokens and nothing of the page grid: `--column`,
-`--rail` and `--gutter` are not in use, the panel pads 16px, and its height follows its content up to the
-display's working area. The set screen reads top to bottom as the commit motion runs: the masthead (the panel's
-one bold element, lit by the set's track artwork), the skyline right under it as the instrument, the commit box
-under that, then saves, then renders. Every other screen (sign-in, repos, adopt, restore, settings) is a plain stack
-under the same head, with no art band. The panel closes on Esc and on losing focus; its buttons are the default,
-`lg` and icon sizes only.
+`--rail` and `--gutter` are not in use, the panel pads 16px, and its height follows its content (rAF-coalesced in `usePanelHeight`) up to `MAX_HEIGHT` (600px) within the monitor's working area. The set screen reads top to bottom as the commit motion runs: the song-first masthead (the panel's one bold element, lit by the set's track artwork), the skyline right under it as the instrument, the commit box under that, then waiting bounces (`RenderBand`), then saves (`SavesList`, capped at 5 rows with an expand toggle). Every other screen (sign-in, repos, adopt, restore, 3-tab sticky settings) is a plain stack under a sticky `PanelHead`, with no art band. The panel closes on Esc and on losing focus; its buttons are the default, `lg` and icon sizes only.
 
 ### The backfill window (dit)
 
@@ -610,24 +592,20 @@ popovers, sheets), and they share one treatment.
   dark) and eases there — the artwork is the room's only light source, so the light answering playback is that
   opacity rising.
 - **Masthead scrim** (`MastheadScrim` in the client; `.masthead__scrim` in `atmosphere.css`, both themes' gradients,
-  ending at `--masthead-h`): a legibility floor that is **not flat**: a paper mix of 20% → 34% → 52% → 58% → 34%,
-  then transparent at 72%. It lifts for breadcrumb contrast at the top, dips so the art stays vivid, and
-  fades fully out rather than ending on a line.
+  ending at `--masthead-h`): a legibility floor that is **not flat**: a paper mix of 48% → 48% → 52% → 60% → 64% → 50%, then transparent at 86% in light (`46% → 46% → 50% → 58% → 62% → 48%` to transparent at `86%` in dark). It lifts for breadcrumb contrast at the top, holds legibility behind the title, and fades fully out rather than ending on a line.
 - **Page wash** (`PageWash`, styled as `.wash`): the light the artwork throws on the page. One key light off the
   top edge, wide and low over the title, with a cooler lobe at the top right under the rail, and two faint tilted
   ellipses lower down that drift on slow, coprime loops (67s and 103s). Its three tones are one hue at three
   lightnesses derived from `--art` with relative colour syntax: the core at a wash lightness (`--wash-l`, 0.8 light
   and 0.42 dark, chroma capped by `--wash-c-max`), a deep tone 0.12 below and a lift 0.08 above. A grayscale
-  accent stays grey. Every falloff is a bell-shaped run of stops, and the field is masked by a tile of fine
-  `feTurbulence` noise (alpha 0.84 to 1) that scatters 8-bit contours into grain.
-- **Grain** (`body::after`): an SVG `feTurbulence` at `--grain-opacity × 0.055` (`--grain-opacity` 0.5 light,
+  accent stays grey. Every falloff is a bell-shaped run of stops, and the field is masked by a pre-baked seamless PNG noise tile that scatters 8-bit contours into grain without runtime SVG `feTurbulence` compositing.
+- **Grain** (`body::after`): the same pre-baked seamless PNG noise tile at `--grain-opacity × 0.055` (`--grain-opacity` 0.5 light,
   0.75 dark).
 - **Art fields** (`ArtField`): on the player card, mini-player and share page, the cover blurred hard until only
   its colour survives, over a legibility floor that holds across the whole surface. Type over art uses `.on-art`
-  (a small paper-tinted text shadow) and `.on-art-soft` (88% ink) instead of `--ink-soft`.
+  (a `75%` paper-tinted text shadow) and `.on-art-soft` (90% ink) instead of `--ink-soft`.
 - **Lava field** (`LavaField`): the now-playing sheet's background. The cover's colours as large soft blobs, each
-  following a frequency band of the playing audio. Pausing eases the blobs back to rest and holds the frame;
-  reduced motion shows only the resting frame; with no cover it draws nothing.
+  following one of five frequency bands (`ANALYSER_FFT_SIZE = 512`, 256 bins) with frame-rate-independent `dt` envelope scaling. Pausing eases the blobs back to rest and holds the frame; reduced motion shows only the resting frame; with no cover it draws nothing.
 
 ### Glass
 
@@ -644,8 +622,7 @@ and popovers that float over art. Glass sits on top of the atmosphere, so the ar
 - **Float lift** (`shadow-float`: `0 1px 2px oklch(0 0 0 / 8%), 0 12px 32px oklch(0 0 0 / 18%)`): a glass card
   detached over page content, the player card and the bulk actions bar. It rests on the page rather than lifting
   off it, so it is a close contact shadow under a short soft one, over a `--glass-edge` hairline.
-- **On-art text** (`text-shadow: 0 1px 3px color-mix(in oklab, var(--paper) 70%, transparent)`): type over an
-  art field.
+- **On-art text** (`text-shadow: 0 1px 3px color-mix(in oklab, var(--paper) 75%, transparent)`): type over an art field.
 
 Stock Tailwind shadow sizes (`shadow-sm` … `shadow-xl`) and arbitrary `shadow-[…]` lifts are drift; use the three
 tokens above.
@@ -744,22 +721,22 @@ marks rather than a toolbar.
 ### Inputs / Fields
 
 - **Style:** hairline border (`--input`, `--rule-strong` in dark), a 20% input tint (30% dark), `{rounded.md}`,
-  1.75rem tall.
+  1.75rem tall (`coarse:min-h-11 coarse:text-base` across `Input`, `SelectTrigger`, `Combobox`, `TabsTrigger`, and `Slider` thumbs `coarse:after:-inset-4` so touch targets hit 44px without inflating desktop forms).
 - **Focus:** border shifts to `--ring` with a 2px ring at 30%.
 - **Error:** danger border with a 2px danger ring at 20%. **Disabled:** 50% opacity, no pointer.
+- **`ResponsivePicker`** (`packages/ui/src/components/responsive-picker.tsx`): the adaptive picker pattern — below `768px` it renders a swipeable bottom `Sheet` (`max-h-[85dvh]`, `min-h-11` hairline items, `text-base` search not auto-focused on open so the keyboard stays stowed unless requested); from `768px` up it renders an anchored `Popover` (`w-64`, `max-h-[min(24rem,70dvh)]`) with keyboard listbox navigation, optional create row, and clear action. Used for rail pickers (`InlinePropertyEditor` `select`, `TrackPrioritySection`, `TrackArtists`, `TrackLabelsSection`, `CollectionTracksSection`, `TrackRelationsSection`), `StatusDropdown`, `LabelsCell`, `PeekPanel` status editing, `AddTrackMenu` / track pickers, and `HubNav`'s mobile section jump.
 - `InlinePropertyEditor` edits a value in place in the rail; it takes a `displayValue` for a stored form that is
   not the readable one, and a `hint` line that stays inside the field so it never reads as the next label.
-- `InlineTitleEditor` renders the masthead title as an editable `<h1>` with a hover pencil.
+- `InlineTitleEditor` renders the masthead title as an editable `<h1>` with a hover pencil (and stacks full-width 44px Save / Cancel buttons on mobile instead of icon buttons).
+- `EntityForm` supports `FormDisclosure` (`kind: "disclosure"`, `mobileOnly?: boolean` so secondary metadata can fold on phones and stay flat on desktop, auto-opening on validation error) and `onCancel`.
 
 ### Status
 
-- **Pill** (`{components.status-pill}`): the user's colour at full strength with contrast-guarded text, masthead
-  byline and rail via `StatusDisplay` and `StatusDropdown`. The rail variant (`{components.status-block}`) runs
-  full width, so the colour reads as a state the entity is in.
-- **Chip** (`StatusChip`): 18% tint, 35% border, for tables, menus and peek.
+- **Block / Pill** (`{components.status-block}`, `{components.status-pill}`): the user's colour at full strength with contrast-guarded text (`getContrastColour`), rendered once in the entity rail via `StatusDropdown` (`variant="icon-title"`). An entity masthead omits any second full-strength status pill so the page carries only one full-strength status control.
+- **Chip** (`StatusChip`): 18% tint, 35% border, for tables, menus and peek (`PeekPanel` adds inline playback and status editing via `ResponsivePicker`).
 - **Flag** (`flag` variant, no pie): a fact about the row rather than a pipeline position — `Explicit`, a session's
   `Main`, and `DuplicateFlag`'s "same audio as v3" on a version row or the tracks table's title, when a version's
-  fingerprint matches an earlier one.
+  fingerprint matches an earlier one. (`NowPlayingFlag` in the masthead uses a quiet inline 6px playback dot — `--art` when playing, `--ink-soft` when paused — rather than a `StatusChip`.)
 - **Pie:** every variant draws its dot as a conic-gradient pie from `--pct` (`status.percentage`), registered with
   `@property` so it sweeps between positions. A flag variant carries no pie. Changing status transitions the fill
   colour and the pie together over `--status-shift` (420ms).
@@ -770,10 +747,10 @@ marks rather than a toolbar.
 ### Tables
 
 `Table variant="entity"` (`packages/ui` `table.tsx`): sticky `th` in the label shape, `td` in `--ink-soft`, hairline
-rows, a flat 4% ink hover (not artwork-tinted; that read as noise), `TableScroll` for horizontal overflow,
+rows, a flat 4% ink hover (not artwork-tinted; that read as noise), `TableScroll` for horizontal overflow (`tabIndex={0}`, `role="region"`, focus ring for keyboard horizontal scrolling),
 `PinnedCell`/`PinnedHead` (opaque paper, needed only because it slides under cells), `TrackCell` (thumb and title),
 `RowPlay` and `MeterCell`. The `DataTable` root and its parts supply the behaviour (URL state, saved views, grouping,
-peek, draft rows, bulk bar, cell grid); entity tables supply columns. A table of things nothing deletes from it (a track's
+peek, draft rows, bulk bar, cell grid); entity tables supply columns. On phones (`RowCardList`), collection track lists offer a dedicated `Reorder` mode (`@dnd-kit/sortable` + `DragOverlay`) and `RowActionSheet` exposes track numbering (`Set track #`), artists, status, and delete. On `BoardView`, a synthetic `NO_STATUS` ("No status") column leads the board, phones switch columns via a `tablist` of status pills, and cards attach drag strictly to a grip handle (`touchAction: "none"`) alongside `DragOverlay` travel and a `⋯` move menu. A table of things nothing deletes from it (a track's
 repositories) mounts `DataTable` directly with no `deleteKind`, and its section renders nothing until it has a row.
 
 ### Attachment tile
@@ -789,14 +766,10 @@ local file. While the file is being processed the name shimmers.
 
 ### Navigation
 
-- **Sidebar** (`{components.sidebar}`): sunk paper, `SIDEBAR_EYEBROW` group labels, an `ArtSwatch` beside each
-  collection and track, collapsible groups, and `SidebarSearchTrigger` for the command palette. Active rows take
-  the sidebar accent plate (8% ink, 12% dark).
+- **Sidebar** (`{components.sidebar}`): sunk paper, song-first hierarchy (`Home` with unassigned-sets dot, `COLLECTIONS`, `TRACKS`, `STUDIO` collapsed by default and hidden from viewers, separated `NOTEBOOK` `"Personal"` with track badges on recents, single `Settings` button in the footer), `SIDEBAR_EYEBROW` group labels, an `ArtSwatch` beside each collection and track, collapsible groups, and `SidebarSearchTrigger` for the command palette. Active rows take the sidebar accent plate (8% ink, 12% dark).
 - **Breadcrumbs:** `crumbs` on `Masthead` and `PageHead`, lifted for contrast by the masthead scrim.
-- **TabBar** (phones): `h-(--tabbar-height)`, five `min-h-11` tabs; a lit tab is a hairline-height bar at the
-  bar's own top edge, not a badge on the icon.
-- **TopStrip** (phones): project switcher or back link on the left, account trigger on the right, both opening a
-  `BottomSheet`.
+- **TabBar** (phones): `h-(--tabbar-height)`, five `min-h-11` tabs (`Home · Collections · Tracks · Notes · Search`, plus opt-in `Studio`); a lit tab is a hairline-height bar at the bar's own top edge, not a badge on the icon.
+- **TopStrip** (phones): project switcher or back link on the left, `+` `QuickCreateSheet` trigger (New Track / New Collection / New Session / New Note) and account trigger on the right, opening bottom `Sheet`s.
 - **Command bar:** the client's desktop command bar is a 40px sunk bar of key hints (Departure Mono keys in ink,
   labels in soft ink) that becomes the `:`/move prompt, with its suggestions in an overlay surface above it. It is
   the ui `CommandBar`, a row in the content column rather than a fixed layer.
@@ -805,23 +778,12 @@ local file. While the file is being processed the name shimmers.
 
 Gear for the menu bar panel, built from the same parts as the save diff card:
 
-- **Set masthead:** the set's name in the display face, then the branch and "2h 14m in this set since the last
-  commit" in soft ink, then "Open on the web ↗" as a text link. The art is the set's track artwork through
-  `--art-image` and the usual `--art` pair; with no artwork it is grayscale like every page. The `⋯` menu sits at
-  the right edge as an icon button.
-- **Skyline readout:** `SetSkyline` in `data-mode="changes"`, one column per track, lit where the set differs
-  from the last commit. It is one tab stop (`←/→/Home/End` move across tracks) with an `aria-live` line naming the
-  lit track ("Bass · +EQ Eight"); under reduced motion the fade goes and the lit state stays.
+- **Set masthead:** song-first hierarchy when assigned to a track (`Song · {title}` eyebrow, `"Open song on the web"` link) above the set's name in `text-subtitle/[1.08]`, the branch and "2h 14m in this set since the last commit" in soft ink. The art is the set's track artwork through `--art-image` and the usual `--art` pair with `.on-art` / `.on-art-soft`; with no artwork it is grayscale like every page. The `⋯` menu sits at the right edge as an icon button (wearing an `--art` `data-attention-dot` when an update is ready/failed or backfill is paused).
+- **Skyline readout:** `SetSkyline` in `data-mode="changes"`, one column per track (clipped in `.skyline-readout .skyline` so `.skyline__bar::after` never overlaps the masthead), lit where the set differs from the last commit. It is one tab stop (`←/→/Home/End` move across tracks; click pins a bar) with an `aria-live` line naming the lit track ("Bass · +EQ Eight"); under reduced motion the fade goes and the lit state stays.
 - **Commit box:** a textarea holding the suggested message; under it the clauses as toggle chips (`+2 tracks`,
-  `+EQ Eight on Bass`, `tempo 120 → 124`), a helper line in soft ink, a refusal line in `--danger` when the commit is
-  refused, and the primary "Commit" with its `⌘↩` hint. A clause toggled off leaves the text; typed text wins over
-  the suggestion. With nothing to commit the box reads "Nothing to commit" and the last commit takes its place.
-- **Save rows:** the shared save row body (time, chips) with a push dot in front: the status pie, ink when
-  pushed, `--art` while pushing, hollow while pending. Under the heading "3 saves since 'added strings'".
-- **Render card:** one card per waiting bounce, under the label-shape heading "NEW BOUNCE": a play control, the
-  file name wrapped and never cut, a line of evidence ("bounced 4 min after your last save"), and the decisions as
-  text buttons (Add as version, Not this set, Not a bounce, Never here). The cards form a listbox owning `↑/↓`,
-  `Y`, `N` and Space; uploading shows a `Progress` line in place of the buttons.
+  `+EQ Eight on Bass`, `tempo 120 → 124`) wearing `IconCheck` when active (`data-pressed:bg-art/12 data-pressed:text-art`), helper text gated to the first commit, a refusal line in `--danger` when the commit is refused, and the primary "Commit" ("Committing…" while pending) with its `⌘↩` hint. A clause toggled off leaves the text; typed text wins over the suggestion. With nothing to commit the box reads "Nothing to commit" and the last commit takes its place.
+- **Render band & saves:** `RenderBand` sits above `SavesList` (which caps at `VISIBLE_SAVE_CAP = 5` rows with an expand toggle). Each waiting bounce (`RenderCardView` in a roving-`tabIndex` `role="list"` / `role="listitem"`) shows a play control, 2px clickable `role="slider"` scrub track, the wrapped filename, evidence, and decisions (`Add as version` / `Add anyway` · `Not a bounce` · `Other ▾` with `Wrong set…` / `Never watch <folder>/`), plus an inline `"Raise limit"` link to Settings → `Bounces` when oversized. Each save row puts a push dot (status pie: ink pushed, `--art` pushing, hollow pending) in front of the shared save row body.
+- **Settings & secondary screens:** `Settings` keeps a sticky `PanelHead` over 3 line tabs (`General` · `Bounces` · `Live`) with collapsed exclusions and ignored disclosures (`Ignored bounces & folders`); `SignIn` adds `Copy code` and `Cancel`; `Adopt` shows 3-state project loading; `Restore` uses `<Progress>` states and commit `<blockquote>`; `Repos` uses a sticky head + filter.
 - **Menu items with a second line:** Quit's note, and the failure line of "Update to 0.10.0" when that update could not
   be taken, are `flex-col items-start gap-0.5` with the line in `text-micro` (soft ink, `--danger` for the failure). While
   an update installs the item reads "Updating…" and is disabled.
@@ -830,18 +792,10 @@ Gear for the menu bar panel, built from the same parts as the save diff card:
 
 Gear for the backfill window, built from `Rows`, `Progress`, `Checkbox`, `Combobox`, `Button` and `Kbd`:
 
-- **Folder list** (`src/backfill/folder-list.tsx`): a hairline `Rows` listbox, one component for every step. The row is
-  a `Row` with a leading tick (`Checkbox`, `aria-hidden`, a mouse affordance only; the ticked folders are the listbox's
-  selected options) or a leading icon, a `RowTitle`, a wrapping `RowMeta` and, in the run, a `Progress` line under
-  the meta while the folder commits or uploads. A folder already in dit is `aria-disabled` and reachable.
-- **State icons** (Bring in): Tabler, one stroke, none animated. Waiting `IconCircle`, committing and uploading
-  `IconCircleDot`, waiting for the hub `IconWifiOff`, done `IconCircleCheck`, paused `IconPlayerPause`, failed
-  `IconAlertTriangle`. Check uses the check for a folder read, the triangle for one in doubt.
-- **Picker** (`src/backfill/picker.tsx`): `@workspace/ui`'s `Combobox` as a single-select field with type-to-filter,
-  named by an `aria-label` or by the visible label's id. Every set in Check has two.
-- **Folder progress** (Bring in, right pane): the state line, a full-width `Progress`, and a definition list of Sets
-  committed, Saves stored and Data uploaded in `tabular-nums`; a failed folder shows its reason in `--danger` with an
-  outline "Try again" instead.
+- **Folder list** (`src/backfill/folder-list.tsx`): a hairline `Rows` listbox, one component for every step (prefixed on Find by a `"Filter folders"` search input and `"Tick all"`/`"Untick all"` batch actions). The row is a `Row` with a leading tick (`Checkbox`, `aria-hidden`, a mouse affordance only; the ticked folders are the listbox's selected options) or a leading icon, a `RowTitle`, a wrapping `RowMeta` and, in the run, a `Progress` line under the meta while the folder commits or uploads. A folder already in dit is `aria-disabled` and reachable.
+- **State icons** (Bring in): Tabler, one stroke, none animated. Waiting `IconCircle`, committing and uploading `IconCircleDot`, waiting for the hub `IconWifiOff`, done `IconCircleCheck`, paused `IconPlayerPause`, failed `IconAlertTriangle`. Check uses the check for a folder read, the triangle for one in doubt, and adds `"Apply to all folders"` and a `"Uses the matched session's track."` caption under locked track pickers.
+- **Picker** (`src/backfill/picker.tsx`): `@workspace/ui`'s `Combobox` as a single-select field with type-to-filter, named by an `aria-label` or by the visible label's id. Every set in Check has two.
+- **Folder progress** (Bring in, right pane): the state line, a full-width `Progress` (paired with an overall `<Progress>` and `"Jump to active"` in the footer), and a definition list of Sets committed, Saves stored and Data uploaded in `tabular-nums`; a failed folder shows its reason in `--danger` with an outline "Try again" instead. Done offers `"Review unmatched sessions"`.
 - **Notice**: the panel's hairline-left `text-small` soft-ink line, `role="status"`, for what Find found (or did not)
   and the sync warning on Check.
 
@@ -876,6 +830,7 @@ Gear for the backfill window, built from `Rows`, `Progress`, `Checkbox`, `Combob
   paragraph in soft ink behind a 1px `rule-strong` hairline on the left, `role="status"`: information, never an
   alert colour or a box. One notice speaks for every setting it names, and it is not rendered while it has
   nothing to say, so it takes no gap in the page's rhythm.
+- **Navigation & mobile controls:** Desktop `HubNav` renders a left column of collapsible section/group links; on phones it renders `SettingsTabNav` plus a `"Jump to section"` `ResponsivePicker` when the active scope has entries. `LabEqControl` folds its 8 rack band sliders behind a `"Bands (8)"` disclosure on phones.
 - **Advanced groups** (the rate limits) fold behind a `CollapsibleSection` head with their row count, closed
   unless the URL names the group. Opened, the reset for the whole group sits above the rows as a count of changed
   rows and a ghost "Reset all to defaults", confirmed through `ConfirmDeleteDialog`.
@@ -883,12 +838,7 @@ Gear for the backfill window, built from `Rows`, `Progress`, `Checkbox`, `Combob
 ### Rail
 
 `RailIdentity` (thumb, title and subtitle; hidden ≤1180px), then `RailBlock`s separated by a hairline, each with a
-`RailLabel` and a value, an `InlinePropertyEditor`, a `StatusDropdown`, a `Meter`, or a two-column grid of pairs
-(KEY·BPM, CREATED·UPDATED). `MetadataItem` shows an empty value as italic "Not set" in faint ink. `MainToggle` is a
-filled or outline star in the `RailLabel` action slot, it fills on press
-and stays filled, no toast. Also `CollectionProgress` and `ProjectRailCounts`. The seam between blocks is the `rail-seam:` variant, which also
-reaches across the `display: contents` wrapper `RailMore` folds the tail into; the "More details" toggle sits after
-that wrapper so the selector can find it.
+`RailLabel` and a value, an `InlinePropertyEditor`, a `StatusDropdown` (the entity's single full-strength status control), a `Meter`, or a two-column grid of pairs (KEY·BPM, CREATED·UPDATED). On Track pages, Key/BPM stay promoted in the primary rail while studio summary (`TrackStudioRailBlock`, opening `TrackStudioDrawer`), loudness, spectrum, work heatmap (`TrackWorkHeatmap`), sharing, release date, ISRC/ISWC, custom fields, timestamps, and actions tuck into `more`. On Collection pages, loudness/spectrum/tempo/key-ring meters, UPC, and custom fields live in `more` (`Analytics & details`). `MetadataItem` shows an empty value as italic "Not set" in faint ink. `MainToggle` is a filled or outline star in the `RailLabel` action slot, it fills on press and stays filled, no toast. Also `CollectionProgress` and `ProjectRailCounts`. The seam between blocks is the `rail-seam:` variant, which also reaches across the `display: contents` wrapper `RailMore` folds the tail into; the "More details" toggle sits after that wrapper so the selector can find it.
 
 `DetectedMeta` replaces the KEY·BPM pair when the track's own field (derived from its main session) is empty: the
 primary version's detection reads in `text-ink-faint` with a `detected` hint and, where the track has a main
@@ -949,30 +899,11 @@ instrument in; the rails carry the spectrum at every size.
 
 ### Strips
 
-`MeasureStack` (`components/track-audio/`) sits under the track waveform: a legend row of `TogglePill`s choosing
-which measurements to show — a chart legend rather than a row of switches, so a pressed pill stays outlined and
-says it is on with a filled `--art` swatch instead of a full art fill — each pill wrapped in a `Tooltip` naming
-what it draws in plain language, starting from the viewer's strips setting (the visuals policy's `strips`,
-all three by default since that is everything there is), then one 24px captioned
-row per choice, hairline-separated, sharing the waveform's own bar grid (`bucketOf`, exported from
-`packages/ui/src/lib/waveform-bars.ts`) so a moment lines up the same way in every strip as it does in the wave above them. Each strip
-seeks on click and by keyboard (`StripRow`, the one seek gesture every strip shares) through the same action the
-waveform uses. Captions are the `LABEL` shape. While the version under the strips is the one playing, one 1px ink
-playhead runs through every strip: `MeasureStack` writes the position to `--playhead` once a frame and each strip
-translates its line by it. Every strip fetches its own measure only while its pill is on, and toggling a pill
-re-renders the stack alone, never the waveform beside it.
+`MeasureStack` (`components/track-audio/`) sits under the track waveform inside a collapsible `HeightReveal` disclosed by an `Analysis` toggle in the version metadata bar (starting from the viewer's `visuals.strips` setting, `[]` by default so the masthead opens clean until asked). Inside it sits a legend row of `TogglePill`s choosing which measurements to show — a chart legend rather than a row of switches, so a pressed pill stays outlined and says it is on with a filled `--art` swatch instead of a full art fill — each pill wrapped in a `Tooltip` naming what it draws in plain language, then hairline-separated `StripRow` tracks (16px caption eyebrow above a `px-2`-aligned seek surface) sharing the waveform's bar grid (`bucketOf`, exported from `packages/ui/src/lib/waveform-bars.ts`) so a moment lines up the same way in every strip as it does in the wave above them. Each strip seeks via `useTimelineScrub` (preserving vertical touch scroll with `touch-pan-y`) and keyboard arrows, and displays a hairline hover ghost + measurement readout. While the version under the strips is the one playing, a 1px `--art` playhead runs through every strip (`MeasureStack` writes `playhead.style.transform` directly once per frame). Every strip fetches its own measure only while its pill is on, and toggling a pill re-renders the stack alone, never the waveform beside it.
 
-- **`LoudnessStrip`**: the short-term curve as an `art/20` area under a 1px ink line on the same −28..0 LUFS ruler
-  `LoudnessScale` draws, turned sideways, with the viewer's loudness reference as a dotted hairline.
-- **`SpectrogramStrip`**: the stored PNG, stretched to the strip's own width and flipped vertically (bass at the
-  bottom, the PNG stores it top row first) and tinted by `--art` through `mix-blend-mode` so the grayscale tile
-  reads in the artwork's hue. In both themes a loud band shows the artwork tone and a quiet one fades into the
-  paper: `multiply` over the plain image in dark, `screen` over the `invert`ed image in light; 48px tall, the one strip that is an
-  image rather than a drawing.
-- **`ChangeStrip`**: per-second cells filled `--art` at the change value's own alpha, with a summary line ("38%
-  changed · most in 1:32–2:10") that seeks to the loudest stretch. Props-only — the change map, the summary and the
-  geometry come in, nothing fetches inside it — so the Lab's any-pair comparison draws through the same component
-  under its two waveforms.
+- **`LoudnessStrip`** (`h-14 phone:h-12`): the short-term curve as an `art/20` area under a 1px ink line on the same −28..0 LUFS domain `LoudnessScale` draws, with `-6`, reference, and `-24` gridlines, top ticks marking measured/clipping segments, and LUFS delta hover readout.
+- **`SpectrogramStrip`** (`h-24 phone:h-20`, expandable to `h-44`): renders the 160-band log-frequency grayscale PNG into a DPR-scaled `<canvas>` coloured through a 256-entry OKLCH LUT anchored on the active `--art` (`spectrogram-lut.ts`, `[-68, -6]` dB, gamma `1.35`, transparent silence, dark-on-paper / light-on-dark ramps, `0.75 * max + 0.25 * mean` downsampling). Includes a `100 / 1k / 10k` frequency grid, `50..16k` edge ticks, and a hover crosshair (`time · Hz (note) · dB`).
+- **`ChangeStrip`** (`h-9`): per-second cells filled `--art` at the change value's own alpha (with a `< 0.15` noise gate), `vs vN` + alignment badge, clickable `Jump:` hotspot chips, and `loudnessDelta` hover readout. Props-only — the change map, summary, and geometry come in, nothing fetches inside it — so the Lab's any-pair comparison draws through the same component under its two waveforms.
 
 ### Key ring
 
@@ -1009,31 +940,12 @@ moves. Under reduced motion the camera moves at once. Without WebGL the web is o
 
 ### Audio (signature)
 
-- **Waveform** (`Waveform` and its parts in `packages/ui/src/components/waveform.tsx`; the player's container is
-  the client's `TrackWaveform`): 160 square 2px bars with `justify-content: space-between` so gaps absorb slack;
-  played bars take `--art`; comment marks sit above with a drop-line. Hovering or keyboard-focusing a pin shows a
-  `FloatingNote` above it with the author, timecode and comment excerpt; touch leaves the pin's tap-to-open
-  behaviour unchanged.
-- **Audio comments** (`AudioCommentPanel`): a `Popover` anchored to the audio meta row, headed by the
-  `VersionBadge`, because threads belong to one version. `CommentCompose` adds a `Stamp` timecode chip.
+- **Waveform & version bar** (`Waveform` and its parts in `packages/ui/src/components/waveform.tsx`; the player's container is the client's `TrackWaveform`): 160 square 2px bars with `justify-content: space-between` so gaps absorb slack; played bars take `--art`; comment marks sit above with a drop-line (`data-resolved` pins stay softly visible as 8px hairline stems, and `clusterMarks` collapses pins within `0.025` width into count badges). Hovering or keyboard-focusing a pin shows a `FloatingNote` above it with the author, timecode and comment excerpt; touch leaves the pin's tap-to-open behaviour unchanged. Both `ActiveWave` and `IdleWave` carry `WaveMarks` and `WaveHoverGhost` and scrub via `useTimelineScrub`. Under the waveform sits a 2-zone metadata bar: identity/metrics (`TrackAudioDropdown`, icon-only pin indicator, `DuplicateFlag`, `LoudnessLabel` highlighting `truePeakDb > 0` in `--warn`, compact `FromCommitLink`) on the left, and `Analysis` · compare · comments · overflow on the right.
+- **Audio comments** (`AudioCommentPanel`): a `Popover` on desktop or bottom `Sheet` (`max-h-[55dvh]`) on phones anchored to the audio meta row, headed by the `VersionBadge`, because threads belong to one version; mirrored in `TrackCommentsSection`'s `vN Mix notes` / `All` / `General` body tabs. `CommentCompose` adds a `Stamp` timecode chip.
 - **Player card** (`MusicPlayer`): a fixed bottom-left glass card under the sidebar, tinted by the playing track's
-  art with a 1.1s cross-fade.
-- **Now playing** (`NowPlaying`): a sheet over the lava field with the hero transport. On phones, `MiniPlayer` in
-  the dock opens it.
-- **Lab** (`components/lab/`): the sheet's third pane, an `IconButton` toggle beside the queue toggle in
-  `SecondaryRow` that carries a small `--art` dot while anything in the Lab changes the sound
-  (`settingsNeedLab`), so the player pane says the record is not playing as mixed. Four sections in the rail's
-  caption shape over a hairline — TIME & PITCH, RACK, HEAR IT AS, BOUNCE — quieter than the transport above them,
-  never a bordered card, scrolling under a soft mask at both edges so no row is cut mid-line. Every parameter row
-  is a `RackSliderRow`: a `LABEL` in one shared label column, a `Slider`, and the figure in one shared value
-  column, so Speed, Threshold and Wet line up down the whole pane. While the Lab prepares or cannot open the file,
-  a `Meter` or a line of ink copy takes the sliders' place (not `--danger`: it is a limit, not an error), and the
-  rest stays editable. Each RACK module is a `RackModule`: its pill, an optional control that only means something
-  while it runs (the reverb's room), and a body that opens in height through `HeightReveal` when the module is
-  engaged. RACK's EQ is the one bold element: a 1.5px `--art` response line with the region between it and 0 dB
-  washed `art/15`, so boosts and cuts read as shapes, over `LiveSpectrumScale` at its `tall` size; numbered
-  handles fill with `--art` while dragged or focused and carry a readout (`120 Hz · −3.0 dB · Q 0.9`) beside
-  them. The same values as fields fold away under "Bands", listing only the slots in use, with "Add band".
+  art with a 1.1s cross-fade (`Lab` status dot/hint shown on `MiniPlayer` as well when altering sound).
+- **Now playing** (`NowPlaying`): a sheet over the lava field with the hero transport (two-column layout at `lg:` pairing art with loudness/spectrum meters). On phones, `MiniPlayer` in the dock opens it.
+- **Lab** (`components/lab/`): the sheet's third pane, an `IconButton` toggle beside the `"Up next"` queue toggle in `SecondaryRow` that carries a small `--art` dot while anything in the Lab changes the sound (`useLabAltering`), headed by a sticky `Bypass` (`b`) + `Reset all` bar. Four sections in the rail's caption shape over a hairline — TIME & PITCH, RACK, HEAR IT AS, BOUNCE — quieter than the transport above them, never a bordered card, scrolling under a soft mask at both edges so no row is cut mid-line. Every parameter row is a `RackSliderRow`: a `LABEL` in one shared label column, a `Slider`, and the figure in one shared value column, so Speed, Threshold and Wet line up down the whole pane. While the Lab prepares or cannot open the file, a `Meter` or a line of ink copy takes the sliders' place (not `--danger`: it is a limit, not an error), and the rest stays editable. Each RACK module is a `RackModule`: its pill, an optional control that only means something while it runs (the reverb's room), and a body that opens in height through `HeightReveal` when the module is engaged. RACK's EQ is the one bold element: a 1.5px `--art` response line with the region between it and 0 dB washed `art/15`, so boosts and cuts read as shapes, over `LiveSpectrumScale` at its `tall` size; double-clicking empty canvas adds a peaking band, scrolling the wheel over a handle steps Q, and numbered handles fill with `--art` while dragged or focused and carry a readout (`120 Hz · −3.0 dB · Q 0.9`) beside them. The same values as fields fold away under "Bands", listing only the slots in use, with "Add band".
   `GrMeter` draws on `RulerScale`: −24..0 dB with an `art/70` bar hanging from 0, an ink hold tick and the
   figure above, the loudness meters' ballistics reused. HEAR IT AS is four labelled rows (Stereo, Monitor,
   Bands, Device) in the same label column. BOUNCE prints the version's own waveform: it waits in faint ink, the
@@ -1043,10 +955,7 @@ moves. Under reduced motion the camera moves at once. Without WebGL the web is o
 
 ### Notes, comments, activity and diffs
 
-- **Notes** (`Description` wrapping BlockNote in `.doc`): prose typography at the measure in `--ink-soft`,
-  label-shape headings, blockquotes with an `--art` left rule, checklists ticked in `--art`, a hover surface and a
-  placeholder so it reads as editable. `.doc` is the only place the editor's tree is styled; its `!important`
-  declarations are what it takes to beat BlockNote's stylesheet.
+- **Notes** (`Description` wrapping BlockNote in `.doc`): proportional sans prose (`--font-doc`, defaulting to `--font-system-sans` and overridden to `--font-system-serif` by `data-font="serif"`) at the measure in `--ink-soft`, label-shape headings, `--art` underlined links, `1px solid var(--rule)` inline `<code>` in `--font-mono`, blockquotes with an `--art` left rule, checklists ticked in `--art`, a hover surface, and a placeholder so it reads as editable. Lyrics sections reserve `padding-right: 9rem` on phones so the mono syllable/rhyme gutter never clips prose, and `EditorAccessoryBar` (`packages/ui/src/components/block-editor/accessory-bar.tsx`) pins a fixed mobile toolbar above the soft keyboard (`+ Section`, `Rhymes`, `Synonyms`, `Checklist`, `Bold`, `Italic`, `Undo/Redo`). `.doc` is the only place the editor's tree is styled; its `!important` declarations are what it takes to beat BlockNote's stylesheet. `NotebookShell` opens a split desktop index (`DesktopNoteIndex` auto-opening the latest note) alongside `NoteList`.
 - **Comments** (`CommentList`): avatar (initials on 22% art), name, relative time, threaded replies indented,
   bare-text actions in `text-micro`.
 - **Activity** (`ActivityFeed`): a hairline down the left, one row per event, **with detail** (status `from → to`,
@@ -1364,7 +1273,8 @@ before 2026-09-13). Recorded so nobody "fixes" these back.
 | Theme                                                                                                                        | `packages/ui/src/components/theme-provider.tsx`                                                                                                        |
 | Appearance attributes (names, values, defaults; the hooks that read them) and their contract test                            | `packages/ui/src/lib/appearance.ts`, `packages/ui/src/styles/appearance.test.ts`                                                                       |
 | Artwork mapping and fallback chain                                                                                           | `packages/ui/src/lib/art.ts` (+ `art.test.ts`), `apps/client/src/lib/art.ts` (the artwork row), `apps/server/src/db/queries/artwork.ts` (the chain)    |
-| Signature gear: waveform, loudness meter, save-to-save diff                                                                  | `packages/ui/src/components/waveform.tsx`, `packages/ui/src/components/loudness/`, `packages/ui/src/components/session-structure/`                     |
+| Signature gear: waveform, loudness meter, save-to-save diff, spectrogram LUT                                                   | `packages/ui/src/components/waveform.tsx`, `packages/ui/src/components/loudness/`, `packages/ui/src/components/session-structure/`, `apps/client/src/components/track-audio/spectrogram-lut.ts` |
+| Adaptive pickers & mobile editor accessory bar                                                                               | `packages/ui/src/components/responsive-picker.tsx`, `packages/ui/src/components/block-editor/accessory-bar.tsx`                                      |
 | The inventory web: its renderer and palette, and its data                                                                    | `packages/ui/src/components/constellation/`, `packages/ui/src/lib/constellation.ts`, `apps/client/src/lib/inventory-web.ts` (layout)                   |
 | The save diff's model: one facet per thing a save can change, the skyline's geometry, the set as a tree                      | `packages/session-diff/src/index.ts` (the registry, `diffSaves`, `diffSave`), `packages/session-diff/src/`                                             |
 | Accent extraction                                                                                                            | `apps/server/src/lib/palette.ts` (+ `palette.test.ts`, which loads the four `*.jpg` covers in `fixtures/covers/` as fixtures)                          |

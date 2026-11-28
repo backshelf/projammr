@@ -311,15 +311,24 @@ function FilterTrigger({
 function TypedFilterMenu({
   config,
   value,
+  open,
+  onOpenChange,
   children,
 }: {
   config: FilterColumnConfig;
   value: string | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: (close: () => void) => ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const resolvedOpen = open ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (open === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={resolvedOpen} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <FilterTrigger config={config} filterValue={value} />
       </PopoverTrigger>
@@ -334,6 +343,8 @@ export type FilterControlProps<C extends FilterColumnConfig> = {
   config: C;
   value: string | null;
   counts?: Record<string, number>;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onChange: (value: string | null) => void;
 };
 
@@ -348,11 +359,13 @@ function ChoiceFilterMenu({
   config,
   value,
   counts = {},
+  open,
+  onOpenChange,
   onChange,
 }: FilterControlProps<ChoiceFilterConfig>) {
   const members = memberValues(value, config.multiple);
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <FilterTrigger config={config} filterValue={value} />
       </DropdownMenuTrigger>
@@ -397,10 +410,17 @@ function ChoiceFilterMenu({
 function RangeFilterMenu({
   config,
   value,
+  open,
+  onOpenChange,
   onChange,
 }: FilterControlProps<RangeFilterConfig>) {
   return (
-    <TypedFilterMenu config={config} value={value}>
+    <TypedFilterMenu
+      config={config}
+      value={value}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       {(close) => (
         <RangeForm
           config={config}
@@ -419,10 +439,17 @@ function RangeFilterMenu({
 function TextFilterMenu({
   config,
   value,
+  open,
+  onOpenChange,
   onChange,
 }: FilterControlProps<TextFilterConfig>) {
   return (
-    <TypedFilterMenu config={config} value={value}>
+    <TypedFilterMenu
+      config={config}
+      value={value}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       {(close) => (
         <TextForm
           config={config}

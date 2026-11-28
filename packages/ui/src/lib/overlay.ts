@@ -52,7 +52,7 @@ export const BACKDROP =
  * box. `minmax(0, 1fr)` drops that minimum, leaving the row to truncate.
  */
 export const POPUP =
-  "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 grid-cols-[minmax(0,1fr)] gap-4 p-5 text-sm text-popover-foreground outline-none sm:max-w-md";
+  "fixed top-1/2 left-1/2 z-50 grid max-h-[85dvh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 grid-cols-[minmax(0,1fr)] gap-4 overflow-y-auto overscroll-contain p-5 text-sm text-popover-foreground outline-none sm:max-w-md";
 
 /**
  * How a modal panel arrives. `pop` comes into focus where it rests; `sheet`

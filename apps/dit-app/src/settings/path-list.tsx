@@ -6,6 +6,7 @@ import { Row, Rows } from "@workspace/ui/components/layout/rows";
 
 import { pickFolders } from "../bridge";
 import { describeFailure } from "../use-command";
+import { shortenHome } from "./paths";
 
 /**
  * A list of folders the person can remove from and add to with the system's folder picker. A path is wrapped, never
@@ -15,6 +16,8 @@ export function PathList({
   id,
   labelledBy,
   paths,
+  home,
+  emptyNotice,
   onChange,
   onError,
 }: {
@@ -22,6 +25,10 @@ export function PathList({
   /** The id of the element that names the list. */
   labelledBy: string;
   paths: string[];
+  /** Home directory used for `~/` shortening when provided. */
+  home?: string;
+  /** Explicit empty state shown when no explicit paths are configured. */
+  emptyNotice?: string;
   onChange: (paths: string[]) => void;
   /** Hears why the folder picker failed, or null when the next attempt starts. */
   onError?: (error: string | null) => void;
@@ -43,24 +50,34 @@ export function PathList({
       aria-labelledby={labelledBy}
       className="flex flex-col gap-2"
     >
-      {paths.length > 0 && (
+      {paths.length > 0 ? (
         <Rows as="ul" className="border-b border-rule">
-          {paths.map((path) => (
-            <Row key={path} as="li" className="gap-2 px-0 py-1">
-              <span className="min-w-0 flex-1 font-mono text-micro break-all text-ink-soft">
-                {path}
-              </span>
-              <IconButton
-                aria-label={`Remove ${path}`}
-                onClick={() =>
-                  onChange(paths.filter((other) => other !== path))
-                }
-              >
-                <IconX />
-              </IconButton>
-            </Row>
-          ))}
+          {paths.map((path) => {
+            const label = shortenHome(path, home);
+            return (
+              <Row key={path} as="li" className="gap-2 px-0 py-1">
+                <span
+                  title={path}
+                  className="min-w-0 flex-1 font-mono text-micro break-all text-ink-soft"
+                >
+                  {label}
+                </span>
+                <IconButton
+                  aria-label={`Remove ${label}`}
+                  onClick={() =>
+                    onChange(paths.filter((other) => other !== path))
+                  }
+                >
+                  <IconX />
+                </IconButton>
+              </Row>
+            );
+          })}
         </Rows>
+      ) : (
+        emptyNotice && (
+          <p className="text-micro text-pretty text-ink-soft">{emptyNotice}</p>
+        )
       )}
       <Button
         id={id}

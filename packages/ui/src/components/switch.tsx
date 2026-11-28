@@ -16,7 +16,7 @@ function Switch({
         "relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border-2 border-rule bg-ink/8",
         "motion-ink",
         "data-[state=checked]:border-ink data-[state=checked]:bg-ink",
-        "focus-visible:ring-2 focus-visible:ring-art focus-visible:ring-offset-2 focus-visible:outline-none",
+        "focus-visible:ring-2 focus-visible:ring-art focus-visible:ring-offset-2 focus-visible:outline-hidden",
         "disabled:cursor-not-allowed disabled:opacity-50",
         "coarse:after:absolute coarse:after:-inset-2",
         className

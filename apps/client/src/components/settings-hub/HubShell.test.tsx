@@ -28,6 +28,10 @@ mock.module("next/link", () => ({
   useLinkStatus: () => ({ pending: false }),
 }));
 
+mock.module("next/navigation", () => ({
+  useRouter: () => ({ push: mock() }),
+}));
+
 const { HubShell } = await import("./HubShell");
 
 // happy-dom starts on about:blank, where `history.replaceState` is ignored.

@@ -186,9 +186,10 @@ describe("the arranged lists", () => {
       stored({
         "layout.dockTabs": [
           { id: "notes", shown: true },
+          { id: "home", shown: false },
           { id: "collections", shown: false },
           { id: "tracks", shown: true },
-          { id: "sessions", shown: false },
+          { id: "studio", shown: false },
           { id: "search", shown: false },
         ],
         "palette.emptyGroups": [
@@ -213,40 +214,40 @@ describe("the arranged lists", () => {
 
     expect(shell.dockTabs).toEqual([
       "notes",
+      "home",
       "collections",
       "tracks",
-      "sessions",
       "search",
     ]);
     expect(shell.paletteEmptyGroups).toEqual(["actions", "recent-tracks"]);
   });
 
-  it("lists the repositories section on the track and collection pages, after sessions and tracks", () => {
+  it("includes unassigned-sets after new on project home and leaves plugins/samples/heatmap hidden by default", () => {
     const shell = shellFrom(stored({}));
-    const ids = (sections: readonly { id: string }[]) =>
-      sections.map(({ id }) => id);
-
-    const track = ids(shell.entityPageSections.track);
-    expect(track.indexOf("repositories")).toBe(track.indexOf("sessions") + 1);
-    const collection = ids(shell.entityPageSections.collection);
-    expect(collection.indexOf("repositories")).toBe(
-      collection.indexOf("tracks") + 1
-    );
+    const home = shell.projectHomeSections;
+    const ids = home.map(({ id }) => id);
+    expect(ids.indexOf("unassigned-sets")).toBe(ids.indexOf("new") + 1);
+    expect(ids).not.toContain("recent-activity");
+    expect(home.filter((s) => !s.shown).map((s) => s.id)).toEqual([
+      "plugins",
+      "samples",
+      "heatmap",
+    ]);
   });
 
-  it("appends the repositories section to a track arrangement stored before it existed", () => {
+  it("appends missing sections to a partial track arrangement", () => {
     const shell = shellFrom(
       stored({
         "pages.trackSections": [
-          { id: "sessions", shown: true },
+          { id: "lyrics", shown: true },
           { id: "overview", shown: true },
         ],
       })
     );
 
     const ids = shell.entityPageSections.track.map(({ id }) => id);
-    expect(ids.slice(0, 2)).toEqual(["sessions", "overview"]);
-    expect(ids).toContain("repositories");
+    expect(ids.slice(0, 2)).toEqual(["lyrics", "overview"]);
+    expect(ids).toContain("relations");
   });
 
   it("show an id a stored list leaves out, after the stored rows, with the default's row", () => {

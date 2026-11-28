@@ -18,9 +18,9 @@ describe("versionCommentsLabel", () => {
     expect(versionCommentsLabel(3, 2, 1)).toBe("3 comments on v2 · 1 resolved");
   });
 
-  it("reads all resolved when every comment is", () => {
+  it("reads resolved cleanly for single and multiple resolved comments", () => {
     expect(versionCommentsLabel(3, 2, 3)).toBe("All 3 resolved on v2");
-    expect(versionCommentsLabel(1, 2, 1)).toBe("All 1 resolved on v2");
+    expect(versionCommentsLabel(1, 2, 1)).toBe("1 resolved on v2");
   });
 });
 

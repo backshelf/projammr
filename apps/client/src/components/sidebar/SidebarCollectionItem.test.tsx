@@ -91,7 +91,9 @@ describe("SidebarCollectionItem", () => {
     clientGetCollectionTrackSummaries.mockResolvedValue([track]);
     renderItem();
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand Demos" }));
+    const expand = screen.getByRole("button", { name: "Expand Demos" });
+    expect(expand.className).toContain("size-6");
+    fireEvent.click(expand);
     await screen.findByText("Track One");
 
     expect(screen.getByRole("button", { name: "Collapse Demos" })).toBeTruthy();

@@ -8,7 +8,9 @@ import {
   BACKDROP,
   composeRender,
   ENTRANCE,
+  OVERLAY_DESC,
   OVERLAY_SURFACE,
+  OVERLAY_TITLE,
   POPUP,
 } from "@workspace/ui/lib/overlay";
 import {
@@ -163,7 +165,7 @@ function AlertDialogTitle({
   return (
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
-      className={cn("text-lg font-semibold", className)}
+      className={cn(OVERLAY_TITLE, className)}
       {...props}
     />
   );
@@ -178,7 +180,7 @@ function AlertDialogDescription({
   return (
     <AlertDialogPrimitive.Description
       data-slot="alert-dialog-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn(OVERLAY_DESC, className)}
       {...props}
     />
   );

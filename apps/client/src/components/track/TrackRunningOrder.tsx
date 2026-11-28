@@ -5,7 +5,7 @@ import { hrefFromParsedRoute } from "@/lib/utils";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 
 const chevronLinkClasses =
-  "motion-ink relative text-ink-soft hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 rounded-sm coarse:after:absolute coarse:after:-inset-2";
+  "motion-ink relative text-ink-soft hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/30 rounded-sm coarse:inline-flex coarse:size-11 coarse:items-center coarse:justify-center";
 
 function ChevronLink({
   direction,
@@ -65,7 +65,7 @@ export function TrackRunningOrder({
       {collectionId !== undefined && (previous || next) && (
         <nav
           aria-label="Running order"
-          className="ml-2 inline-flex items-center gap-1 align-middle"
+          className="ml-2 inline-flex items-center gap-1 align-middle coarse:gap-2"
         >
           {previous && (
             <ChevronLink

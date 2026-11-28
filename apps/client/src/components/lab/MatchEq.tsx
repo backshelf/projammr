@@ -1,5 +1,6 @@
 "use client";
 
+import { RACK_LABEL_WIDTH } from "@/components/lab/rack-columns";
 import {
   matchEqAvailable,
   matchEqReferenceLabel,
@@ -99,14 +100,15 @@ export function MatchEq({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       <Tooltip>
         <TooltipTrigger asChild>
           <span
             tabIndex={0}
             className={cn(
               LABEL,
-              "shrink-0 text-ink-soft underline decoration-ink-faint/40 decoration-dotted underline-offset-4"
+              RACK_LABEL_WIDTH,
+              "shrink-0 leading-tight text-ink-soft underline decoration-ink-faint/40 decoration-dotted underline-offset-4"
             )}
           >
             Match EQ to

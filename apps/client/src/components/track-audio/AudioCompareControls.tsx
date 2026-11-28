@@ -207,11 +207,16 @@ export function CompareChangeStrip({
   return (
     <ChangeStrip
       label={strip.label}
+      vsVersion={strip.vsVersion}
+      aligned={strip.aligned}
+      offsetMs={strip.offsetMs}
       change={strip.change}
+      loudnessDelta={strip.loudnessDelta}
       summary={strip.summary}
       durationSeconds={durationSeconds}
       getSeconds={getSeconds}
       onSeek={onSeek}
+      live
     />
   );
 }

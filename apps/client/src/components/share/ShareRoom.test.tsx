@@ -123,7 +123,7 @@ describe("ShareRoomProvider", () => {
     expect(playNow).toHaveBeenCalledTimes(1);
   });
 
-  it("changes the pick without playing when the share is not loaded", () => {
+  it("plays the selected track immediately even when the share is not loaded yet", () => {
     const { result } = roomFor([track(1, 11, true), track(2, 12, true)]);
 
     expect(result.current.loaded).toBe(false);
@@ -132,13 +132,15 @@ describe("ShareRoomProvider", () => {
     expect(result.current.index).toBe(1);
     expect(result.current.entry?.trackAudioId).toBe(12);
     expect(result.current.artwork?.assetPath).toBe("/share/tok/cover/12");
-    expect(playNow).not.toHaveBeenCalled();
+    expect(playNow).toHaveBeenCalledTimes(1);
+    expect(playNow.mock.calls[0]?.[1]).toBe(1);
   });
 
   it("starts the picked entry, and a timecode starts the share there", () => {
     const { result } = roomFor([track(1, 11, true), track(2, 12, true)]);
 
     act(() => result.current.select(1));
+    playNow.mockClear();
     act(() => result.current.start());
     expect(playNow.mock.calls[0]?.[1]).toBe(1);
 

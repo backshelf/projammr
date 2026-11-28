@@ -64,15 +64,38 @@ describe("the masthead", () => {
     expect(screen.getByText("main")).toBeTruthy();
   });
 
-  test("opens the set's page on the web", async () => {
+  test("opens the song's page on the web when assigned, and falls back to the session page when unassigned", async () => {
     const snapshot = quiet();
     const calls = mockApp(snapshot);
-    showSet(snapshot);
+    const { unmount } = showSet(snapshot);
 
-    fireEvent.click(screen.getByRole("button", { name: /Open on the web/ }));
+    expect(screen.getByText("Song · Science")).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "science123" });
+    expect(heading.className).toContain("text-subtitle");
+    expect(heading.className).toContain("on-art");
 
+    fireEvent.click(screen.getByRole("button", { name: /Open song on the web/ }));
     await waitFor(() =>
       expect(argsOf(calls, "open_web")).toEqual([
+        { path: "/project/4/track/12" },
+      ])
+    );
+    unmount();
+
+    const unassigned = quiet({
+      open: {
+        ...(snapshot.open as OpenSet),
+        track: null,
+        webPath: "/project/4/session/812",
+      },
+    });
+    const unassignedCalls = mockApp(unassigned);
+    showSet(unassigned);
+
+    expect(screen.queryByText(/Song ·/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Open on the web/ }));
+    await waitFor(() =>
+      expect(argsOf(unassignedCalls, "open_web")).toEqual([
         { path: "/project/4/session/812" },
       ])
     );
@@ -84,7 +107,7 @@ describe("the masthead", () => {
     mockApp(snapshot);
     showSet({ ...snapshot, open });
 
-    expect(screen.queryByText(/Open on the web/)).toBeNull();
+    expect(screen.queryByText(/Open (song )?on the web/)).toBeNull();
   });
 
   test("is lit by the track's artwork through the app's scheme and takes its accent", () => {
@@ -96,7 +119,7 @@ describe("the masthead", () => {
     expect(style).toContain(
       'url("dit-art://localhost/static/images/9f2c.webp?w=800")'
     );
-    expect(style).toContain("--art-light: oklch(0.55 0.182 262.5)");
+    expect(style).toContain("--art-light: oklch(0.5 0.182 262.5)");
     expect(container.querySelector(".masthead__field")).not.toBeNull();
   });
 
@@ -113,7 +136,7 @@ describe("the masthead", () => {
 });
 
 describe("the commit box", () => {
-  test("holds the suggestion, with a chip for each clause and the helper line", () => {
+  test("holds the suggestion with check-marked chips and hides the tutorial line after the first commit", () => {
     const snapshot = quiet();
     mockApp(snapshot);
     showSet(snapshot);
@@ -126,13 +149,39 @@ describe("the commit box", () => {
       "+EQ Eight on Bass",
       "tempo 120 \u2192 124",
     ]) {
-      expect(chip(name).getAttribute("aria-pressed")).toBe("true");
+      const pill = chip(name);
+      expect(pill.getAttribute("aria-pressed")).toBe("true");
+      expect(pill.className).toContain("data-pressed:bg-art/12");
+      expect(pill.querySelector("svg")).not.toBeNull();
     }
     expect(
-      screen.getByText(
+      screen.queryByText(
         "A commit names the set as it is now, so you can find it later."
       )
+    ).toBeNull();
+  });
+
+  test("shows Committing… while a commit is in flight", async () => {
+    let finish: () => void = () => undefined;
+    const snapshot = quiet();
+    mockApp(snapshot, (command) => {
+      if (command === "commit") {
+        return new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      }
+      return undefined;
+    });
+    showSet(snapshot);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Commit/ }));
+    expect(
+      await screen.findByRole("button", { name: /^Committing…/ })
     ).toBeTruthy();
+
+    await act(async () => {
+      finish();
+    });
   });
 
   test("a clause toggled off drops from the message, and comes back when toggled on", () => {
@@ -357,7 +406,7 @@ describe("the commit box", () => {
     await waitFor(() => expect(document.activeElement).toBe(message()));
   });
 
-  test("asks for no message on the first commit, which the app names", () => {
+  test("asks for no message on the first commit, which shows the helper line", () => {
     const snapshot = quiet({
       firstCommit: true,
       clauses: [],
@@ -372,6 +421,11 @@ describe("the commit box", () => {
     expect(
       screen.queryByRole("list", { name: "Suggested message" })
     ).toBeNull();
+    expect(
+      screen.getByText(
+        "A commit names the set as it is now, so you can find it later."
+      )
+    ).toBeTruthy();
   });
 });
 
@@ -430,6 +484,25 @@ describe("the saves", () => {
 
     expect(screen.getByRole("heading", { name: "1 save" })).toBeTruthy();
     expect(screen.getByText("First save seen")).toBeTruthy();
+  });
+
+  test("caps the list at 5 saves with a Show all disclosure", () => {
+    const sample = quiet().saves[0]!;
+    const many = Array.from({ length: 7 }, (_, index) => ({
+      ...sample,
+      id: `save-${index}`,
+      at: sample.at - index * 60_000,
+    }));
+    const snapshot = quiet({ saves: many });
+    mockApp(snapshot);
+    showSet(snapshot);
+
+    const region = screen.getByRole("region", { name: /7 saves since/ });
+    expect(within(region).getAllByRole("listitem")).toHaveLength(5);
+    fireEvent.click(screen.getByRole("button", { name: "Show all 7 saves" }));
+    expect(within(region).getAllByRole("listitem")).toHaveLength(7);
+    fireEvent.click(screen.getByRole("button", { name: "Show fewer saves" }));
+    expect(within(region).getAllByRole("listitem")).toHaveLength(5);
   });
 });
 
@@ -610,7 +683,7 @@ describe("the skyline", () => {
 });
 
 describe("the renders", () => {
-  test("stand under the saves with the label-shape heading, and are absent with none waiting", () => {
+  test("stand above the saves with the label-shape heading, and are absent with none waiting", () => {
     const snapshot = quiet({ renders: base.renders });
     mockApp(snapshot);
     const { rerender } = showSet(snapshot);
@@ -618,7 +691,7 @@ describe("the renders", () => {
     const saves = screen.getByRole("heading", { name: /saves since/ });
     const band = screen.getByRole("heading", { name: /New bounce/ });
     expect(
-      saves.compareDocumentPosition(band) & Node.DOCUMENT_POSITION_FOLLOWING
+      band.compareDocumentPosition(saves) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
 
     const none = quiet({ renders: [] });

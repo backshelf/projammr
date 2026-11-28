@@ -72,7 +72,7 @@ export function AccountSheet({
       </SheetClose>
       <div className={cn(SHEET_ROW, "justify-between")}>
         <span>Theme</span>
-        <span className={"flex items-center gap-1"}>
+        <span className={"flex items-center gap-2"}>
           {THEMES.map((option) => (
             <button
               key={option}
@@ -81,8 +81,7 @@ export function AccountSheet({
               aria-pressed={theme === option}
               className={cn(
                 LABEL,
-                "relative min-h-11 rounded-sm border border-rule px-3",
-                "coarse:after:absolute coarse:after:-inset-2 coarse:after:content-['']",
+                "min-h-11 min-w-11 rounded-sm border border-rule px-3",
                 theme === option ? "border-art text-ink" : "text-ink-soft"
               )}
             >

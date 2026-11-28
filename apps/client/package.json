@@ -29,7 +29,6 @@
     "@workspace/settings": "workspace:*",
     "@workspace/ui": "workspace:*",
     "better-auth": "^1.7.19",
-    "class-variance-authority": "^0.7.1",
     "graphology": "^0.26.0",
     "graphology-layout": "^0.6.1",
     "graphology-layout-forceatlas2": "^0.10.1",

@@ -7,7 +7,11 @@ import {
 } from "./commit-shortcut";
 import { ErrorLine } from "./error-line";
 import { FocusTargetProvider, useFocusOnShow } from "./focus-target";
-import { PanelActionsProvider, type PanelActions } from "./panel-actions";
+import {
+  PanelActionsProvider,
+  type PanelActions,
+  type SettingsTab,
+} from "./panel-actions";
 import { usePanelKeys } from "./keymap";
 import type { Nav } from "./screen";
 
@@ -23,6 +27,7 @@ export function Chrome({
   children: ReactElement;
 }): ReactElement {
   const [nav, setNav] = useState<Nav>(start);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [reported, setReported] = useState<string | null>(null);
   const focusTarget = useFocusOnShow();
   const commitShortcut = useCommitShortcutSlot();
@@ -30,11 +35,16 @@ export function Chrome({
   const actions = useMemo<PanelActions>(
     () => ({
       nav,
-      go: setNav,
+      screen: nav === "home" ? undefined : nav,
+      settingsTab,
+      go: (to, tab) => {
+        setNav(to);
+        if (tab !== undefined) setSettingsTab(tab);
+      },
       back: () => setNav("home"),
       report: setReported,
     }),
-    [nav]
+    [nav, settingsTab]
   );
   return (
     <MotionProvider>

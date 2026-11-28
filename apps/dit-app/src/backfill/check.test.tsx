@@ -261,13 +261,34 @@ describe("Check", () => {
 
     expect(
       screen.getByText(
-        "These folders need 14.2 GB and you have 9.8 GB left. Untick folders until they fit."
+        "These folders need 14.2 GB and you have 9.8 GB left. Go back (⌘[) to untick folders until they fit."
       )
     ).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "Start" }) as HTMLButtonElement)
         .disabled
     ).toBe(true);
+  });
+
+  test("explains why a matched session locks the track picker and applies a project to all folders", async () => {
+    const view = checkView();
+    const calls = mockBackfillApp(view);
+    renderWindow(view);
+
+    expect(
+      screen.getByText("Uses the matched session’s track.")
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply to all folders" })
+    );
+
+    await waitFor(() =>
+      expect(argsOf(calls, "backfill_set_project")).toEqual([
+        { folder: SCIENCE, project: 4 },
+        { folder: mother.folders[1]!.path, project: 4 },
+      ])
+    );
   });
 
   test("with no storage cap it says so and never blocks", () => {

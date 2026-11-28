@@ -35,7 +35,7 @@ type ScrubGeometry = {
 };
 
 const FOCUS_RING =
-  "focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-none";
+  "focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden";
 
 /** Where a pointer can hover, the times answer it and are otherwise out of the
  *  way; a coarse pointer never hovers, so there they stay put. */
@@ -65,11 +65,14 @@ const GEOMETRY: Record<ScrubSize, ScrubGeometry> = {
     thumb: false,
   },
   card: {
-    root: "relative mt-2",
-    hit: cn("block w-full cursor-pointer rounded-full", FOCUS_RING),
+    root: "relative mt-1",
+    hit: cn(
+      "relative flex h-5 w-full cursor-pointer items-center rounded-full",
+      FOCUS_RING
+    ),
     track: "h-1",
     times: cn(HOVER_TIMES, "fine:motion-reveal"),
-    thumb: false,
+    thumb: true,
   },
   full: {
     root: "relative",
@@ -186,11 +189,16 @@ function useScrubDrag(
 export function Scrub({
   size,
   detached = false,
+  showTimes = true,
+  className,
 }: {
   size: ScrubSize;
   /** Card only: the card floats over the page rather than sitting in the
    *  sidebar column, and can grow downward to show the times. */
   detached?: boolean;
+  /** Whether to render the elapsed / remaining row beneath the bar. */
+  showTimes?: boolean;
+  className?: string;
 }) {
   const duration = useDuration();
   const { getProgress } = useMusicPlayerStore();
@@ -255,7 +263,7 @@ export function Scrub({
 
   // aria-valuenow and aria-valuetext are written by the draw above.
   return (
-    <div ref={rootRef} className={geometry.root}>
+    <div ref={rootRef} className={cn(geometry.root, className)}>
       <div
         ref={sliderRef}
         className={cn("group/scrub touch-none", geometry.hit)}
@@ -276,17 +284,16 @@ export function Scrub({
           >
             <span
               className={cn(
-                "-ml-1.5 block size-3 rounded-full bg-art",
-                "shadow-[0_1px_2px_oklch(0_0_0/25%)]",
+                "-ml-1.5 block size-3 rounded-full bg-art shadow-float",
                 "opacity-0 motion-reveal",
-                "group-focus-visible/scrub:opacity-100",
+                "group-hover/scrub:opacity-100 group-focus-visible/scrub:opacity-100",
                 dragPos !== null && "opacity-100"
               )}
             />
           </span>
         )}
       </div>
-      {geometry.times && (
+      {showTimes && geometry.times && (
         <span className={detached ? DETACHED_TIMES : geometry.times}>
           <span className={"flex min-h-0 justify-between overflow-hidden"}>
             <span ref={leadRef} className={TIME} />

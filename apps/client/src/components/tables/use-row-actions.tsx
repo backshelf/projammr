@@ -28,12 +28,17 @@ export type RowActionsState<TData extends RowData, TChild = never> = Pick<
   | "clearSelection"
   | "orderedStatuses"
   | "bulkCollections"
+  | "bulkLabels"
+  | "bulkPriorityLevels"
   | "onBulkPatch"
   | "onBulkAddToCollection"
+  | "onBulkSetLabels"
   | "onBulkMove"
   | "onBulkDelete"
   | "requestDelete"
   | "handleCellSave"
+  | "editableCells"
+  | "reorder"
   | "moveToProject"
   | "setMoveTarget"
   | "rowActions"
@@ -64,12 +69,17 @@ export function useRowActions<TData extends RowData, TChild = never>({
   clearSelection,
   orderedStatuses,
   bulkCollections,
+  bulkLabels,
+  bulkPriorityLevels,
   onBulkPatch,
   onBulkAddToCollection,
+  onBulkSetLabels,
   onBulkMove,
   onBulkDelete,
   requestDelete,
   handleCellSave,
+  editableCells,
+  reorder,
   moveToProject,
   setMoveTarget,
   rowActions,
@@ -108,10 +118,33 @@ export function useRowActions<TData extends RowData, TChild = never>({
         ? data.filter((r) => targetIds.has(rowIdOf(r)))
         : [row];
 
+      const artistField = editableCells?.artists;
+      const rowLabels = (row as { labels?: { id: number }[] }).labels;
+      const rowLabelIds =
+        !many && Array.isArray(rowLabels)
+          ? rowLabels.map((l) => l.id)
+          : undefined;
+      const rowArtists = (row as { artists?: unknown }).artists;
+      const currentArtists = Array.isArray(rowArtists)
+        ? rowArtists.filter((a): a is string => typeof a === "string")
+        : [];
+      const rowIndex = !many
+        ? data.findIndex((candidate) => rowIdOf(candidate) === rowId)
+        : -1;
+      const rawTrackNumber = (row as { trackNumber?: number | null })
+        .trackNumber;
+      const currentTrackNumber =
+        typeof rawTrackNumber === "number"
+          ? rawTrackNumber
+          : rowIndex >= 0
+            ? rowIndex + 1
+            : 1;
+
       return {
         playback: rowActions?.play?.(row),
         statuses: orderedStatuses,
         collections: bulkCollections,
+        priorityLevels: bulkPriorityLevels,
         onSetStatus:
           onBulkPatch || canSave
             ? (statusId: number) => {
@@ -120,6 +153,61 @@ export function useRowActions<TData extends RowData, TChild = never>({
                 } else {
                   void handleCellSave(rowId, "statusId", statusId);
                 }
+              }
+            : undefined,
+        onSetPriority:
+          bulkPriorityLevels &&
+          bulkPriorityLevels.length > 0 &&
+          (many
+            ? onBulkPatch != null
+            : canSave && editableCells?.priority != null)
+            ? (priorityId: number) => {
+                if (many) {
+                  void runBulk({ priorityId }, (n) => `Updated ${n} ${plural}`);
+                } else {
+                  void handleCellSave(rowId, "priorityId", priorityId);
+                }
+              }
+            : undefined,
+        labels: bulkLabels,
+        rowLabelIds,
+        onSetLabels:
+          bulkLabels && bulkLabels.length > 0 && onBulkSetLabels
+            ? (add: number[], remove: number[]) => {
+                void onBulkSetLabels({ ids }, { add, remove }).then((r) => {
+                  if (r.ok) {
+                    toast.success(`Updated ${plural}`);
+                    if (many) clearSelection();
+                  } else {
+                    toast.error(`Could not update ${plural}`);
+                  }
+                });
+              }
+            : undefined,
+        artists:
+          !many && canSave && artistField
+            ? {
+                current: currentArtists,
+                suggestions: artistField.suggestions,
+                onSave: (next: string[]) =>
+                  handleCellSave(rowId, "artists", next),
+              }
+            : undefined,
+        reorder:
+          !many && reorder
+            ? {
+                trackNumber: currentTrackNumber,
+                total: data.length,
+                onMoveUp:
+                  currentTrackNumber > 1
+                    ? () => void reorder.onMove(rowId, currentTrackNumber - 1)
+                    : undefined,
+                onMoveDown:
+                  currentTrackNumber < data.length
+                    ? () => void reorder.onMove(rowId, currentTrackNumber + 1)
+                    : undefined,
+                onSetTrackNumber: (trackNumber: number) =>
+                  reorder.onMove(rowId, trackNumber),
               }
             : undefined,
         onAddToCollection: onBulkAddToCollection
@@ -195,11 +283,16 @@ export function useRowActions<TData extends RowData, TChild = never>({
       canSave,
       orderedStatuses,
       bulkCollections,
+      bulkLabels,
+      bulkPriorityLevels,
       onBulkPatch,
       onBulkAddToCollection,
+      onBulkSetLabels,
       onBulkMove,
       onBulkDelete,
       handleCellSave,
+      editableCells,
+      reorder,
       clearSelection,
       rowActions,
       actions,

@@ -1,5 +1,6 @@
 "use client";
 
+import { PlayAffordance } from "@/components/music-player/PlayAffordance";
 import { AppLink } from "@/components/navigation/AppLink";
 import { StatusChip } from "@workspace/ui/components/status-chip";
 import {
@@ -15,6 +16,7 @@ import { useLatestRef } from "@workspace/ui/hooks/use-latest-ref";
 import { imageUrl } from "@/lib/utils";
 import { IconChevronLeft, IconChevronRight, IconX } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
+import { ResponsivePicker } from "@workspace/ui/components/responsive-picker";
 import { Spinner } from "@workspace/ui/components/spinner";
 import {
   Sheet,
@@ -24,7 +26,7 @@ import {
 } from "@workspace/ui/components/sheet";
 import { AnimatePresence, FADE, LEAVE, m } from "@workspace/ui/lib/motion";
 import { cn } from "@workspace/ui/lib/utils";
-import type { PriorityLevel } from "@workspace/api/api";
+import type { PriorityLevel, Status } from "@workspace/api/api";
 import * as React from "react";
 
 import { PeekTitleEditor } from "./PeekTitleEditor";
@@ -56,6 +58,8 @@ type PeekRelated = {
 export type PeekRow = {
   id: number;
   title: string;
+  /** Position in the collection being viewed, when collection-scoped. */
+  trackNumber?: number | null;
   /** Secondary line under the title: artists, a track count, a date. */
   subtitle?: string;
   image?: string | null;
@@ -141,6 +145,17 @@ export type PeekPanelProps = {
     onSave: (title: string) => Promise<boolean>;
     onEnd: () => void;
   };
+  /** Playback target for track or collection peek panels. */
+  play?: {
+    kind: "track" | "collection";
+    id: number;
+    title?: string;
+  } | null;
+  /** Inline status picker configuration when the viewer can edit this row. */
+  statusEdit?: {
+    statuses: Status[];
+    onSelect: (statusId: number) => Promise<boolean>;
+  };
 };
 
 /**
@@ -161,6 +176,8 @@ export function PeekPanel({
   position,
   entityLabel = "record",
   rename,
+  play,
+  statusEdit,
 }: PeekPanelProps) {
   // Left/right step through rows while the panel is open. Pushed innermost
   // over the table's own scope and the global player seek arrows, so the
@@ -296,6 +313,14 @@ export function PeekPanel({
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
+                      {play && (
+                        <PlayAffordance
+                          kind={play.kind}
+                          id={play.id}
+                          title={play.title}
+                          hideMenu
+                        />
+                      )}
                       {/* The dialog's accessible name stays mounted while the
                           editor is up, so it never loses its label. */}
                       <SheetTitle
@@ -329,10 +354,57 @@ export function PeekPanel({
                       </SheetDescription>
                     )}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {row.status && (
-                        <StatusDisplay status={row.status} variant="chip" />
+                      {statusEdit && statusEdit.statuses.length > 0 ? (
+                        <ResponsivePicker
+                          value={
+                            row.status?.id != null
+                              ? String(row.status.id)
+                              : undefined
+                          }
+                          onSelect={(next) =>
+                            void statusEdit.onSelect(Number(next))
+                          }
+                          options={statusEdit.statuses.map((s) => ({
+                            value: String(s.id),
+                            label: s.name,
+                            icon: (
+                              <span
+                                aria-hidden
+                                className="size-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: s.colourHex }}
+                              />
+                            ),
+                          }))}
+                          searchable={false}
+                          title="Status"
+                          align="start"
+                          trigger={
+                            <button
+                              type="button"
+                              aria-label="Change status"
+                              className="inline-flex items-center rounded-sm focus-visible:outline-2 focus-visible:outline-ring coarse:min-h-11"
+                            >
+                              {row.status ? (
+                                <StatusDisplay
+                                  status={row.status}
+                                  variant="chip"
+                                />
+                              ) : (
+                                <StatusChip colour="var(--ink-soft)">
+                                  Set status
+                                </StatusChip>
+                              )}
+                            </button>
+                          }
+                        />
+                      ) : (
+                        row.status && (
+                          <StatusDisplay status={row.status} variant="chip" />
+                        )
                       )}
-                      {row.priority && <PriorityBadge level={row.priority} />}
+                      {row.priority && (
+                        <PriorityBadge level={row.priority} hideDefault />
+                      )}
                     </div>
                   </div>
                 </header>

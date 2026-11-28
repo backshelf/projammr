@@ -198,7 +198,7 @@ export function TrackAudioDialog({
                       onClick={() => toggle(candidate.id)}
                       className={cn(
                         "flex min-w-0 flex-1 items-center gap-3 py-2 pr-2 pl-3 text-left motion-ink",
-                        "hover:bg-ink/4 focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-none"
+                        "hover:bg-ink/4 focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-hidden"
                       )}
                     >
                       {isChecked ? (

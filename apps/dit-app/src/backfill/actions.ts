@@ -18,6 +18,10 @@ export type BackfillActions = {
     target: BackfillTarget
   ) => Promise<void>;
   setProject: (folder: string, project: number) => Promise<void>;
+  applyProjectToAll?: (
+    folders: readonly string[],
+    project: number
+  ) => Promise<void>;
   back: () => Promise<void>;
   start: () => Promise<void>;
   pause: () => Promise<void>;
@@ -25,7 +29,7 @@ export type BackfillActions = {
   retry: (folder: string) => Promise<void>;
   /** The window's own close: leaves what Check made removed, or pauses a run. */
   close: () => Promise<void>;
-  /** "See sessions not in dit": the instance's sessions list, filtered, in the browser. */
+  /** "Review unmatched sessions": the instance's sessions list, filtered, in the browser. */
   openSessions: (path: string | null) => Promise<void>;
 };
 
@@ -70,6 +74,14 @@ export function useBackfillActions(
         ),
       setProject: (folder, project) =>
         send(() => callBackfill("backfill_set_project", { folder, project })),
+      applyProjectToAll: (folders, project) =>
+        send(async () => {
+          await Promise.all(
+            folders.map((folder) =>
+              callBackfill("backfill_set_project", { folder, project })
+            )
+          );
+        }),
       back: () => send(() => callBackfill("backfill_back")),
       start: () => send(() => callBackfill("backfill_start")),
       pause: () => send(() => callBackfill("backfill_pause")),

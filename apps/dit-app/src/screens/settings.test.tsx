@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import type { Settings as SettingsValues, Snapshot } from "../ipc";
+import type { SettingsTab } from "../panel-actions";
 import {
   argsOf,
   base,
@@ -21,8 +22,8 @@ function settingsOf(
   return signedIn({ settings: { ...base.settings, ...settings }, ...rest });
 }
 
-function show(snapshot: Snapshot): void {
-  renderScreen(<Settings snapshot={snapshot} />, "settings");
+function show(snapshot: Snapshot, initialTab: SettingsTab = "general"): void {
+  renderScreen(<Settings snapshot={snapshot} initialTab={initialTab} />, "settings");
 }
 
 function sentSettings(calls: ReturnType<typeof mockApp>): unknown[] {
@@ -30,18 +31,37 @@ function sentSettings(calls: ReturnType<typeof mockApp>): unknown[] {
 }
 
 describe("Settings", () => {
-  test("names the machine and the instance it signs in to, and the instance is read-only", () => {
+  test("switches between General, Bounces, and Live tabs", () => {
     mockApp(base);
+    show(settingsOf());
+
+    expect(screen.getByLabelText("Machine name")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Bounces" }));
+    expect(screen.getByLabelText("Max upload size")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Live" }));
+    expect(screen.getByText(/Live's dit script/)).toBeTruthy();
+  });
+
+  test("names the machine, instance, app version, and web devices link", async () => {
+    const calls = mockApp(base);
     show(settingsOf());
 
     expect(
       (screen.getByLabelText("Machine name") as HTMLInputElement).value
     ).toBe("Studio Mac");
     expect(screen.getByText("https://projammr.example")).toBeTruthy();
+    expect(screen.getByText("v1.0.0")).toBeTruthy();
     expect(screen.queryByLabelText("Instance")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Devices on web" }));
+    await waitFor(() =>
+      expect(argsOf(calls, "open_web")).toEqual([
+        { path: "/settings/devices" },
+      ])
+    );
   });
 
-  test("renames the machine when the field is left or Enter is pressed, and not for an unchanged or empty name", async () => {
+  test("renames the machine when the field is left or Enter is pressed, shows Saved, and ignores unchanged or empty names", async () => {
     const calls = mockApp(base);
     show(settingsOf());
     const field = screen.getByLabelText("Machine name");
@@ -60,6 +80,7 @@ describe("Settings", () => {
         { key: "machineName", value: "Laptop" },
       ])
     );
+    expect(await screen.findByText("Saved")).toBeTruthy();
   });
 
   test("turns start at login off and on", async () => {
@@ -185,13 +206,13 @@ describe("Settings", () => {
   });
 
   describe("max upload size", () => {
-    const field = (): HTMLElement =>
-      screen.getByLabelText("Max upload size (MB)");
+    const field = (): HTMLElement => screen.getByLabelText("Max upload size");
 
-    test("sets a whole number of megabytes", async () => {
+    test("sets a whole number of megabytes and shows an inline MB suffix", async () => {
       const calls = mockApp(base);
-      show(settingsOf({ maxUploadMb: 12 }));
+      show(settingsOf({ maxUploadMb: 12 }), "bounces");
       expect((field() as HTMLInputElement).value).toBe("12");
+      expect(screen.getByText("MB")).toBeTruthy();
 
       fireEvent.change(field(), { target: { value: "25" } });
       fireEvent.keyDown(field(), { key: "Enter" });
@@ -203,7 +224,7 @@ describe("Settings", () => {
 
     test("refuses anything else without asking the app", () => {
       const calls = mockApp(base);
-      show(settingsOf());
+      show(settingsOf(), "bounces");
 
       fireEvent.change(field(), { target: { value: "12 MB" } });
       fireEvent.blur(field());
@@ -216,13 +237,14 @@ describe("Settings", () => {
   });
 
   describe("folders", () => {
-    test("adds the folders the picker returns and skips the ones already listed", async () => {
+    test("adds the folders the picker returns, shortens home paths with ~/, and shows default home notice when empty", async () => {
       const calls = mockApp(base, (command) =>
         command === "plugin:dialog|open"
           ? ["/Users/me", "/Users/me/Music"]
           : undefined
       );
-      show(settingsOf({ watchRoots: ["/Users/me"] }));
+      show(settingsOf({ watchRoots: ["/Users/me"] }), "bounces");
+      expect(screen.getByText("~/")).toBeTruthy();
       const [add] = screen.getAllByRole("button", { name: "Add folder…" });
 
       fireEvent.click(add!);
@@ -232,13 +254,22 @@ describe("Settings", () => {
           { key: "watchRoots", value: ["/Users/me", "/Users/me/Music"] },
         ])
       );
+
+      teardown();
+      mockApp(base);
+      show(settingsOf({ watchRoots: [] }), "bounces");
+      expect(
+        screen.getByText(
+          "Watching entire home folder (~/). Add folders to narrow where dit looks."
+        )
+      ).toBeTruthy();
     });
 
     test("adds nothing when the picker is cancelled", async () => {
       const calls = mockApp(base, (command) =>
         command === "plugin:dialog|open" ? null : undefined
       );
-      show(settingsOf());
+      show(settingsOf(), "bounces");
       const [add] = screen.getAllByRole("button", { name: "Add folder…" });
 
       fireEvent.click(add!);
@@ -251,10 +282,13 @@ describe("Settings", () => {
 
     test("removes a folder from the list it is in", async () => {
       const calls = mockApp(base);
-      show(settingsOf({ excluded: ["/Users/me/Library", "/Users/me/Trash"] }));
+      show(
+        settingsOf({ excluded: ["/Users/me/Library", "/Users/me/Trash"] }),
+        "bounces"
+      );
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Remove /Users/me/Library" })
+        screen.getByRole("button", { name: "Remove ~/Library" })
       );
 
       await waitFor(() =>
@@ -270,7 +304,7 @@ describe("Settings", () => {
           throw "The folder picker couldn't open.";
         }
       });
-      show(settingsOf());
+      show(settingsOf(), "bounces");
       const [add] = screen.getAllByRole("button", { name: "Add folder…" });
 
       fireEvent.click(add!);
@@ -282,15 +316,22 @@ describe("Settings", () => {
   });
 
   describe("what the render watcher skips and remembers", () => {
-    test("shows the built-in exclusions as fixed text beside the person's own", () => {
+    test("collapses built-in exclusions behind a disclosure beside the person's own", () => {
       mockApp(base);
       show(
         settingsOf({
           builtInExcluded: ["Library", "node_modules", "Trash"],
           excluded: ["/Users/me/Backups"],
-        })
+        }),
+        "bounces"
       );
 
+      expect(
+        screen.queryByText("Always skipped: Library, node_modules, Trash.")
+      ).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: "3 built-in exclusions" })
+      );
       expect(
         screen.getByText("Always skipped: Library, node_modules, Trash.")
       ).toBeTruthy();
@@ -298,14 +339,15 @@ describe("Settings", () => {
         screen.queryByRole("button", { name: "Remove Library" })
       ).toBeNull();
       expect(
-        screen.getByRole("button", { name: "Remove /Users/me/Backups" })
+        screen.getByRole("button", { name: "Remove ~/Backups" })
       ).toBeTruthy();
     });
 
-    test("lists the files marked Not a bounce, wraps their folders and takes one back by its fingerprint", async () => {
+    test("collapses ignored bounces & folders, humanizes fingerprints, and forgets by fingerprint", async () => {
       const calls = mockApp(base);
       show(
         settingsOf({
+          neverHereFolders: [],
           rejectedFiles: [
             {
               fingerprint: "dit:100:abc",
@@ -314,11 +356,20 @@ describe("Settings", () => {
             },
             { fingerprint: "dit:200:def", name: null, folder: null },
           ],
-        })
+        }),
+        "bounces"
+      );
+
+      expect(screen.queryByText("Files marked Not a bounce")).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: /Ignored bounces & folders \(2\)/ })
       );
 
       expect(screen.getByText("Files marked Not a bounce")).toBeTruthy();
-      expect(screen.getByText("/Users/me/Music/Exports")).toBeTruthy();
+      expect(screen.getByText("~/Music/Exports")).toBeTruthy();
+      expect(
+        screen.getByText("Not-a-bounce choices sync across devices.")
+      ).toBeTruthy();
       fireEvent.click(
         screen.getByRole("button", { name: "Forget demo take 3.wav" })
       );
@@ -328,19 +379,38 @@ describe("Settings", () => {
           { fingerprint: "dit:100:abc" },
         ])
       );
-      // A file the app cannot name is listed by its fingerprint, and still removable.
       expect(
-        screen.getByRole("button", { name: "Forget dit:200:def" })
+        screen.getByRole("button", {
+          name: "Forget Unnamed file (200 Bytes · def)",
+        })
       ).toBeTruthy();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Manage on web" })
+      );
+      await waitFor(() =>
+        expect(argsOf(calls, "open_web")).toEqual([
+          { path: "/settings/devices" },
+        ])
+      );
     });
 
     test("lists the folders marked Never here and takes one back", async () => {
       const calls = mockApp(base);
-      show(settingsOf({ neverHereFolders: ["/Users/me/Bounces/old"] }));
+      show(
+        settingsOf({
+          rejectedFiles: [],
+          neverHereFolders: ["/Users/me/Bounces/old"],
+        }),
+        "bounces"
+      );
 
+      fireEvent.click(
+        screen.getByRole("button", { name: /Ignored bounces & folders \(1\)/ })
+      );
       expect(screen.getByText("Folders marked Never here")).toBeTruthy();
       fireEvent.click(
-        screen.getByRole("button", { name: "Forget /Users/me/Bounces/old" })
+        screen.getByRole("button", { name: "Forget ~/Bounces/old" })
       );
 
       await waitFor(() =>
@@ -354,7 +424,13 @@ describe("Settings", () => {
       mockApp(base, (command) => {
         if (command === "forget_never_here") throw "That folder isn't marked.";
       });
-      show(settingsOf({ rejectedFiles: [], neverHereFolders: ["/x"] }));
+      show(
+        settingsOf({ rejectedFiles: [], neverHereFolders: ["/x"] }),
+        "bounces"
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: /Ignored bounces & folders \(1\)/ })
+      );
       expect(screen.getByText("No file is marked.")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("button", { name: "Forget /x" }));
@@ -366,14 +442,19 @@ describe("Settings", () => {
   });
 
   describe("Live's script", () => {
-    test("reinstalls while connected, says which Live said hello and where the script is", async () => {
+    test("reinstalls while connected, says which Live said hello and shortens the script path", async () => {
       const calls = mockApp(base);
       const path = "/Users/me/Music/Ableton/User Library/Remote Scripts/dit";
       show(
-        settingsOf({}, { script: { state: "connected", live: "12.4.6", path } })
+        settingsOf({}, { script: { state: "connected", live: "12.4.6", path } }),
+        "live"
       );
       expect(screen.getByText("Connected · Live 12.4.6")).toBeTruthy();
-      expect(screen.getByText(`Installed at ${path}`)).toBeTruthy();
+      expect(
+        screen.getByText(
+          "Installed at ~/Music/Ableton/User Library/Remote Scripts/dit"
+        )
+      ).toBeTruthy();
 
       fireEvent.click(
         screen.getByRole("button", { name: "Reinstall Live's dit script" })
@@ -384,10 +465,11 @@ describe("Settings", () => {
       );
     });
 
-    test("tells how to enable it once installed, and offers Install when it is not", () => {
+    test("tells how to enable it once installed, and offers Install with accurate not-installed copy", () => {
       mockApp(base);
       const { unmount } = renderScreen(
         <Settings
+          initialTab="live"
           snapshot={settingsOf(
             {},
             {
@@ -412,9 +494,15 @@ describe("Settings", () => {
         settingsOf(
           { cliInstalled: null },
           { script: { state: "not-installed", live: null, path: null } }
-        )
+        ),
+        "live"
       );
       expect(screen.getByText("Not installed")).toBeTruthy();
+      expect(
+        screen.getByText(
+          "Install dit's script into Live's User Library, then enable it in Live › Settings › Link, Tempo & MIDI."
+        )
+      ).toBeTruthy();
       expect(screen.queryByText(/^Installed at/)).toBeNull();
       expect(
         screen.getByRole("button", { name: "Install Live's dit script" })
@@ -427,7 +515,8 @@ describe("Settings", () => {
         settingsOf(
           {},
           { script: { state: "live-not-found", live: null, path: null } }
-        )
+        ),
+        "live"
       );
 
       expect(screen.getByText("Live wasn't found.")).toBeTruthy();
@@ -436,7 +525,7 @@ describe("Settings", () => {
   });
 
   describe("the dit command", () => {
-    test("says where it is installed and has no button to install it again", () => {
+    test("says where it is installed on one line and has no button to install it again", () => {
       mockApp(base);
       show(settingsOf({ cliInstalled: "/usr/local/bin/dit" }));
 
@@ -472,7 +561,7 @@ describe("Settings", () => {
   describe("permissions", () => {
     test("explains Screen Recording and asks for it", async () => {
       const calls = mockApp(base);
-      show(settingsOf({}, { permissions: { screenRecording: false } }));
+      show(settingsOf({}, { permissions: { screenRecording: false } }), "live");
       expect(screen.getByText("Screen Recording: Not allowed")).toBeTruthy();
       expect(screen.getByText(/dit reads Live's window title/)).toBeTruthy();
 
@@ -487,7 +576,7 @@ describe("Settings", () => {
 
     test("has nothing to ask once it is allowed, and still explains the folder prompts", () => {
       mockApp(base);
-      show(settingsOf({}, { permissions: { screenRecording: true } }));
+      show(settingsOf({}, { permissions: { screenRecording: true } }), "live");
 
       expect(screen.getByText("Screen Recording: Allowed")).toBeTruthy();
       expect(

@@ -181,4 +181,14 @@ describe("SkylineReadout", () => {
     expect(group.getAttribute("data-mode")).toBe("whole");
     expect(spoken()).toBe("No track has changed since the last commit");
   });
+
+  test("pins the clicked bar even after the pointer leaves", () => {
+    const group = showReadout();
+
+    fireEvent.click(bars()[2]!);
+    fireEvent.pointerLeave(group);
+
+    expect(spoken()).toBe("Pad · added");
+    expect(bars()[2]!.hasAttribute("data-hot")).toBe(true);
+  });
 });

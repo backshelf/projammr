@@ -5,9 +5,15 @@ import { bulkSelectionSchema } from "../../db/queries/pagination.js";
 import { withProjectPolicyForTest } from "../../db/queries/project-policy.js";
 import { recordRevisions } from "../../db/queries/saves.js";
 import { saves } from "../../db/schema/saves.js";
+import { sessions } from "../../db/schema/sessions.js";
 import { tracks } from "../../db/schema/tracks.js";
 import { setupSuite } from "../../test/fixtures.js";
-import { selectSessionIds } from "./queries.js";
+import { holdTransaction } from "../../test/held-transaction.js";
+import {
+  bulkMoveSessions,
+  selectSessionIds,
+  updateSession,
+} from "./queries.js";
 
 const suite = setupSuite("Session");
 const {
@@ -715,5 +721,308 @@ describe("session create under the project's defaults", () => {
 
     expect(created.main).toBe(false);
     expect(await isMain(before.id)).toBe(true);
+  });
+});
+
+describe("session inbox triage, unassigned filter, and main promotion", () => {
+  it("accepts and clears inboxDismissedAt as an ISO string on PATCH /sessions/:id", async () => {
+    requireProject();
+    const session = await mkSession({ name: "Inbox Dismiss" });
+    const stamp = "2026-11-28T08:00:00.000Z";
+
+    const dismissed = await request("editor", `/sessions/${session.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ inboxDismissedAt: stamp }),
+    });
+    expect(dismissed.status).toBe(200);
+    expect((await dismissed.json()).inboxDismissedAt).toBe(stamp);
+
+    const restored = await request("editor", `/sessions/${session.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ inboxDismissedAt: null }),
+    });
+    expect(restored.status).toBe(200);
+    expect((await restored.json()).inboxDismissedAt).toBeNull();
+
+    const invalid = await request("editor", `/sessions/${session.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ inboxDismissedAt: "not-a-date" }),
+    });
+    expect(invalid.status).toBe(400);
+  });
+
+  it("filters paginated sessions by unassigned=true and unassigned=false", async () => {
+    requireProject();
+    const trackId = await mkTrack("Filter Unassigned Track");
+    const linked = await mkSession({
+      name: "UnassignedFilter Linked",
+      trackId,
+    });
+    const orphan = await mkSession({ name: "UnassignedFilter Orphan" });
+
+    const onlyUnassigned = (await (
+      await request(
+        "viewer",
+        `/projects/${suite.projectId}/sessions/paginated?q=UnassignedFilter&unassigned=true`
+      )
+    ).json()) as { rows: { id: number }[]; rowCount: number };
+    expect(onlyUnassigned.rows.map((r) => r.id)).toEqual([orphan.id]);
+    expect(onlyUnassigned.rowCount).toBe(1);
+
+    const onlyAssigned = (await (
+      await request(
+        "viewer",
+        `/projects/${suite.projectId}/sessions/paginated?q=UnassignedFilter&unassigned=false`
+      )
+    ).json()) as { rows: { id: number }[]; rowCount: number };
+    expect(onlyAssigned.rows.map((r) => r.id)).toEqual([linked.id]);
+    expect(onlyAssigned.rowCount).toBe(1);
+  });
+
+  it("clears prior main session when PATCH sets { trackId, main: true }", async () => {
+    requireProject();
+    const trackId = await mkTrack("Patch Main Track");
+    const oldMain = await mkSession({
+      trackId,
+      main: true,
+      name: "Old Main",
+    });
+    const incoming = await mkSession({ name: "Incoming Main" });
+
+    const res = await request("editor", `/sessions/${incoming.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ trackId, main: true }),
+    });
+    expect(res.status).toBe(200);
+    const updated = await res.json();
+    expect(updated.trackId).toBe(trackId);
+    expect(updated.main).toBe(true);
+
+    const oldAfter = await (
+      await request("viewer", `/sessions/${oldMain.id}`)
+    ).json();
+    expect(oldAfter.main).toBe(false);
+  });
+
+  it("clears prior main session when PATCH sets { main: true } without trackId", async () => {
+    requireProject();
+    const trackId = await mkTrack("Promote Main Track");
+    const oldMain = await mkSession({
+      trackId,
+      main: true,
+      name: "Old Main 2",
+    });
+    const secondary = await mkSession({
+      trackId,
+      main: false,
+      name: "Secondary Session",
+    });
+
+    const res = await request("editor", `/sessions/${secondary.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ main: true }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).main).toBe(true);
+
+    const oldAfter = await (
+      await request("viewer", `/sessions/${oldMain.id}`)
+    ).json();
+    expect(oldAfter.main).toBe(false);
+  });
+
+  it("locks sessionId and retries when { main: true } promotes an unlinked session concurrently linked to a track", async () => {
+    requireProject();
+    const trackId = await mkTrack("Concurrent Unlinked Promote Track");
+    const oldMain = await mkSession({
+      trackId,
+      main: true,
+      name: "Existing Track Main",
+    });
+    const unlinked = await mkSession({
+      main: false,
+      name: "Unlinked Promoted Concurrently",
+    });
+
+    const held = await holdTransaction(async (tx) => {
+      await tx
+        .update(sessions)
+        .set({ trackId })
+        .where(eq(sessions.id, unlinked.id));
+    });
+
+    const promotedPromise = updateSession(unlinked.id, { main: true });
+    await held.blocking();
+    await held.commit();
+
+    const promoted = await promotedPromise;
+    expect(promoted.trackId).toBe(trackId);
+    expect(promoted.main).toBe(true);
+
+    const [oldRow] = await db
+      .select({ main: sessions.main })
+      .from(sessions)
+      .where(eq(sessions.id, oldMain.id));
+    expect(oldRow?.main).toBe(false);
+  });
+
+  it("serializes concurrent { trackId, main: true } promotions on a track with an existing main", async () => {
+    requireProject();
+    const trackId = await mkTrack("Concurrent Main Race Track");
+    const oldMain = await mkSession({
+      trackId,
+      main: true,
+      name: "Prior Main",
+    });
+    const s1 = await mkSession({ main: false, name: "Racer One" });
+    const s2 = await mkSession({ main: false, name: "Racer Two" });
+
+    const held = await holdTransaction(async (tx) => {
+      await tx
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(eq(sessions.id, s1.id))
+        .for("update");
+    });
+
+    const p1 = updateSession(s1.id, { trackId, main: true });
+    await held.blocking();
+    const p2 = updateSession(s2.id, { trackId, main: true });
+    await held.blocking(2);
+    await held.commit();
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1.trackId).toBe(trackId);
+    expect(r2.trackId).toBe(trackId);
+
+    const rows = await db
+      .select({ id: sessions.id, main: sessions.main })
+      .from(sessions)
+      .where(eq(sessions.trackId, trackId));
+    expect(rows.filter((r) => r.main).map((r) => r.id)).toEqual([s2.id]);
+    expect(rows.find((r) => r.id === oldMain.id)?.main).toBe(false);
+    expect(rows.find((r) => r.id === s1.id)?.main).toBe(false);
+  });
+
+  it("serializes concurrent { trackId, main: true } and { main: true } promotions on a track with no prior main", async () => {
+    requireProject();
+    const trackId = await mkTrack("Concurrent No-Prior-Main Track");
+    const s1 = await mkSession({ main: false, name: "No-Main Racer One" });
+    const s2 = await mkSession({ main: false, name: "No-Main Racer Two" });
+    const s3 = await mkSession({
+      trackId,
+      main: false,
+      name: "No-Main Racer Three",
+    });
+
+    const results = await Promise.all([
+      request("editor", `/sessions/${s1.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ trackId, main: true }),
+      }),
+      request("editor", `/sessions/${s2.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ trackId, main: true }),
+      }),
+      request("editor", `/sessions/${s3.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ main: true }),
+      }),
+    ]);
+    for (const res of results) {
+      expect(res.status).toBe(200);
+    }
+
+    const rows = await db
+      .select({ id: sessions.id, main: sessions.main })
+      .from(sessions)
+      .where(eq(sessions.trackId, trackId));
+    expect(rows.filter((r) => r.main)).toHaveLength(1);
+  });
+
+  it("links an unlinked main: true session without 23505 when { trackId } omits main", async () => {
+    requireProject();
+    const occupiedTrack = await mkTrack("Occupied Main Track");
+    const existingMain = await mkSession({
+      trackId: occupiedTrack,
+      main: true,
+      name: "Occupied Existing Main",
+    });
+    const unlinkedMainA = await mkSession({
+      main: true,
+      name: "Unlinked Main A",
+    });
+    const emptyTrack = await mkTrack("Empty Main Track");
+    const unlinkedMainB = await mkSession({
+      main: true,
+      name: "Unlinked Main B",
+    });
+
+    const resA = await request("editor", `/sessions/${unlinkedMainA.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ trackId: occupiedTrack }),
+    });
+    expect(resA.status).toBe(200);
+    const bodyA = await resA.json();
+    expect(bodyA.trackId).toBe(occupiedTrack);
+    expect(bodyA.main).toBe(false);
+
+    const [existingAfter] = await db
+      .select({ main: sessions.main })
+      .from(sessions)
+      .where(eq(sessions.id, existingMain.id));
+    expect(existingAfter?.main).toBe(true);
+
+    const resB = await request("editor", `/sessions/${unlinkedMainB.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ trackId: emptyTrack }),
+    });
+    expect(resB.status).toBe(200);
+    const bodyB = await resB.json();
+    expect(bodyB.trackId).toBe(emptyTrack);
+    expect(bodyB.main).toBe(true);
+  });
+
+  it("serializes concurrent bulkMoveSessions promotions on a track with an existing main", async () => {
+    requireProject();
+    const trackId = await mkTrack("Concurrent BulkMove Main Track");
+    const oldMain = await mkSession({
+      trackId,
+      main: true,
+      name: "BulkMove Prior Main",
+    });
+    const s1 = await mkSession({ main: false, name: "BulkMove Racer One" });
+    const s2 = await mkSession({ main: false, name: "BulkMove Racer Two" });
+
+    const held = await holdTransaction(async (tx) => {
+      await tx
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(eq(sessions.id, oldMain.id))
+        .for("update");
+    });
+
+    const p1 = bulkMoveSessions(
+      [{ sessionId: s1.id, trackId, main: true }],
+      suite.projectId,
+      suite.owner.userId
+    );
+    await held.blocking();
+    const p2 = bulkMoveSessions(
+      [{ sessionId: s2.id, trackId, main: true }],
+      suite.projectId,
+      suite.owner.userId
+    );
+    await held.blocking(2);
+    await held.commit();
+
+    await Promise.all([p1, p2]);
+
+    const rows = await db
+      .select({ id: sessions.id, main: sessions.main })
+      .from(sessions)
+      .where(eq(sessions.trackId, trackId));
+    expect(rows.filter((r) => r.main)).toHaveLength(1);
+    expect(rows.find((r) => r.id === oldMain.id)?.main).toBe(false);
   });
 });

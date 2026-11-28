@@ -71,6 +71,11 @@ import {
 import type { SaveMeta } from "@workspace/api/api";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { loaded } from "@/lib/loaded";
+import { searchParam, type RouteSearchParams } from "@/modules/route-module";
+import { LinkToDialog } from "@/components/product-linking/LinkToDialog";
+import { Button } from "@workspace/ui/components/button";
+import { IconLink } from "@tabler/icons-react";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 /** How many saves the session page shows before pointing at the history page. */
@@ -84,17 +89,38 @@ export default async function SessionPage({
   collectionId,
   trackId,
   sessionId,
+  searchParams = {},
 }: {
   projectId: number;
   collectionId?: number;
   trackId?: number;
   sessionId: number;
+  searchParams?: RouteSearchParams;
 }) {
+  const sessionResult = await cachedSession(sessionId);
+  const session = loaded(sessionResult);
+  const standalone = searchParam(searchParams.standalone) === "1";
+
+  if (session.trackId != null && !standalone) {
+    const targetTrackHref = hrefFromParsedRoute(
+      {
+        kind: "track",
+        trackId: session.trackId,
+        collectionId: collectionId ?? session.track?.collections?.[0]?.id,
+      },
+      projectId
+    );
+    const qs = new URLSearchParams({
+      studio: "overview",
+      session: String(sessionId),
+    });
+    redirect(`${targetTrackHref}?${qs.toString()}`);
+  }
+
   const projectProm = cachedProject(projectId);
   const collectionProm = collectionId
     ? cachedCollection(collectionId)
     : undefined;
-  const sessionProm = cachedSession(sessionId);
   // One extra save is fetched only to be the last shown save's baseline; the
   // structure card and the history share the one list.
   const savesProm = getSessionSaves(sessionId, VISIBLE_SAVES + 1);
@@ -111,7 +137,6 @@ export default async function SessionPage({
 
   const [
     projectResult,
-    sessionResult,
     collectionResult,
     savesResult,
     commitsResult,
@@ -121,7 +146,6 @@ export default async function SessionPage({
     { shell },
   ] = await Promise.all([
     projectProm,
-    sessionProm,
     collectionProm,
     savesProm,
     commitsProm,
@@ -132,7 +156,6 @@ export default async function SessionPage({
   ]);
 
   const project = loaded(projectResult);
-  const session = loaded(sessionResult);
   const collection = collectionResult ? loaded(collectionResult) : undefined;
   const saves = isActionError(savesResult) ? [] : savesResult;
   const commits = isActionError(commitsResult) ? [] : commitsResult;
@@ -281,6 +304,25 @@ export default async function SessionPage({
         }
       />
       <div className={BODY}>
+        {session.trackId == null && canEdit && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-4">
+            <div>
+              <p className="text-body text-ink">
+                This DAW set isn&apos;t assigned to a track yet.
+              </p>
+              <p className="text-small text-ink-soft">
+                Assign it so collaborators see it under the song&apos;s Studio
+                drawer.
+              </p>
+            </div>
+            <LinkToDialog targetKind="session" targetId={sessionId}>
+              <Button variant="outline" size="sm">
+                <IconLink data-icon="inline-start" />
+                Assign to a track
+              </Button>
+            </LinkToDialog>
+          </div>
+        )}
         <SectionFold>
           <PageSections
             order={shell.entityPageSections.session}

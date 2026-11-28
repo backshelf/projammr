@@ -97,15 +97,16 @@ export function LavaField() {
 
     let lastT = performance.now();
     const tick = (t: number) => {
+      const dt = Math.max(0, t - lastT);
+      lastT = t;
       let settled = false;
       if (data) {
         analyser.getByteFrequencyData(data);
         bandLevels(data, levels);
-        stepBlobs(blobs, levels, t, t - lastT);
+        stepBlobs(blobs, levels, t, dt);
       } else {
-        settled = fadeBlobs(blobs, t);
+        settled = fadeBlobs(blobs, t, dt);
       }
-      lastT = t;
       drawField(ctx, blobs, palette, SIZE, theme);
       if (!settled) frame = requestAnimationFrame(tick);
     };

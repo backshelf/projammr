@@ -206,7 +206,7 @@ describe("the token layer with no attribute", () => {
     );
     expect(phone?.declarations).toEqual({
       "--masthead-band": "52vh",
-      "--masthead-head": "42vh",
+      "--masthead-head": "30vh",
     });
   });
 });
@@ -544,5 +544,44 @@ describe("the lyrics gutter off-rules", () => {
     expect(rule.prelude).toContain("::after");
     expect(rule.prelude).toContain(":not( [data-is-only-empty-block] )");
     expect(rule.declarations.content).toBe("none !important");
+  });
+});
+
+describe("prose, noise and keyboard dock", () => {
+  it('sets .doc default prose to system sans while respecting :root[data-font="serif"]', () => {
+    expect(token("doc.css", ".doc", "--font-doc")).toBe(
+      "var(--font-system-sans)"
+    );
+    expect(token("doc.css", ".doc", "font-family")).toBe("var(--font-doc)");
+    expect(
+      token("doc.css", ':root[data-font="serif"] .doc', "--font-doc")
+    ).toBe("var(--font-system-serif)");
+    expect(token("doc.css", ".doc code", "border")).toBe(
+      "1px solid var(--rule)"
+    );
+    expect(token("doc.css", ".doc a", "color")).toBe("var(--art)");
+  });
+
+  it("replaces SVG feTurbulence with pre-baked PNG noise in atmosphere.css", () => {
+    const atmosphere = readFileSync(
+      join(import.meta.dir, "atmosphere.css"),
+      "utf8"
+    );
+    expect(atmosphere).not.toContain("feTurbulence");
+    expect(token("atmosphere.css", ".wash", "mask-image")).toContain(
+      "data:image/png;base64,"
+    );
+    expect(
+      token("atmosphere.css", "body::after", "background-image")
+    ).toContain("data:image/png;base64,");
+  });
+
+  it("zeroes --dock when body[data-keyboard] is active on phones", () => {
+    const keyboard = files["foundation.css"]!.find(
+      (b) =>
+        b.prelude === "body[data-keyboard]" &&
+        b.context.join() === "@media (width < 768px)"
+    );
+    expect(keyboard?.declarations["--dock"]).toBe("0px");
   });
 });

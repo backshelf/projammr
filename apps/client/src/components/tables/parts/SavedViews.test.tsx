@@ -158,7 +158,7 @@ describe("SavedViews", () => {
     expect(
       screen.getByRole("button", { name: "Explicit: Not explicit" })
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Energy" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Energy/ })).toBeNull();
     expect(window.location.search).toBe("?explicit=false");
   });
 

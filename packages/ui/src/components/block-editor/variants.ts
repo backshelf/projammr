@@ -8,6 +8,8 @@ export type VariantProps = {
   onChange?: (json: string) => void;
   editable?: boolean;
   placeholder?: string;
+  /** Accessible name for the editor's `role="textbox"` surface. Defaults to `"Document editor"`. */
+  ariaLabel?: string;
   /**
    * Editor colour scheme. Without this, BlockNoteView falls back to the OS
    * `prefers-color-scheme`, which forces `.bn-root.dark` even when the app is
@@ -16,6 +18,16 @@ export type VariantProps = {
    */
   theme?: "light" | "dark";
 };
+
+const DEFAULT_EDITOR_ARIA_LABEL = "Document editor";
+
+export function editorDomAttributes(ariaLabel?: string) {
+  return {
+    editor: {
+      "aria-label": ariaLabel?.trim() || DEFAULT_EDITOR_ARIA_LABEL,
+    },
+  };
+}
 
 /**
  * The variant a surface asks for decides which editor component is mounted.

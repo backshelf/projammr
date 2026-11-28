@@ -14,4 +14,5 @@ export const sessionFilterSchema = z.object({
   priority: idListParamSchema,
   track: z.coerce.number().int().optional(),
   inDit: z.stringbool().optional(),
+  unassigned: z.stringbool().optional(),
 });

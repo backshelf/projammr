@@ -88,15 +88,12 @@ describe("LabelsCell", () => {
     ).toBe("/settings/project/3/labels");
   });
 
-  it("leaves the labels pane out of a viewer's picker", async () => {
+  it("hides the Edit labels trigger for a viewer while keeping read-only badges", () => {
     renderCell(undefined, "viewer");
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Edit labels" }));
-    });
-
-    expect(screen.getByPlaceholderText("Filter or create…")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Manage labels" })).toBeNull();
+    expect(screen.getByText("Single")).toBeTruthy();
+    expect(screen.getByText("Demo")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit labels" })).toBeNull();
   });
 
   it("keeps badges on a single line and collapses overflow into a +N popover", async () => {

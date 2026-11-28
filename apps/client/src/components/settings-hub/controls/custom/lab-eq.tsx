@@ -13,9 +13,13 @@ import {
   RACK_DEFAULT,
   type RackDefault,
 } from "@workspace/settings/groups/lab";
+import { IconChevronRight } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { TogglePill } from "@workspace/ui/components/toggle-pill";
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
+import { LABEL } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
+import { useState } from "react";
 import {
   describedByOf,
   labelIdOf,
@@ -40,6 +44,8 @@ export function LabEqControl({
   disabled,
   id,
 }: SettingControlProps<unknown, ControlOf<"custom">>) {
+  const isMobile = useIsMobile();
+  const [bandsOpen, setBandsOpen] = useState(false);
   const value = rawValue as EqValue;
   const isDefault = isRackDefault(value);
   const effective = isDefault ? DEFAULT_LAB.rack.eq : value;
@@ -52,20 +58,36 @@ export function LabEqControl({
       ),
     });
 
+  const bandRows = (
+    <div className="flex flex-col gap-1.5">
+      {effective.bands.map((band, index) => (
+        <RackBand
+          // eslint-disable-next-line @eslint-react/no-array-index-key -- the index is the band's fixed slot (0..7), never reordered
+          key={index}
+          index={index}
+          band={band}
+          disabled={disabled}
+          onChange={(bandPatch) => patchBand(index, bandPatch)}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <div
       id={id}
+      data-wide-control=""
       role="group"
       aria-labelledby={labelIdOf(id)}
       aria-describedby={describedByOf(id)}
-      className="flex w-80 flex-col gap-2.5"
+      className="flex w-full max-w-80 flex-col gap-2.5"
     >
       <div className="flex items-center justify-between gap-2">
         <TogglePill
           pressed={effective.on}
           onPressedChange={(next) => patch({ on: next })}
           disabled={disabled}
-          className={RACK_PILL_WIDTH}
+          className={cn(RACK_PILL_WIDTH, "phone:min-h-11")}
         >
           EQ
         </TogglePill>
@@ -78,6 +100,7 @@ export function LabEqControl({
             size="xs"
             disabled={disabled}
             onClick={() => onChange(RACK_DEFAULT)}
+            className="phone:min-h-11 phone:min-w-11 coarse:min-w-11"
           >
             Reset
           </Button>
@@ -90,18 +113,32 @@ export function LabEqControl({
           disabled={disabled}
         />
       </div>
-      <div className="flex flex-col gap-1.5">
-        {effective.bands.map((band, index) => (
-          <RackBand
-            // eslint-disable-next-line @eslint-react/no-array-index-key -- the index is the band's fixed slot (0..7), never reordered
-            key={index}
-            index={index}
-            band={band}
-            disabled={disabled}
-            onChange={(bandPatch) => patchBand(index, bandPatch)}
-          />
-        ))}
-      </div>
+      {isMobile ? (
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            aria-expanded={bandsOpen}
+            onClick={() => setBandsOpen((open) => !open)}
+            className={cn(
+              LABEL,
+              "flex min-h-11 cursor-pointer items-center gap-1.5 self-start rounded-sm px-1 text-ink-soft motion-ink hover:text-ink",
+              "focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-hidden"
+            )}
+          >
+            <IconChevronRight
+              aria-hidden
+              className={cn(
+                "size-3.5 text-ink-faint motion-move",
+                bandsOpen && "rotate-90"
+              )}
+            />
+            <span>Bands ({effective.bands.length})</span>
+          </button>
+          {bandsOpen && bandRows}
+        </div>
+      ) : (
+        bandRows
+      )}
     </div>
   );
 }

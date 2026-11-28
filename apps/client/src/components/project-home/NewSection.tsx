@@ -10,20 +10,24 @@ import { Rows } from "@workspace/ui/components/layout/rows";
 import { SectionHead } from "@workspace/ui/components/layout/section-head";
 import { cachedEffectiveSettings } from "@/lib/settings/server";
 import { NewSaves } from "./NewSaves";
+import { groupTodayRenders } from "./render-groups";
 import { RenderRow } from "./RenderRow";
 import { newWindowLabel } from "./today-copy";
 
 /**
- * What landed in the project's new window: the track audio versions linked, each playable
- * in place, then the session saves. Renders nothing when the read failed or
- * both are empty; with only one of them, only that part shows.
+ * What landed in the project's new window: the track audio versions linked
+ * (collapsed per track so repeated bounces read as `v3–v4`), then raw DAW
+ * saves folded behind a producer disclosure. Renders nothing when the read
+ * failed or nothing visible landed.
  */
 export async function NewSection({
   projectId,
   today,
+  canEdit = true,
 }: {
   projectId: number;
   today: Promise<ProjectToday | ActionError>;
+  canEdit?: boolean;
 }) {
   const [result, format, settings] = await Promise.all([
     today,
@@ -32,8 +36,9 @@ export async function NewSection({
   ]);
   if (isActionError(result)) return null;
 
-  const { renders, saves } = result;
-  if (renders.length === 0 && saves.length === 0) return null;
+  const groupedRenders = groupTodayRenders(result.renders);
+  const showSaves = canEdit && result.saves.length > 0;
+  if (groupedRenders.length === 0 && !showSaves) return null;
   const asOf = new Date();
 
   return (
@@ -46,16 +51,21 @@ export async function NewSection({
         >
           NEW
         </SectionHead>
-        {renders.length > 0 && (
+        {groupedRenders.length > 0 && (
           <Rows>
-            {renders.map((row) => (
-              <RenderRow key={row.id} row={row} projectId={projectId} />
+            {groupedRenders.map(({ latest, versionLabel }) => (
+              <RenderRow
+                key={latest.trackId}
+                row={latest}
+                projectId={projectId}
+                versionLabel={versionLabel}
+              />
             ))}
           </Rows>
         )}
-        {saves.length > 0 && (
+        {showSaves && (
           <NewSaves
-            entries={saveEntries(saves, projectId, format)}
+            entries={saveEntries(result.saves, projectId, format)}
             asOf={asOf}
           />
         )}

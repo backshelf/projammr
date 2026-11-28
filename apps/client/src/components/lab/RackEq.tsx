@@ -8,11 +8,15 @@ import {
 import { RackBand } from "@/components/lab/RackBand";
 import { RackModule } from "@/components/lab/RackModule";
 import { LiveSpectrumScale } from "@/components/spectrum/LiveSpectrumScale";
-import { SPECTRUM_WINDOW_FALLBACK } from "@workspace/dsp/spectrum";
+import type { SpectrumCurve } from "@/components/spectrum/SpectrumScale";
+import { spectrumWindow, type Spectrum } from "@workspace/dsp/spectrum";
 import {
+  useCurrentTrack,
   useLabSettings,
   usePlayerActions,
 } from "@/components/music-player/player-hooks";
+import { trackLabel } from "@/components/music-player/types";
+import { useTrackAudioMeasure } from "@/components/track-audio/measures";
 import { IconChevronRight, IconPlus } from "@tabler/icons-react";
 import { HeightReveal } from "@workspace/ui/components/height-reveal";
 import { LABEL } from "@workspace/ui/lib/shell";
@@ -26,6 +30,23 @@ import { useState } from "react";
  * "Bands", listing only the slots in use, with a way to bring another in.
  */
 export function RackEq() {
+  const current = useCurrentTrack();
+  const stored = useTrackAudioMeasure<Spectrum>(
+    current?.trackAudio?.id ?? null,
+    "spectrum"
+  );
+  const curves: SpectrumCurve[] =
+    stored && current
+      ? [
+          {
+            ...stored,
+            label: current.trackAudio
+              ? `v${current.trackAudio.version}`
+              : trackLabel(current),
+            emphasis: "selected",
+          },
+        ]
+      : [];
   const { rack } = useLabSettings();
   const { setEqOn, setEqBand } = usePlayerActions();
   const { on, bands } = rack.eq;
@@ -40,9 +61,13 @@ export function RackEq() {
         <LiveSpectrumScale
           owner="any"
           size={EQ_DRAWING_SIZE}
-          curves={[]}
-          window={SPECTRUM_WINDOW_FALLBACK}
-          label="Live spectrum with the EQ's response"
+          curves={curves}
+          window={spectrumWindow(curves.map((curve) => curve.db))}
+          label={
+            stored
+              ? "Live spectrum with stored average and EQ response"
+              : "Live spectrum with the EQ's response"
+          }
         />
         <EqCurveOverlay
           bands={bands}

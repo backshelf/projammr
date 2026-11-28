@@ -23,7 +23,9 @@ export const versionCommentsLabel = (
 ) => {
   if (count === 0) return `Comments on v${version}`;
   if (isAllResolved(count, resolvedCount))
-    return `All ${count} resolved on v${version}`;
+    return count === 1
+      ? `1 resolved on v${version}`
+      : `All ${count} resolved on v${version}`;
   const total = `${pluralizeCount(count, "comment")} on v${version}`;
   return resolvedCount > 0 ? `${total} · ${resolvedCount} resolved` : total;
 };

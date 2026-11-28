@@ -115,6 +115,7 @@ const FILTER_VALUE_PARSERS: {
   priority: (raw) => (ID_LIST.test(raw) ? raw : undefined),
   explicit: (raw) => (raw === "true" || raw === "false" ? raw : undefined),
   inDit: (raw) => (raw === "true" || raw === "false" ? raw : undefined),
+  unassigned: (raw) => (raw === "true" || raw === "false" ? raw : undefined),
 };
 
 /**

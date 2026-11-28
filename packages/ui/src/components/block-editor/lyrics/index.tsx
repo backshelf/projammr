@@ -5,7 +5,7 @@ import { use } from "react";
 import { EditorFrame } from "../frame";
 import { sectionInputRule } from "../section-block";
 import { useBlockDocument } from "../use-document";
-import type { VariantProps } from "../variants";
+import { editorDomAttributes, type VariantProps } from "../variants";
 import { lyricsAnalysis } from "./analysis";
 import { LyricsContext } from "./context";
 import { splitSoftBreaks } from "./normalise";
@@ -25,9 +25,11 @@ export default function LyricsEditor({
   onChange,
   editable,
   placeholder,
+  ariaLabel,
   theme,
 }: VariantProps) {
-  const dictionary = use(LyricsContext)?.dictionary ?? null;
+  const lyrics = use(LyricsContext);
+  const dictionary = lyrics?.dictionary ?? null;
   const { initialContent, onDocumentChange } = useBlockDocument(
     value,
     onChange,
@@ -37,6 +39,7 @@ export default function LyricsEditor({
   const editor = useCreateBlockNote({
     schema: lyricsSchema,
     initialContent,
+    domAttributes: editorDomAttributes(ariaLabel),
     extensions: [sectionInputRule, lyricsAnalysis(dictionary)],
     // One string under both keys: BlockNote prints `default` on whichever
     // empty line has the caret and `emptyDocument` on a lone empty block, and
@@ -55,6 +58,7 @@ export default function LyricsEditor({
       editable={editable}
       theme={theme}
       slashMenu={false}
+      lyricsPrefixes={lyrics?.prefixes ?? null}
     >
       <LyricsSuggestionMenus editor={editor} />
     </EditorFrame>

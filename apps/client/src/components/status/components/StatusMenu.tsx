@@ -1,15 +1,15 @@
 "use client";
 
 import { StatusDisplayType } from "@/components/status/StatusDisplay";
-import {
-  DropdownMenuGroup,
-  DropdownMenuItem,
-} from "@workspace/ui/components/dropdown-menu";
 import { FloatingNote } from "@workspace/ui/components/floating-note";
+import {
+  ResponsivePickerItem,
+  ResponsivePickerList,
+} from "@workspace/ui/components/responsive-picker";
 import { Meter } from "@workspace/ui/components/table";
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
 import { AnimatePresence } from "@workspace/ui/lib/motion";
 import { cn } from "@workspace/ui/lib/utils";
-import { cva } from "class-variance-authority";
 import { CSSProperties, useMemo, useState } from "react";
 
 /**
@@ -21,36 +21,23 @@ import { CSSProperties, useMemo, useState } from "react";
  *
  * The host sets --status per row, the same variable the pill and chip read.
  */
-const statusMenu = "flex flex-col overflow-hidden rounded-[inherit]";
+const statusMenu = "flex flex-col divide-y-0 overflow-hidden rounded-[inherit]";
 
 /** The colour rail runs the full height of the row, flush to the leading edge,
  *  and is the only place the status colour appears at full strength. It widens
  *  on hover, and stays widened on the row the entity is already in. */
-const statusMenuItem = cva(
-  cn(
-    "relative w-full cursor-pointer items-center gap-3 px-3 py-2 pl-4 text-left text-body/[1.2] text-ink motion-settle",
-    "[&+&]:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--ink)_8%,transparent)]",
-    "hover:bg-[color-mix(in_oklab,var(--status,var(--ink))_12%,transparent)]",
-    "focus-visible:bg-[color-mix(in_oklab,var(--status,var(--ink))_12%,transparent)] focus-visible:outline-none",
-    "data-highlighted:bg-[color-mix(in_oklab,var(--status,var(--ink))_12%,transparent)]",
-    "before:absolute before:inset-y-0 before:start-0 before:w-[0.1875rem] before:bg-[var(--status,var(--ink-soft))]",
-    "before:motion-settle",
-    "hover:before:w-[0.3125rem] focus-visible:before:w-[0.3125rem] data-highlighted:before:w-[0.3125rem]",
-    "data-[current=true]:before:w-[0.3125rem]"
-  ),
-  {
-    variants: {
-      /* In a Select the item primitive wraps its children in a text span and
-         hangs a tick off the trailing edge, so the row hands the grid to that
-         span and leaves room for the tick rather than running the percentage
-         underneath it. */
-      tickable: {
-        true: "block pr-7 [&>span:last-of-type]:grid [&>span:last-of-type]:w-full [&>span:last-of-type]:grid-cols-[1fr_auto] [&>span:last-of-type]:items-center [&>span:last-of-type]:gap-3",
-        false: "grid grid-cols-[1fr_auto]",
-      },
-    },
-    defaultVariants: { tickable: false },
-  }
+const statusMenuItem = cn(
+  "relative w-full cursor-pointer items-center gap-3 px-3 py-2 pl-4 text-left text-body/[1.2] text-ink motion-settle",
+  "[&+&]:shadow-[inset_0_1px_0_color-mix(in_oklab,var(--ink)_8%,transparent)]",
+  "hover:bg-[color-mix(in_oklab,var(--status,var(--ink))_12%,transparent)]",
+  "focus-visible:bg-[color-mix(in_oklab,var(--status,var(--ink))_12%,transparent)] focus-visible:outline-hidden",
+  "data-highlighted:bg-[color-mix(in_oklab,var(--status,var(--ink))_12%,transparent)]",
+  "before:absolute before:inset-y-0 before:start-0 before:w-[0.1875rem] before:bg-[var(--status,var(--ink-soft))]",
+  "before:motion-settle",
+  "hover:before:w-[0.3125rem] focus-visible:before:w-[0.3125rem] data-highlighted:before:w-[0.3125rem]",
+  "data-[current=true]:before:w-[0.3125rem]",
+  "[&>span:first-of-type>span:first-child]:flex [&>span:first-of-type>span:first-child]:items-center [&>span:first-of-type>span:first-child]:justify-between [&>span:first-of-type>span:first-child]:gap-3",
+  "[&>span:first-of-type>span:nth-child(2)]:whitespace-normal"
 );
 
 /**
@@ -180,6 +167,7 @@ export const StatusMenuList = ({
   currentId?: number | null;
   onPick?: (status: StatusDisplayType) => void;
 }) => {
+  const isMobile = useIsMobile();
   const { hovered, anchor, menuProps, rowHandlers } = useHoveredStatus();
   const ordered = useMemo(
     () => [...statuses].sort(byPipelinePosition),
@@ -188,22 +176,27 @@ export const StatusMenuList = ({
 
   return (
     <>
-      <DropdownMenuGroup className={statusMenu} {...menuProps}>
-        {ordered.map((status) => (
-          <DropdownMenuItem
-            key={status.id}
-            className={statusMenuItem()}
-            style={statusVars(status)}
-            data-current={status.id === currentId}
-            title={status.description || undefined}
-            onClick={onPick && (() => onPick(status))}
-            {...rowHandlers(status)}
-          >
-            <StatusMenuRow status={status} />
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuGroup>
-      <StatusNote status={hovered} anchor={anchor} />
+      <ResponsivePickerList className={statusMenu} {...menuProps}>
+        {ordered.map((status) => {
+          const desc = status.description?.trim();
+          return (
+            <ResponsivePickerItem
+              key={status.id}
+              selected={status.id === currentId}
+              className={statusMenuItem}
+              style={statusVars(status)}
+              data-current={status.id === currentId}
+              title={desc || undefined}
+              description={isMobile && desc ? desc : undefined}
+              onSelect={onPick ? () => onPick(status) : undefined}
+              {...rowHandlers(status)}
+            >
+              <StatusMenuRow status={status} />
+            </ResponsivePickerItem>
+          );
+        })}
+      </ResponsivePickerList>
+      {!isMobile && <StatusNote status={hovered} anchor={anchor} />}
     </>
   );
 };

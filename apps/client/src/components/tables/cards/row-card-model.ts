@@ -34,6 +34,8 @@ export type RowCardPlay = {
  */
 export type RowCardModel = {
   id: number;
+  /** Position in the collection being viewed, when collection-scoped. */
+  trackNumber?: number | null;
   /** The row's full page: tapping the card goes here. */
   href: string;
   title: string;

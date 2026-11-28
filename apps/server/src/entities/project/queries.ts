@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -12,7 +12,11 @@ import { invalidateMembershipCache } from "../../db/queries/authorization.js";
 import { seedPriorityLevels } from "../../db/queries/priority-levels.js";
 import { seedRelationTypes } from "../../db/queries/track-relation-types.js";
 import { projectPolicy } from "../../db/queries/project-policy.js";
-import { getProjectSaves, projectSaveSchema } from "../../db/queries/saves.js";
+import {
+  getProjectSaves,
+  projectSaveSchema,
+  sessionSaveStats,
+} from "../../db/queries/saves.js";
 import { releasingProjectUsage } from "../../db/queries/storage-usage.js";
 import {
   getRecentTrackAudios,
@@ -34,6 +38,8 @@ import {
   projects,
   projectSchema,
 } from "../../db/schema/projects.js";
+import { saves } from "../../db/schema/saves.js";
+import { sessions, sessionSchema } from "../../db/schema/sessions.js";
 import { tracks } from "../../db/schema/tracks.js";
 import { getQuietTracks, quietTrackSchema } from "../track/queries.js";
 
@@ -64,18 +70,93 @@ export async function getProject(projectId: number): Promise<ProjectDetail> {
 export const TODAY_RENDER_LIMIT = 12;
 export const TODAY_SAVE_LIMIT = 12;
 export const QUIET_LIMIT = 8;
+const UNASSIGNED_SET_LIMIT = 5;
+
+const unassignedSetSchema = sessionSchema
+  .pick({
+    id: true,
+    name: true,
+    daw: true,
+    dawName: true,
+    dawVersion: true,
+    tempo: true,
+    rootNote: true,
+    scale: true,
+    tracksCount: true,
+    scenesCount: true,
+    localFilepath: true,
+    localFileUpdatedAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    inDit: z.boolean(),
+    saveCount: z.number(),
+    lastSaveAt: z.date().nullable(),
+  });
 
 export const projectTodaySchema = z.object({
   renders: z.array(trackAudioWithOwnerSchema),
   saves: z.array(projectSaveSchema),
   counts: z.object({ renders: z.number(), saves: z.number() }),
   quiet: z.object({ tracks: z.array(quietTrackSchema), total: z.number() }),
+  unassignedSets: z.object({
+    sessions: z.array(unassignedSetSchema),
+    total: z.number(),
+  }),
 });
+
+async function getUnassignedSets(projectId: number) {
+  const where = and(
+    eq(sessions.projectId, projectId),
+    isNull(sessions.trackId),
+    isNull(sessions.inboxDismissedAt)
+  );
+  const newestSavedAt = sql`coalesce(
+    (select max(${saves.fileUpdatedAt}) from ${saves} where ${saves.sessionId} = ${sessions.id}),
+    ${sessions.localFileUpdatedAt},
+    ${sessions.updatedAt}
+  )`;
+  const [rows, [totalRow]] = await Promise.all([
+    db
+      .select({
+        id: sessions.id,
+        name: sessions.name,
+        daw: sessions.daw,
+        dawName: sessions.dawName,
+        dawVersion: sessions.dawVersion,
+        tempo: sessions.tempo,
+        rootNote: sessions.rootNote,
+        scale: sessions.scale,
+        tracksCount: sessions.tracksCount,
+        scenesCount: sessions.scenesCount,
+        localFilepath: sessions.localFilepath,
+        localFileUpdatedAt: sessions.localFileUpdatedAt,
+        updatedAt: sessions.updatedAt,
+        repoId: sessions.repoId,
+      })
+      .from(sessions)
+      .where(where)
+      .orderBy(desc(newestSavedAt), desc(sessions.id))
+      .limit(UNASSIGNED_SET_LIMIT),
+    db.select({ total: count() }).from(sessions).where(where),
+  ]);
+  const stats = await sessionSaveStats(rows.map((r) => r.id));
+  return {
+    sessions: rows.map(({ repoId, ...row }) => ({
+      ...row,
+      inDit: repoId != null,
+      saveCount: stats.get(row.id)?.saveCount ?? 0,
+      lastSaveAt: stats.get(row.id)?.lastSaveAt ?? null,
+    })),
+    total: totalRow?.total ?? 0,
+  };
+}
 
 /**
  * What a project's home page reads in one go: the renders linked and the
- * saves made within the project's "today" window, and the tracks nobody has
- * touched for its quiet threshold. A threshold of 0 counts nothing quiet.
+ * saves made within the project's "today" window, the tracks nobody has
+ * touched for its quiet threshold, and unassigned DAW sets awaiting triage.
+ * A threshold of 0 counts nothing quiet.
  */
 export async function getProjectToday(
   projectId: number
@@ -84,7 +165,7 @@ export async function getProjectToday(
   const now = Date.now();
   const since = new Date(now - conventions.todayNewHours * HOUR_MS);
 
-  const [recent, revised, quiet] = await Promise.all([
+  const [recent, revised, quiet, unassignedSets] = await Promise.all([
     getRecentTrackAudios(projectId, since, TODAY_RENDER_LIMIT),
     getProjectSaves(projectId, {
       since,
@@ -98,6 +179,7 @@ export async function getProjectToday(
           limit: QUIET_LIMIT,
         })
       : { tracks: [], total: 0 },
+    getUnassignedSets(projectId),
   ]);
 
   return {
@@ -105,6 +187,7 @@ export async function getProjectToday(
     saves: revised.saves,
     counts: { renders: recent.total, saves: revised.total },
     quiet,
+    unassignedSets,
   };
 }
 

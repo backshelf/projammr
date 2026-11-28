@@ -104,6 +104,7 @@ export type EntityTableParts<Row extends RowData, Child = never> = Pick<
   | "navigableColumns"
   | "newRow"
   | "filterColumns"
+  | "filterPresets"
   | "groupByOptions"
   | "getRowGroupKey"
   | "subRows"
@@ -112,6 +113,7 @@ export type EntityTableParts<Row extends RowData, Child = never> = Pick<
   | "rowAccent"
   | "bulkCollections"
   | "onBulkAddToCollection"
+  | "reorder"
   | "actions"
 > & { mutationOptions?: Parameters<typeof useEntityMutations>[2] };
 

@@ -194,7 +194,7 @@ export const collectionTable = {
     );
 
     const initiallyHiddenColumns = useMemo(
-      () => ["createdAt", ...customFieldKeys(customFields)],
+      () => ["id", "createdAt", ...customFieldKeys(customFields)],
       [customFields]
     );
 
@@ -308,7 +308,9 @@ export const collectionTable = {
               {track.title}
             </TitleCell>
           ),
-          priority: (track) => <PriorityBadge level={track.priority} />,
+          priority: (track) => (
+            <PriorityBadge level={track.priority} hideDefault />
+          ),
         },
       }),
       [trackTitleConfig, hoverPlay]

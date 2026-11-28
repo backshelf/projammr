@@ -15,7 +15,11 @@ import { advanceTimersByTimeAsync } from "@workspace/test/timers";
 // The module is the hooks' home as well as the cache's; the hooks' provider
 // has no place in a test that only drives the cache.
 mock.module("@/components/jobs/JobsProvider", () => ({
+  JobsProvider: ({ children }: { children: unknown }) => children,
   useJobsFinish: () => {},
+  useJobsDrain: () => {},
+  useJob: () => undefined,
+  useJobsLoaded: () => true,
 }));
 
 const getMeasure = mock();

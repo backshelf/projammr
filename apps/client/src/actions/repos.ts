@@ -33,16 +33,6 @@ export async function getTrackRepos(
   return toActionResult(res, "Failed to read the track's repositories");
 }
 
-export async function getCollectionRepos(
-  collectionId: number
-): Promise<Repo[] | ActionError> {
-  const res = await serverApi.GET("/api/collections/{id}/repos", {
-    params: { path: { id: String(collectionId) } },
-  });
-
-  return toActionResult(res, "Failed to read the collection's repositories");
-}
-
 export async function setRepoPushSamples(
   repoId: number,
   pushSamples: boolean

@@ -154,11 +154,10 @@ describe("factsOf", () => {
 });
 
 describe("reasonsOf", () => {
-  test("lists the three kinds in the spec's order and words", () => {
-    expect(reasonsOf(card(), format)).toEqual([
+  test("lists the non-timing kinds in order without repeating save distance", () => {
+    expect(reasonsOf(card())).toEqual([
       "named like the set",
       "in its folder",
-      "4 min after your last save",
     ]);
   });
 
@@ -167,22 +166,20 @@ describe("reasonsOf", () => {
       reasonsOf(
         card({
           reasonKinds: { named: false, inFolder: true, nearSave: false },
-        }),
-        format
+        })
       )
     ).toEqual(["in its folder"]);
   });
 
-  test("is nothing when none held, or when the distance is not known", () => {
+  test("is nothing when only timing or none held", () => {
     const none = { named: false, inFolder: false, nearSave: false };
-    expect(reasonsOf(card({ reasonKinds: none }), format)).toEqual([]);
+    expect(reasonsOf(card({ reasonKinds: none }))).toEqual([]);
     expect(
       reasonsOf(
         card({
           bouncedAfterMs: null,
           reasonKinds: { named: false, inFolder: false, nearSave: true },
-        }),
-        format
+        })
       )
     ).toEqual([]);
   });

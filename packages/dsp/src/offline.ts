@@ -17,7 +17,7 @@ export const ANALYSIS_TEMPO = 1 << 5;
 export const ANALYSIS_KEY = 1 << 6;
 /** Sections with repeat groups. */
 export const ANALYSIS_SECTIONS = 1 << 7;
-/** The 128-band spectrogram tile, one column per 100 ms. */
+/** The 160-band log-spaced spectrogram tile, one column per 50 ms. */
 export const ANALYSIS_SPECTROGRAM = 1 << 8;
 /** Short-term loudness and L/R correlation per second. */
 export const ANALYSIS_CURVES = 1 << 9;
@@ -43,9 +43,14 @@ export const ANALYSIS_OFFLINE =
 export const ONSET_RATE_HZ = 100;
 export const MEL_BANDS = 40;
 export const CHROMA_BINS = 12;
-export const SPECTROGRAM_BANDS = 128;
+export const SPECTROGRAM_BANDS = 160;
 /** Milliseconds per spectrogram column. */
-export const SPECTROGRAM_COLUMN_MS = 100;
+export const SPECTROGRAM_COLUMN_MS = 50;
+export const SPECTROGRAM_LOW_HZ = 20;
+export const SPECTROGRAM_HIGH_HZ = 20_000;
+export const SPECTROGRAM_FLOOR_DB = -80;
+export const SPECTROGRAM_CEIL_DB = 0;
+export const SPECTROGRAM_TILT_DB_PER_OCTAVE = 4;
 
 const PITCH_CLASSES = [
   "C",
@@ -91,7 +96,7 @@ export type Section = {
 
 export type Spectrogram = {
   columns: number;
-  /** Column-major: `SPECTROGRAM_BANDS` bytes per column, lowest band first, 0 = −90 dBFS, 255 = 0 dBFS. */
+  /** Column-major: `SPECTROGRAM_BANDS` bytes per column, lowest band first, 0 = −80 dBFS, 255 = 0 dBFS. */
   bytes: Uint8Array;
 };
 

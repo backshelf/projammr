@@ -1,10 +1,6 @@
 "use client";
 
 import {
-  BlockEditor,
-  type BlockEditorProps,
-} from "@workspace/ui/components/block-editor";
-import {
   Field,
   FieldDescription,
   FieldError,
@@ -22,23 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
-import { useHydrated } from "@workspace/ui/hooks/use-hydrated";
 import { cn } from "@workspace/ui/lib/utils";
 import React from "react";
 import { Control, Controller, FieldValues, Path } from "react-hook-form";
 
-// The editor is browser-only, so the first client render has to match the
-// server's empty placeholder before its variant chunk is allowed in.
-function ClientBlockEditor(props: BlockEditorProps) {
-  const hydrated = useHydrated();
-  if (!hydrated) {
-    return <div className="min-h-6" />;
-  }
-
-  return <BlockEditor {...props} />;
-}
-
-export type FormControllerType = "title" | "input" | "select" | "blocknote";
+export type FormControllerType = "title" | "input" | "select";
 
 export interface FormControllerProps<T extends FieldValues> {
   name: Path<T>;
@@ -50,7 +34,6 @@ export interface FormControllerProps<T extends FieldValues> {
   placeholder?: string;
   inputType?: React.ComponentProps<typeof Input>["type"];
   options?: string[];
-  blocknotePlaceholder?: string;
   className?: string;
   readOnly?: boolean;
   /** A control rendered inside the input's trailing edge (a remove button). */
@@ -67,7 +50,6 @@ export function FormController<T extends FieldValues>({
   placeholder,
   inputType,
   options,
-  blocknotePlaceholder,
   className,
   readOnly,
   trailing,
@@ -81,22 +63,6 @@ export function FormController<T extends FieldValues>({
       render={({ field, fieldState }) => {
         let input: React.ReactNode;
         switch (type) {
-          case "blocknote":
-            input = (
-              <div
-                className={cn(
-                  "doc rounded-md border border-input bg-input/20 px-3 py-2 motion-ink focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 aria-invalid:border-destructive dark:bg-input/30 [&_.bn-editor]:px-0",
-                  className
-                )}
-              >
-                <ClientBlockEditor
-                  value={field.value || ""}
-                  onChange={(json: string) => field.onChange(json)}
-                  placeholder={blocknotePlaceholder || placeholder}
-                />
-              </div>
-            );
-            break;
           case "title":
             input = (
               <input
@@ -106,7 +72,7 @@ export function FormController<T extends FieldValues>({
                 type="text"
                 placeholder={placeholder}
                 className={cn(
-                  "w-full rounded-none border-0 border-b border-input bg-transparent px-0 py-1.5 font-heading text-3xl motion-ink placeholder:font-sans placeholder:text-base placeholder:font-normal placeholder:text-muted-foreground focus:ring-0 focus-visible:border-ring focus-visible:ring-0 focus-visible:ring-offset-0 aria-invalid:border-destructive",
+                  "w-full rounded-none border-0 border-b border-input bg-transparent px-0 py-1.5 font-heading text-title/[1.05] text-ink motion-ink placeholder:font-mono placeholder:text-lead placeholder:font-normal placeholder:text-ink-faint focus-visible:border-ring focus-visible:outline-hidden aria-invalid:border-destructive",
                   className
                 )}
               />

@@ -52,9 +52,19 @@ const { CommentBackendProvider } =
 const { CommandRegistry } = await import("@/components/commands/provider");
 const { AudioCommentPanel } = await import("./AudioCommentPanel");
 
+const originalWidth = window.innerWidth;
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+}
+
 afterEach(() => {
   cleanup();
   hasSelected = true;
+  setViewportWidth(originalWidth);
 });
 
 const backend = {
@@ -98,6 +108,7 @@ const composer = () => screen.queryByPlaceholderText("Write a comment…");
 
 describe("the open popover", () => {
   it("is a dialog named for the version it holds comments on", async () => {
+    setViewportWidth(1024);
     renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /comment/i }));
@@ -105,6 +116,22 @@ describe("the open popover", () => {
     expect(
       await screen.findByRole("dialog", { name: "Comments on v1" })
     ).toBeTruthy();
+  });
+
+  it("opens as a 55dvh bottom sheet on mobile while preserving pill copy", async () => {
+    setViewportWidth(390);
+    renderPage();
+
+    const trigger = screen.getByRole("button", { name: "Comments on v1" });
+    expect(trigger.textContent).toBe("Comments");
+
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Comments on v1",
+    });
+    expect(dialog.getAttribute("data-side")).toBe("bottom");
+    expect(dialog.className).toContain("max-h-[55dvh]");
   });
 });
 

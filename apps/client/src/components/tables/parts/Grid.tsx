@@ -100,7 +100,7 @@ function GridTable<TData extends RowData, TChild = never>(): ReactNode {
         role="grid"
         aria-rowcount={bodyRowCount + 1}
         className={cn("table-fixed", !hydrated && "phone:invisible")}
-        style={{ width: table.getTotalSize() }}
+        style={{ minWidth: table.getTotalSize() }}
       >
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -115,13 +115,21 @@ function GridTable<TData extends RowData, TChild = never>(): ReactNode {
                       : IconArrowsUpDown;
                 const hideSortIndicator =
                   header.column.columnDef.meta?.hideSortIndicator ?? false;
+                const flexFill =
+                  (header.column.id === "title" ||
+                    header.column.id === "name") &&
+                  table.state.columnSizing[header.column.id] == null;
 
                 return (
                   <TableHead
                     key={header.id}
                     role="columnheader"
                     colSpan={header.colSpan}
-                    style={{ width: header.getSize() }}
+                    style={
+                      flexFill
+                        ? { minWidth: header.getSize() }
+                        : { width: header.getSize() }
+                    }
                     className={cn(
                       "relative",
                       isLeadingColumnId(header.column.id) &&

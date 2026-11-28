@@ -33,6 +33,8 @@ export function CollapsibleGroup({
   hrefNew,
   newLabel,
   hrefAll,
+  separator = false,
+  hint,
   collapsed,
   onCollapsedChange,
   children,
@@ -43,6 +45,8 @@ export function CollapsibleGroup({
    *  ("New track"), since `label` names the group ("Tracks") instead. */
   newLabel?: string;
   hrefAll?: string;
+  separator?: boolean;
+  hint?: string;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   children: ReactNode;
@@ -50,26 +54,43 @@ export function CollapsibleGroup({
   const open = !collapsed;
 
   return (
-    <SidebarGroup>
+    <SidebarGroup className={cn(separator && "mt-1 border-t border-rule pt-2")}>
       <Collapsible
         open={open}
         onOpenChange={(next) => onCollapsedChange(!next)}
       >
-        <div className="flex items-center gap-1">
+        <div className="relative flex items-center gap-1">
           <CollapsibleTrigger
-            className="flex items-center"
+            className="flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-faint hover:text-ink focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
             aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
           >
             <CollapsibleChevron />
           </CollapsibleTrigger>
-          <SidebarGroupLabel asChild>
-            <AppLink
-              href={hrefAll || "#"}
-              className={cn(SIDEBAR_EYEBROW, "text-ink-soft hover:text-ink")}
-            >
+          {hrefAll ? (
+            <SidebarGroupLabel asChild>
+              <AppLink
+                href={hrefAll}
+                className={cn(SIDEBAR_EYEBROW, "text-ink-soft hover:text-ink")}
+              >
+                {label}
+              </AppLink>
+            </SidebarGroupLabel>
+          ) : (
+            <SidebarGroupLabel className={cn(SIDEBAR_EYEBROW, "text-ink-soft")}>
               {label}
-            </AppLink>
-          </SidebarGroupLabel>
+            </SidebarGroupLabel>
+          )}
+          {hint && (
+            <span
+              className={cn(
+                SIDEBAR_EYEBROW,
+                "ml-auto text-ink-faint",
+                hrefNew && "mr-6"
+              )}
+            >
+              {hint}
+            </span>
+          )}
           {hrefNew && newLabel && (
             // A div, not the primitive's default button: the link inside is
             // the control, and a button around a link nests two.

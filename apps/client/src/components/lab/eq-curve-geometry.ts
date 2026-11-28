@@ -140,6 +140,29 @@ export function stepHz(
 export const Q_MIN = eq1Q.min;
 export const Q_MAX = eq1Q.max;
 
+/** Reference gain gridlines drawn behind the EQ curve, in dB. */
+export const EQ_GRID_LEVELS = [-12, -6, 0, 6, 12] as const;
+
+const WHEEL_Q_SENSITIVITY = 0.0025;
+const WHEEL_Q_FINE_SENSITIVITY = 0.0006;
+
+/**
+ * Steps Q from a mouse-wheel `deltaY`: scrolling up (`deltaY < 0`) narrows
+ * the filter (raises Q), scrolling down widens it. Rounded to two decimals
+ * and clamped to `[Q_MIN, Q_MAX]`.
+ */
+export function stepQFromWheel(
+  q: number,
+  deltaY: number,
+  fine: boolean
+): number {
+  if (!Number.isFinite(deltaY) || deltaY === 0) return q;
+  const scale = fine ? WHEEL_Q_FINE_SENSITIVITY : WHEEL_Q_SENSITIVITY;
+  const next = q * Math.exp(-deltaY * scale);
+  const clamped = Math.min(Q_MAX, Math.max(Q_MIN, next));
+  return Math.round(clamped * 100) / 100;
+}
+
 /**
  * A shift-drag's vertical movement as a Q change: up narrows the response
  * (raises Q), down widens it, exponentially so the same pixel travel feels

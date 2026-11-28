@@ -6,6 +6,7 @@ import {
   SessionPicker,
   TrackPickerForSession,
 } from "@/components/product-linking/pickers";
+import { useProjectRole } from "@/hooks/use-project-role";
 import {
   Dialog,
   DialogContent,
@@ -55,6 +56,9 @@ type Props = {
  */
 export function LinkToDialog(props: Props) {
   const { targetId, children } = props;
+  const canEdit = useProjectRole()?.can?.("editor") ?? true;
+
+  if (!canEdit) return null;
 
   return (
     <Dialog>

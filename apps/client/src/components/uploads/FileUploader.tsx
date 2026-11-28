@@ -6,7 +6,7 @@ import {
   TILE_KIND,
   TILE_NAME,
 } from "@/components/attachments/AppAttachment";
-import { useProject } from "@/hooks/use-project-role";
+import { useProject, useProjectRole } from "@/hooks/use-project-role";
 import { storageLimitFailure, storageLimitMessage } from "@/lib/storage-limit";
 import { attachmentStateFor } from "@/components/uploads/attachment-state";
 import { AttachTo, dropPromptFor } from "@/components/uploads/drop-prompt";
@@ -78,6 +78,7 @@ export function FileUploader({
 }) {
   const format = useFormat();
   const { id: projectId } = useProject();
+  const canEdit = useProjectRole()?.can?.("editor") ?? true;
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const maxBytes = useUploadLimit();
   const router = useRouter();
@@ -91,6 +92,8 @@ export function FileUploader({
     (id: number) => setUploads((prev) => prev.filter((u) => u.id !== id)),
     []
   );
+
+  if (!canEdit) return null;
 
   const uploadFile = async (file: File) => {
     const id = nextUploadId++;

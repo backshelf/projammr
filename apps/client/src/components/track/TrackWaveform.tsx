@@ -11,6 +11,10 @@ import {
 } from "@/components/music-player/player-hooks";
 import { progressReadout } from "@/components/music-player/scrub-math";
 import { MusicPlayerTrack } from "@/components/music-player/types";
+import {
+  useTimelineScrub,
+  type TimelineHover,
+} from "@/components/track-audio/use-timeline-scrub";
 import { seekStep } from "@/lib/policies/playback";
 import { usePlaybackPolicy, useVisualsPolicy } from "@/lib/policies/provider";
 import { useFormat } from "@workspace/ui/components/format-provider";
@@ -23,6 +27,8 @@ import {
   type CommentMark,
   type WaveSize,
 } from "@workspace/ui/components/waveform";
+import { formatSeconds } from "@workspace/ui/lib/format";
+import { cn } from "@workspace/ui/lib/utils";
 import { barCountFor, toBars } from "@workspace/ui/lib/waveform-bars";
 import {
   useEffect,
@@ -41,6 +47,36 @@ type WaveSeries = {
   comparePeaks: number[];
   scale: number | undefined;
 };
+
+function hoverPillAlignClass(ratio: number): string {
+  if (ratio < 0.15) return "translate-x-0";
+  if (ratio > 0.85) return "-translate-x-full";
+  return "-translate-x-1/2";
+}
+
+function WaveHoverGhost({ hover }: { hover: TimelineHover | null }) {
+  if (!hover) return null;
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-x-2 inset-y-0 hidden fine:block"
+    >
+      <span
+        className="absolute inset-y-0 w-px bg-ink-faint/60"
+        style={{ left: `${hover.ratio * 100}%` }}
+      />
+      <span
+        className={cn(
+          "absolute top-1 z-10 rounded-sm border border-rule bg-paper/95 px-1.5 py-0.5 text-micro/none whitespace-nowrap text-ink tabular-nums shadow-menu",
+          hoverPillAlignClass(hover.ratio)
+        )}
+        style={{ left: `${hover.ratio * 100}%` }}
+      >
+        {formatSeconds(hover.seconds)}
+      </span>
+    </div>
+  );
+}
 
 /** Resamples the peaks to however many bars the wave's own width can hold,
  *  observed via ResizeObserver, so a narrow phone wave draws fewer,
@@ -78,12 +114,14 @@ function useWaveBars<T extends HTMLElement>({
 function ActiveWave({
   series,
   size,
+  durationSeconds,
   commentMarks,
   onMarkerClick,
   showClock,
 }: {
   series: WaveSeries;
   size: WaveSize;
+  durationSeconds: number;
   commentMarks: CommentMark[];
   onMarkerClick?: (ids: number[]) => void;
   showClock: boolean;
@@ -102,7 +140,7 @@ function ActiveWave({
   const trailRef = useRef<HTMLSpanElement>(null);
   const { playerTime } = useFormat();
 
-  const effectiveDuration = duration || series.peaks.length;
+  const effectiveDuration = duration || durationSeconds || series.peaks.length;
 
   useProgressFrames((seconds) => {
     const readout = progressReadout(seconds, effectiveDuration, playerTime);
@@ -116,10 +154,10 @@ function ActiveWave({
     writeText(trailRef.current, readout.trail);
   });
 
-  const seekFromClick = (clientX: number, rect: DOMRect) => {
-    if (!effectiveDuration) return;
-    seek(((clientX - rect.left) / rect.width) * effectiveDuration);
-  };
+  const { hover, surfaceProps } = useTimelineScrub({
+    durationSeconds: effectiveDuration,
+    onSeek: seek,
+  });
 
   const seekBy = (seconds: number) =>
     seek(Math.max(0, Math.min(effectiveDuration, getProgress() + seconds)));
@@ -149,7 +187,7 @@ function ActiveWave({
         <WaveStack compareBars={compareBars} size={size}>
           <div
             ref={waveRef}
-            className={waveSurface(size)}
+            className={cn(waveSurface(size), "touch-pan-y select-none")}
             role={"slider"}
             tabIndex={0}
             aria-label={"Seek"}
@@ -157,13 +195,12 @@ function ActiveWave({
             aria-valuemax={Math.round(effectiveDuration)}
             // aria-valuenow, aria-valuetext and --played are written by the
             // progress draw above.
-            onClick={(e) =>
-              seekFromClick(e.clientX, e.currentTarget.getBoundingClientRect())
-            }
+            {...surfaceProps}
             onKeyDown={handleSeekKeys}
           >
             <WaveBars bars={bars} />
           </div>
+          <WaveHoverGhost hover={hover} />
         </WaveStack>
       </div>
       {showClock && duration > 0 && (
@@ -183,36 +220,60 @@ function ActiveWave({
 function IdleWave({
   series,
   size,
+  durationSeconds,
+  commentMarks,
+  onMarkerClick,
   playerTrack,
   onPlay,
 }: {
   series: WaveSeries;
   size: WaveSize;
+  durationSeconds: number;
+  commentMarks: CommentMark[];
+  onMarkerClick?: (ids: number[]) => void;
   playerTrack: MusicPlayerTrack;
   onPlay?: () => void;
 }) {
-  const { playNow } = usePlayerActions();
+  const { playAt } = usePlayerActions();
   const {
     ref: waveRef,
     bars,
     compareBars,
   } = useWaveBars<HTMLButtonElement>(series);
 
+  const effectiveDuration = durationSeconds || series.peaks.length;
+  const { hover, surfaceProps } = useTimelineScrub({
+    durationSeconds: effectiveDuration,
+    onSeek: (seconds) => {
+      if (onPlay) {
+        onPlay();
+      } else {
+        playAt(playerTrack, seconds);
+      }
+    },
+  });
+
   return (
     <div className={"relative min-w-0 flex-1"}>
+      <WaveMarks
+        marks={commentMarks}
+        duration={effectiveDuration}
+        onMarkerClick={onMarkerClick}
+      />
       <WaveStack compareBars={compareBars} size={size}>
         <button
           ref={waveRef}
           type={"button"}
-          className={waveSurface(size)}
+          className={cn(waveSurface(size), "touch-pan-y select-none")}
           // A dedicated "Play {title}" control sits beside this wave wherever
           // both are mounted (TrackAudioSection), so this one names itself as
           // the wave while still saying what pressing it does.
           aria-label={`Play ${playerTrack.title} from the waveform`}
-          onClick={() => (onPlay ? onPlay() : playNow([playerTrack]))}
+          {...surfaceProps}
         >
           <WaveBars bars={bars} />
         </button>
+        <WaveHoverGhost hover={hover} />
       </WaveStack>
     </div>
   );
@@ -220,8 +281,9 @@ function IdleWave({
 
 /**
  * The player's wave for one track audio: `@workspace/ui`'s wave parts around
- * a seek slider while its asset is the one playing, or a play button while it
- * is not. The bar count follows the wave's own width.
+ * a seek slider while its asset is the one playing, or a seek-and-play button
+ * while it is not. Both states render comment pins, touch-drag scrubbing, and
+ * `fine:` hover ghost playhead & timecode pills.
  */
 export function TrackWaveform({
   assetId,
@@ -229,6 +291,7 @@ export function TrackWaveform({
   peaks,
   comparePeaks = NO_PEAKS,
   scale,
+  durationSeconds = 0,
   commentMarks = [],
   onMarkerClick,
   onPlay,
@@ -243,6 +306,8 @@ export function TrackWaveform({
   comparePeaks?: number[];
   /** The ceiling both series are drawn against; defaults to `peaks`' own. */
   scale?: number;
+  /** Total duration in seconds for accurate idle pin placement & click-to-seek. */
+  durationSeconds?: number;
   commentMarks?: CommentMark[];
   onMarkerClick?: (ids: number[]) => void;
   /** What starting playback from an idle wave means, where the track belongs
@@ -264,6 +329,7 @@ export function TrackWaveform({
       <ActiveWave
         series={series}
         size={size}
+        durationSeconds={durationSeconds}
         commentMarks={commentMarks}
         onMarkerClick={onMarkerClick}
         showClock={showClock}
@@ -275,6 +341,9 @@ export function TrackWaveform({
     <IdleWave
       series={series}
       size={size}
+      durationSeconds={durationSeconds}
+      commentMarks={commentMarks}
+      onMarkerClick={onMarkerClick}
       playerTrack={playerTrack}
       onPlay={onPlay}
     />

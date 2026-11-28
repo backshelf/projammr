@@ -117,7 +117,7 @@ describe("storage", () => {
       "Needs 8.4 GB of your 31 GB left."
     );
     expect(storageLine({ bytes: 14.2 * GB, remaining: 9.8 * GB }, format)).toBe(
-      "These folders need 14.2 GB and you have 9.8 GB left. Untick folders until they fit."
+      "These folders need 14.2 GB and you have 9.8 GB left. Go back (⌘[) to untick folders until they fit."
     );
     expect(storageLine({ bytes: 14.2 * GB, remaining: null }, format)).toBe(
       "Needs 14.2 GB. No storage limit on this instance."

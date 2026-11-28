@@ -7,8 +7,10 @@ import { type PatchableEntity } from "@/actions/patch-field";
 import { useInlineEdit } from "@/hooks/use-inline-edit";
 import { useProjectRole } from "@/hooks/use-project-role";
 import { IconAlertCircle, IconPencil } from "@tabler/icons-react";
+import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { useArrival } from "@workspace/ui/components/motion/arrival";
+import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
 import { AnimatePresence, m, OPTICAL, SPRING } from "@workspace/ui/lib/motion";
 import { REVEAL_ON_HOVER } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
@@ -46,6 +48,7 @@ export default function InlineTitleEditor({
 }: InlineTitleEditorProps) {
   const projectRole = useProjectRole();
   const canEdit = projectRole?.can("editor") ?? true;
+  const isMobile = useIsMobile();
   const edit = useInlineEdit({ entityType, entityId, fieldName, value });
   useEntityKey("rename", edit.begin, canEdit && !edit.isEditing);
   const editHintId = React.useId();
@@ -73,7 +76,10 @@ export default function InlineTitleEditor({
             }
           >
             <div
-              className={"mb-2 flex w-full max-w-[28rem] items-center gap-1"}
+              className={cn(
+                "mb-2 flex w-full max-w-[28rem] gap-2",
+                isMobile ? "flex-col items-stretch" : "items-center gap-1"
+              )}
             >
               <Input
                 type={"text"}
@@ -83,19 +89,44 @@ export default function InlineTitleEditor({
                 placeholder={placeholder || "Enter title..."}
                 aria-label={"Title"}
                 aria-invalid={edit.error != null}
-                className={
+                className={cn(
                   edit.error
                     ? "h-9 flex-1 border-danger bg-danger/20 text-lead"
-                    : "h-9 flex-1 bg-paper/80 text-lead"
-                }
-                autoFocus
+                    : "h-9 flex-1 bg-paper/80 text-lead",
+                  "coarse:min-h-11"
+                )}
+                autoFocus={!isMobile}
               />
-              <InlineEditActions
-                label={"title"}
-                onConfirm={edit.submit}
-                onCancel={edit.cancel}
-                disabled={edit.isSaving}
-              />
+              {isMobile ? (
+                <div className={"flex items-center gap-2"}>
+                  <Button
+                    type={"button"}
+                    onClick={edit.submit}
+                    disabled={edit.isSaving}
+                    aria-label={"Save title"}
+                    className={"min-h-11 flex-1"}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    type={"button"}
+                    variant={"ghost"}
+                    onClick={edit.cancel}
+                    disabled={edit.isSaving}
+                    aria-label={"Cancel editing title"}
+                    className={"min-h-11 flex-1 text-danger"}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <InlineEditActions
+                  label={"title"}
+                  onConfirm={edit.submit}
+                  onCancel={edit.cancel}
+                  disabled={edit.isSaving}
+                />
+              )}
             </div>
             {edit.error && (
               <div
@@ -124,7 +155,7 @@ export default function InlineTitleEditor({
                   onClick={edit.begin}
                   aria-describedby={editHintId}
                   className={
-                    "-mx-1 block rounded-md px-1 text-left motion-ink hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-none"
+                    "-mx-1 block rounded-md px-1 text-left motion-ink hover:bg-ink/5 focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden coarse:pr-8"
                   }
                 >
                   {value}

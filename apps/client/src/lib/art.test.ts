@@ -15,7 +15,7 @@ describe("artVarsFromArtwork", () => {
     const vars = artVarsFromArtwork(
       artwork({ accentHue: 220.7, accentChroma: 0.108 })
     );
-    expect(vars["--art-light"]).toBe("oklch(0.55 0.140 220.7)");
+    expect(vars["--art-light"]).toBe("oklch(0.5 0.140 220.7)");
     expect(vars["--art-dark"]).toBe("oklch(0.78 0.135 220.7)");
     expect(vars["--art-image"]).toBe('url("/media/images/a.jpg?w=256")');
   });

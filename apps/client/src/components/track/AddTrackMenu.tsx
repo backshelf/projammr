@@ -82,6 +82,7 @@ export function AddTrackMenu({
             statusesProm={statusesPromise}
             customFields={customFields}
             onStay={() => setOpen(null)}
+            onCancel={() => setOpen(null)}
           />
         </DialogContent>
       </Dialog>

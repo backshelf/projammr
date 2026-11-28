@@ -200,7 +200,7 @@ function CommentItem({
           {user ? initials(user.name) : "?"}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="mb-[0.1875rem] flex items-baseline gap-2">
+          <div className="mb-[0.1875rem] flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span
               className={cn(
                 "text-small motion-ink",

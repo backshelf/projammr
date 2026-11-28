@@ -21,6 +21,7 @@ import { PageHead } from "@workspace/ui/components/layout/page-head";
 import { ScrollRoot } from "@workspace/ui/components/layout/scroll-root";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { PAGE } from "@workspace/ui/lib/shell";
+import { cn } from "@workspace/ui/lib/utils";
 import {
   SETTINGS,
   type SettingKey,
@@ -75,7 +76,9 @@ function HubFrame({ children }: { children: ReactNode }) {
         <TopStrip back />
       </Suspense>
       <div className="min-h-0 flex-1">
-        <ScrollRoot className={PAGE}>{children}</ScrollRoot>
+        <ScrollRoot className={cn(PAGE, "[&>*]:max-w-[68rem]")}>
+          {children}
+        </ScrollRoot>
       </div>
     </div>
   );

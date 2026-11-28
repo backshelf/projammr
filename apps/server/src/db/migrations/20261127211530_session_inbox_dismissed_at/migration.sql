@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "inbox_dismissed_at" timestamp;

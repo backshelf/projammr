@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@workspace/test/globals";
 import type { Label, PriorityLevel } from "@workspace/api/api";
 import { MotionProvider } from "@workspace/ui/components/motion-provider";
 import { LEVEL_COLOURS, scaleLevel } from "@/fields/priority-fixture";
@@ -51,7 +52,10 @@ const BASE_PROPS = {
   onClear: () => {},
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  unstubAllGlobals();
+});
 
 function renderBar(
   overrides: Partial<React.ComponentProps<typeof BulkActionsBar>> = {}
@@ -314,5 +318,40 @@ describe("BulkActionsBar Set field…", () => {
     await pick("Value", "Mellow");
     await apply();
     expect(onSetField).toHaveBeenCalledWith("cf_1", "b2");
+  });
+});
+
+describe("BulkActionsBar phone sheet", () => {
+  it("renders a slim 56px bar on phone that opens a BottomSheet with bulk actions", async () => {
+    stubGlobal("innerWidth", 400);
+    stubGlobal("matchMedia", () => ({
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    const onSetPriority = mock();
+    const { container } = renderBar({
+      priorityLevels: LEVELS,
+      onSetPriority,
+      onDelete: mock(),
+    });
+    await act(async () => {});
+
+    const bar = container.querySelector('[data-slot="bulk-bar-mobile"]');
+    expect(bar).not.toBeNull();
+    expect(bar?.className).toContain("h-14");
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+    });
+
+    expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Priority" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Now" }));
+    });
+    expect(onSetPriority).toHaveBeenCalledWith(23);
   });
 });

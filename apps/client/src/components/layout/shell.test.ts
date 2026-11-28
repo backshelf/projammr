@@ -13,4 +13,11 @@ describe("CANVAS", () => {
     expect(classes).toContain("grid-rows-[max-content_1fr]");
     expect(classes).not.toContain("grid-rows-[auto_1fr]");
   });
+
+  it("reserves max-content rows for head and rail when stacked", () => {
+    const classes = CANVAS.split(/\s+/);
+
+    expect(classes).toContain("stack:grid-rows-[max-content_max-content_1fr]");
+    expect(classes).not.toContain("stack:grid-rows-none");
+  });
 });

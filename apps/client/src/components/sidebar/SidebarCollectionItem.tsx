@@ -69,7 +69,7 @@ export function SidebarCollectionItem({
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="flex items-center gap-1">
           <CollapsibleTrigger
-            className="flex items-center"
+            className="flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-faint hover:text-ink focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
             aria-label={
               open
                 ? `Collapse ${collection.title}`

@@ -20,6 +20,9 @@ export type TabQuickJump = {
 const QUICK_JUMP_META: Partial<
   Record<DockTabId, { label: string; commandId?: string }>
 > = {
+  home: { label: "Switch project" },
+  collections: { label: "New collection", commandId: "new-collection" },
+  tracks: { label: "New track", commandId: "new-track" },
   notes: { label: "New note", commandId: "new-note" },
 };
 

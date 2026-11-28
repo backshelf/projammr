@@ -5,7 +5,7 @@ import { formatSeconds, formatTimecode } from "@workspace/ui/lib/format";
 import { AnimatePresence } from "@workspace/ui/lib/motion";
 import { cn } from "@workspace/ui/lib/utils";
 import { MAX_BARS, toBars } from "@workspace/ui/lib/waveform-bars";
-import { memo, useEffect, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type CommentMark = {
   id: number;
@@ -16,7 +16,7 @@ export type CommentMark = {
    *  which keeps an older feed's pins behaving exactly as before. */
   excerpt?: string;
   /** The comment is resolved: its pin fades to faint ink and its drop-line
-   *  retracts, though it still seeks and still shows its note. */
+   *  dims, though it still seeks and still shows its note. */
   resolved?: boolean;
   /** Who resolved it; a resolved mark without one says only `Resolved`. */
   resolvedBy?: string;
@@ -49,12 +49,10 @@ export const waveSurface = (size: WaveSize) => cn(WAVE, WAVE_HEIGHT[size]);
 export const playedBars = (fraction: number, count: number) =>
   String(Math.round(fraction * count));
 
-/** A pin above the wave: an `<i>` dot and a `<span>` hairline dropping into
- *  the wave that ties a comment to its moment rather than leaving the link
- *  implied. A resolved pin (`data-resolved`) fades its dot to faint ink and
- *  retracts the hairline up into it with a `scaleY` from its top edge; each
- *  child carries the one transition list covering what it animates, so the dot
- *  keeps its colour under reduced motion and the hairline snaps. */
+/** A pin above the wave: an `<i>` dot and a `<span>` 8px hairline dropping
+ *  into the wave that ties a comment to its moment rather than leaving the
+ *  link implied. A resolved pin (`data-resolved`) fades its dot to faint ink
+ *  and keeps a faint 8px hairline stem so its anchor on the wave stays clear. */
 const MARK = cn(
   "absolute top-0 grid size-[1.125rem] -translate-x-1/2 cursor-pointer place-items-center border-none bg-transparent p-0",
   "coarse:after:absolute coarse:after:-inset-3.5 coarse:after:content-['']",
@@ -64,9 +62,78 @@ const MARK = cn(
   "data-[resolved]:[&>i]:bg-ink-faint",
   "[&>span]:absolute [&>span]:top-3.5 [&>span]:left-1/2 [&>span]:h-2 [&>span]:w-px [&>span]:origin-top",
   "[&>span]:bg-[color-mix(in_oklab,var(--art)_55%,transparent)]",
-  "[&>span]:motion-move [&>span]:ease-leave",
-  "data-[resolved]:[&>span]:scale-y-0"
+  "[&>span]:motion-ink",
+  "data-[resolved]:[&>span]:bg-[color-mix(in_oklab,var(--ink-faint)_45%,transparent)]"
 );
+
+const CLUSTER_MARK = cn(
+  "absolute top-0 grid size-[1.125rem] -translate-x-1/2 cursor-pointer place-items-center border-none bg-transparent p-0",
+  "coarse:after:absolute coarse:after:-inset-3.5 coarse:after:content-['']",
+  "[&>i]:flex [&>i]:h-4 [&>i]:min-w-4 [&>i]:items-center [&>i]:justify-center [&>i]:rounded-full [&>i]:border-2 [&>i]:border-paper [&>i]:bg-art [&>i]:px-1 [&>i]:font-mono [&>i]:text-[0.625rem]/none [&>i]:text-paper [&>i]:not-italic [&>i]:tabular-nums",
+  "[&>i]:motion-press [&>i]:duration-(--dur-move)",
+  "hover:[&>i]:scale-[1.2] aria-current:[&>i]:scale-[1.2]",
+  "data-[resolved]:[&>i]:bg-ink-faint",
+  "[&>span]:absolute [&>span]:top-4 [&>span]:left-1/2 [&>span]:h-2 [&>span]:w-px [&>span]:origin-top",
+  "[&>span]:bg-[color-mix(in_oklab,var(--art)_55%,transparent)]",
+  "[&>span]:motion-ink",
+  "data-[resolved]:[&>span]:bg-[color-mix(in_oklab,var(--ink-faint)_45%,transparent)]"
+);
+
+/** Pins within 2.5% of the track's duration collapse into one count badge. */
+export const CLUSTER_THRESHOLD_FRACTION = 0.025;
+
+export type MarkCluster = {
+  marks: CommentMark[];
+  ids: number[];
+  positionMs: number;
+  resolved: boolean;
+};
+
+/** Groups adjacent comment marks within `threshold` of `duration` seconds. */
+export function clusterMarks(
+  marks: readonly CommentMark[],
+  duration: number,
+  threshold: number = CLUSTER_THRESHOLD_FRACTION
+): MarkCluster[] {
+  if (marks.length === 0 || duration <= 0) return [];
+  const sorted = [...marks].sort(
+    (a, b) => a.positionMs - b.positionMs || a.id - b.id
+  );
+  const clusters: MarkCluster[] = [];
+  let bucket: CommentMark[] = [];
+  let anchorFraction = 0;
+
+  const flush = () => {
+    if (bucket.length === 0) return;
+    const sumMs = bucket.reduce((acc, m) => acc + m.positionMs, 0);
+    clusters.push({
+      marks: bucket,
+      ids: bucket.map((m) => m.id),
+      positionMs: sumMs / bucket.length,
+      resolved: bucket.every((m) => Boolean(m.resolved)),
+    });
+    bucket = [];
+  };
+
+  for (const mark of sorted) {
+    const fraction = Math.min(
+      1,
+      Math.max(0, mark.positionMs / 1000 / duration)
+    );
+    if (bucket.length === 0) {
+      bucket = [mark];
+      anchorFraction = fraction;
+    } else if (fraction - anchorFraction <= threshold) {
+      bucket.push(mark);
+    } else {
+      flush();
+      bucket = [mark];
+      anchorFraction = fraction;
+    }
+  }
+  flush();
+  return clusters;
+}
 
 /**
  * The bars of one series, each its slot on the timeline. Renders only when the
@@ -150,12 +217,31 @@ function MarkNote({ mark }: { mark: CommentMark }) {
   );
 }
 
+function ClusterNote({ marks }: { marks: readonly CommentMark[] }) {
+  const withExcerpt = marks.filter((m) => Boolean(m.excerpt));
+  if (withExcerpt.length === 0) return null;
+  const shown = withExcerpt.slice(0, 4);
+  const rest = withExcerpt.length - shown.length;
+  return (
+    <div className="flex flex-col divide-y divide-rule">
+      {shown.map((mark) => (
+        <div key={mark.id} className="py-2 first:pt-0 last:pb-0">
+          <MarkNote mark={mark} />
+        </div>
+      ))}
+      {rest > 0 && (
+        <p className="pt-2 text-micro text-ink-soft">+{rest} more</p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Comment pins ride above the wave with a drop-line into it, placed along
- * `duration` seconds. Clustering is left to the eye — threads are few per
- * version and exact times rarely collide. Hovering or keyboard-focusing a pin
- * shows its comment on a floating note; touch keeps the pin's
- * tap-to-seek-and-open behaviour unchanged.
+ * `duration` seconds. Adjacent pins within ~2.5% of the duration collapse
+ * into count badges so threads never pile atop one another. Hovering or
+ * keyboard-focusing a pin shows its comment on a floating note; touch keeps
+ * the pin's tap-to-seek-and-open behaviour unchanged.
  *
  * Memoised because the pins only move when the thread or the duration does,
  * not when the wave around them re-renders for a resize.
@@ -170,7 +256,7 @@ export const WaveMarks = memo(function WaveMarks({
   onMarkerClick?: (ids: number[]) => void;
 }) {
   const [hovered, setHovered] = useState<{
-    mark: CommentMark;
+    cluster: MarkCluster;
     anchor: HTMLButtonElement;
   } | null>(null);
 
@@ -183,49 +269,90 @@ export const WaveMarks = memo(function WaveMarks({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [hovered]);
 
-  if (!marks.length || duration <= 0) return null;
+  const clusters = useMemo(
+    () => clusterMarks(marks, duration),
+    [marks, duration]
+  );
+
+  if (!clusters.length || duration <= 0) return null;
+
+  const hasHoveredExcerpts =
+    hovered?.cluster.marks.some((m) => Boolean(m.excerpt)) ?? false;
 
   return (
     <div className={"relative h-[1.125rem]"}>
-      {marks.map((mark) => {
-        const seconds = mark.positionMs / 1000;
+      {clusters.map((cluster) => {
+        const seconds = cluster.positionMs / 1000;
+        const left = `${Math.min(100, (seconds / duration) * 100)}%`;
+
+        if (cluster.marks.length === 1) {
+          const mark = cluster.marks[0]!;
+          return (
+            <button
+              key={mark.id}
+              type={"button"}
+              className={MARK}
+              style={{ left }}
+              data-resolved={mark.resolved ? "" : undefined}
+              aria-label={
+                (mark.resolved ? "Resolved comment" : "Comment") +
+                (mark.author ? ` by ${mark.author}` : "") +
+                ` at ${formatSeconds(seconds)}`
+              }
+              onPointerEnter={(e) =>
+                setHovered({ cluster, anchor: e.currentTarget })
+              }
+              onPointerLeave={() => setHovered(null)}
+              onFocus={(e) => setHovered({ cluster, anchor: e.currentTarget })}
+              onBlur={() => setHovered(null)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setHovered(null);
+              }}
+              onClick={() => onMarkerClick?.([mark.id])}
+            >
+              <i />
+              <span />
+            </button>
+          );
+        }
+
         return (
           <button
-            key={mark.id}
+            key={cluster.ids.join(",")}
             type={"button"}
-            className={MARK}
-            style={{ left: `${Math.min(100, (seconds / duration) * 100)}%` }}
-            data-resolved={mark.resolved ? "" : undefined}
+            className={CLUSTER_MARK}
+            style={{ left }}
+            data-resolved={cluster.resolved ? "" : undefined}
             aria-label={
-              (mark.resolved ? "Resolved comment" : "Comment") +
-              (mark.author ? ` by ${mark.author}` : "") +
-              ` at ${formatSeconds(seconds)}`
+              `${cluster.marks.length} ` +
+              (cluster.resolved ? "resolved comments" : "comments") +
+              ` around ${formatSeconds(seconds)}`
             }
             onPointerEnter={(e) =>
-              setHovered({ mark, anchor: e.currentTarget })
+              setHovered({ cluster, anchor: e.currentTarget })
             }
             onPointerLeave={() => setHovered(null)}
-            onFocus={(e) => setHovered({ mark, anchor: e.currentTarget })}
+            onFocus={(e) => setHovered({ cluster, anchor: e.currentTarget })}
             onBlur={() => setHovered(null)}
             onKeyDown={(e) => {
               if (e.key === "Escape") setHovered(null);
             }}
-            onClick={() => onMarkerClick?.([mark.id])}
+            onClick={() => onMarkerClick?.(cluster.ids)}
           >
-            <i />
+            <i>{cluster.marks.length}</i>
             <span />
           </button>
         );
       })}
       <AnimatePresence>
-        {hovered?.mark.excerpt && (
+        {hovered && hasHoveredExcerpts && (
           <FloatingNote
             key="wave-mark-note"
             anchor={hovered.anchor}
             placement="above"
             className="w-64 p-3.5 px-4"
           >
-            <MarkNote mark={hovered.mark} />
+            <ClusterNote marks={hovered.cluster.marks} />
           </FloatingNote>
         )}
       </AnimatePresence>

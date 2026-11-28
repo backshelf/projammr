@@ -36,7 +36,7 @@ describe("Repos", () => {
 
     expect(
       screen.getByText(
-        "Open a set in Live and dit will offer to track its project, or bring in all your projects at once."
+        "Open a set in Live and dit will offer to track its project, or track folders in bulk."
       )
     ).toBeTruthy();
     expect(screen.queryByLabelText("Filter repos")).toBeNull();
@@ -48,10 +48,10 @@ describe("Repos", () => {
     });
     renderScreen(<Repos repos={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Bring in projects…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Track a folder…" }));
     await waitFor(() => expect(argsOf(calls, "open_backfill")).toHaveLength(1));
 
-    fireEvent.click(screen.getByRole("button", { name: "Bring in projects…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Track a folder…" }));
     expect(await screen.findByText("No window.")).toBeTruthy();
   });
 
@@ -60,7 +60,7 @@ describe("Repos", () => {
     renderScreen(<Repos repos={[science!]} />);
 
     expect(
-      screen.queryByRole("button", { name: "Bring in projects…" })
+      screen.queryByRole("button", { name: "Track a folder…" })
     ).toBeNull();
   });
 

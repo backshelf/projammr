@@ -157,11 +157,26 @@ const entityTable = cn(
 
 /** Horizontal-scroll wrapper. The table keeps its real columns at every width
  *  and scrolls inside this rather than dropping or reflowing them. */
-function TableScroll({ className, ...props }: React.ComponentProps<"div">) {
+function TableScroll({
+  className,
+  tabIndex = 0,
+  role = "region",
+  "aria-label": ariaLabel,
+  ...props
+}: React.ComponentProps<"div">) {
+  const defaultLabel =
+    ariaLabel ?? (props["aria-labelledby"] ? undefined : "Scrollable table");
   return (
     <div
       data-slot="table-scroll"
-      className={cn(entityTable, className)}
+      role={role}
+      aria-label={defaultLabel}
+      tabIndex={tabIndex}
+      className={cn(
+        entityTable,
+        "focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-hidden",
+        className
+      )}
       {...props}
     />
   );

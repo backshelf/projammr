@@ -473,8 +473,8 @@ pub extern "C" fn analysis_sections_len(handle: u32) -> u32 {
     offline_slice(handle, analysis::offline::Offline::sections).1
 }
 
-/// The spectrogram tile as bytes: 128 mel bands (20 Hz to 20 kHz, lowest
-/// first) per 100 ms column, column after column, 0 for −90 dBFS and 255
+/// The spectrogram tile as bytes: 160 log bands (20 Hz to 20 kHz, lowest
+/// first) per 50 ms column, column after column, 0 for −80 dBFS and 255
 /// for 0 dBFS; `analysis_spectrogram_len` bytes.
 #[unsafe(no_mangle)]
 pub extern "C" fn analysis_spectrogram_ptr(handle: u32) -> *const u8 {

@@ -284,7 +284,7 @@ mod tests {
         assert!(offline.tempo().is_some_and(|t| (t[0] - 120.0).abs() <= 0.5));
         assert!(offline.key().is_some());
         assert!(!offline.sections().is_empty());
-        assert_eq!(offline.spectrogram().len(), 120 * 128);
+        assert_eq!(offline.spectrogram().len(), 240 * 160);
         let timeline = offline.timeline().unwrap();
         assert_eq!(timeline.loudness_curve().len(), 12);
         assert_eq!(timeline.correlation_curve(), [1.0; 12]);

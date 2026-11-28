@@ -126,6 +126,7 @@ export type DataTableConfigValue<TData extends RowData, TChild = never> = {
   /** The row menu's config; a viewer's copy has no `onDelete`. */
   rowActions: DataTableProps<TData, TChild>["rowActions"];
   rowAccent: DataTableProps<TData, TChild>["rowAccent"];
+  reorder: DataTableProps<TData, TChild>["reorder"];
   pinnedColumnId: DataTableProps<TData, TChild>["pinnedColumnId"];
   /** Undefined unless the table can edit. */
   editableCells: DataTableProps<TData, TChild>["editableCells"];
@@ -134,6 +135,7 @@ export type DataTableConfigValue<TData extends RowData, TChild = never> = {
   /** How many columns the table puts before the caller's own (disclosure, selection). */
   leadingColumnCount: number;
   filterColumns: DataTableProps<TData, TChild>["filterColumns"];
+  filterPresets: DataTableProps<TData, TChild>["filterPresets"];
   facets: DataTableProps<TData, TChild>["facets"];
   groupByOptions: DataTableProps<TData, TChild>["groupByOptions"];
   savedViews: DataTableProps<TData, TChild>["savedViews"];

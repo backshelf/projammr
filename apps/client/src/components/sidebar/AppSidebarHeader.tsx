@@ -1,19 +1,17 @@
 import { SIDEBAR_EYEBROW } from "@workspace/ui/lib/shell";
-import { Loading } from "@workspace/ui/components/layout/loading";
 import { JobsTray } from "@/components/jobs/JobsTray";
 import { AppLink } from "@/components/navigation/AppLink";
 import LeaveProjectDropdownMenuItem, {
   LeaveProjectScope,
 } from "@/components/sidebar/LeaveProjectDropdownMenuItem";
 import { SidebarSearchTrigger } from "@/components/sidebar/SidebarSearchTrigger";
-import { SETTINGS_HREF } from "@/lib/settings/href";
 import {
   hrefFromParsedRoute,
   initials,
   mediaProxyUrl,
   NEW_PROJECT_HREF,
 } from "@/lib/utils";
-import { IconPlus, IconSelector } from "@tabler/icons-react";
+import { IconHome, IconPlus, IconSelector } from "@tabler/icons-react";
 import { Project } from "@workspace/api/api";
 import {
   Avatar,
@@ -39,9 +37,11 @@ import {
 export default async function AppSidebarHeader({
   projects,
   currentProject,
+  unassignedCount = 0,
 }: {
   projects: Pick<Project, "name" | "image" | "id">[];
   currentProject?: Pick<Project, "name" | "image" | "id">;
+  unassignedCount?: number;
 }) {
   return (
     <SidebarHeader>
@@ -54,36 +54,34 @@ export default async function AppSidebarHeader({
                   size={"lg"}
                   className={"flex items-center justify-between gap-2"}
                 >
-                  <div className={"flex items-center gap-2"}>
-                    <Loading>
-                      <Avatar>
-                        <AvatarImage
-                          src={mediaProxyUrl(currentProject?.image)}
-                          alt="avatar"
-                        />
-                        <AvatarFallback>
-                          {currentProject && initials(currentProject.name)}
-                        </AvatarFallback>
-                      </Avatar>
+                  <span className={"flex min-w-0 items-center gap-2"}>
+                    <Avatar>
+                      <AvatarImage
+                        src={mediaProxyUrl(currentProject?.image)}
+                        alt="avatar"
+                      />
+                      <AvatarFallback>
+                        {currentProject && initials(currentProject.name)}
+                      </AvatarFallback>
+                    </Avatar>
 
-                      {currentProject?.name ? (
-                        <div className={"flex min-w-0 flex-col text-left"}>
-                          <span className={SIDEBAR_EYEBROW}>Project</span>
-                          <span className={"truncate"}>
-                            {currentProject.name}
-                          </span>
-                        </div>
-                      ) : (
-                        <p
-                          className={
-                            "translate-y-[5%] text-small text-ink-soft italic"
-                          }
-                        >
-                          Select a project...
-                        </p>
-                      )}
-                    </Loading>
-                  </div>
+                    {currentProject?.name ? (
+                      <span className={"flex min-w-0 flex-col text-left"}>
+                        <span className={SIDEBAR_EYEBROW}>Project</span>
+                        <span className={"truncate"}>
+                          {currentProject.name}
+                        </span>
+                      </span>
+                    ) : (
+                      <span
+                        className={
+                          "translate-y-[5%] text-small text-ink-soft italic"
+                        }
+                      >
+                        Select a project...
+                      </span>
+                    )}
+                  </span>
 
                   <IconSelector className={"translate-y-[5%]"} />
                 </SidebarMenuButton>
@@ -91,28 +89,24 @@ export default async function AppSidebarHeader({
               <DropdownMenuContent>
                 <DropdownMenuGroup>
                   <DropdownMenuLabel>Your projects</DropdownMenuLabel>
-                  <Loading>
-                    {projects.length !== 0 ? (
-                      projects.map((project) => {
-                        return (
-                          <DropdownMenuItem key={project.id}>
-                            <AppLink
-                              href={hrefFromParsedRoute(
-                                { kind: "project" },
-                                project.id
-                              )}
-                            >
-                              <p>{project.name}</p>
-                            </AppLink>
-                          </DropdownMenuItem>
-                        );
-                      })
-                    ) : (
-                      <DropdownMenuLabel>
-                        <p>No projects</p>
-                      </DropdownMenuLabel>
-                    )}
-                  </Loading>
+                  {projects.length !== 0 ? (
+                    projects.map((project) => {
+                      return (
+                        <DropdownMenuItem key={project.id} asChild>
+                          <AppLink
+                            href={hrefFromParsedRoute(
+                              { kind: "project" },
+                              project.id
+                            )}
+                          >
+                            <span>{project.name}</span>
+                          </AppLink>
+                        </DropdownMenuItem>
+                      );
+                    })
+                  ) : (
+                    <DropdownMenuLabel>No projects</DropdownMenuLabel>
+                  )}
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
@@ -141,18 +135,22 @@ export default async function AppSidebarHeader({
                     { kind: "project" },
                     currentProject.id
                   )}
+                  className={"flex items-center gap-2"}
                 >
-                  View project
+                  <IconHome className={"size-4 text-ink-soft"} />
+                  <span>Home</span>
+                  {unassignedCount > 0 && (
+                    <span
+                      role="img"
+                      aria-label={`${unassignedCount} unassigned DAW sets`}
+                      className={"ml-auto size-1.5 rounded-full bg-art"}
+                    />
+                  )}
                 </AppLink>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </>
         )}
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <AppLink href={SETTINGS_HREF}>Settings</AppLink>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
       </SidebarMenu>
     </SidebarHeader>
   );

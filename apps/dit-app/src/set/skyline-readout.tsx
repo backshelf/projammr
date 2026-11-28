@@ -6,6 +6,7 @@ import {
   type FocusEvent,
   type JSX,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
 } from "react";
 import type { StructureDiff } from "@workspace/session-diff";
@@ -99,6 +100,13 @@ export function SkylineReadout({
     setPointed(barIndexOf(event.target) ?? pointed);
   }
 
+  function onClick(event: MouseEvent<HTMLDivElement>): void {
+    const index = barIndexOf(event.target);
+    if (index !== null) {
+      setFocused(index);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <div
@@ -114,6 +122,7 @@ export function SkylineReadout({
             setFocused(null);
           }
         }}
+        onClick={onClick}
         onKeyDown={onKeyDown}
         onPointerOver={onPointerOver}
         onPointerLeave={() => setPointed(null)}

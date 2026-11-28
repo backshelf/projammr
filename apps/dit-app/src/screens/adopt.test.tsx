@@ -81,16 +81,29 @@ describe("Adopt", () => {
     expect(track.disabled).toBe(true);
   });
 
-  test("allows offline adoption with projectId null when no projects are listed", async () => {
+  test("allows offline adoption with projectId null when no projects are listed and shows loading vs offline copy", async () => {
     const calls = mockApp(base);
     const noProjects = { ...offer, projectId: null, projects: [] };
-    renderScreen(<Adopt offer={noProjects} />);
+    const { rerender } = renderScreen(
+      <Adopt offer={noProjects} connection="online" home="/Users/me" />
+    );
+    expect(screen.getByText("~/Music/new Project")).toBeTruthy();
+    expect(screen.getByText("Loading projects…")).toBeTruthy();
     const track = screen.getByRole("button", {
       name: "Track it",
     }) as HTMLButtonElement;
     expect(track.disabled).toBe(false);
 
-    fireEvent.click(track);
+    rerender(
+      <Chrome nav="home">
+        <Adopt offer={noProjects} connection="offline" home="/Users/me" />
+      </Chrome>
+    );
+    expect(
+      screen.getByText("Offline — projects load when dit reconnects.")
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Track it" }));
 
     await waitFor(() =>
       expect(argsOf(calls, "adopt")).toEqual([

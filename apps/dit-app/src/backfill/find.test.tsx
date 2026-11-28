@@ -323,4 +323,31 @@ describe("Find", () => {
       "The folder picker couldn't open."
     );
   });
+
+  test("filters folders and toggles all tickable folders with Untick all / Tick all", () => {
+    mockBackfillApp(found());
+    renderWindow(found());
+
+    fireEvent.click(screen.getByRole("button", { name: "Untick all" }));
+    expect(
+      (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Tick all" }));
+    expect(
+      (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+        .disabled
+    ).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("Filter folders"), {
+      target: { value: "hal" },
+    });
+    expect(within(list()).getAllByRole("option")).toHaveLength(1);
+
+    fireEvent.change(screen.getByLabelText("Filter folders"), {
+      target: { value: "does-not-exist" },
+    });
+    expect(screen.getByText("No folder matches “does-not-exist”.")).toBeTruthy();
+  });
 });

@@ -45,11 +45,13 @@ function Harness<TRaw extends FieldValues, TOut extends FieldValues>({
   defaultValues,
   submit,
   onStay,
+  onCancel,
 }: {
   fields: FieldSpec<TRaw>[];
   defaultValues: DefaultValues<TRaw>;
   submit: (data: TOut) => Promise<typeof okResult | ActionError>;
   onStay?: () => void;
+  onCancel?: () => void;
 }) {
   const { form, onSubmit } = useEntityForm({
     fields,
@@ -68,6 +70,7 @@ function Harness<TRaw extends FieldValues, TOut extends FieldValues>({
       fields={fields}
       submitLabel="Create"
       busyLabel="Creating…"
+      onCancel={onCancel}
     />
   );
 }
@@ -341,5 +344,22 @@ describe("EntityForm after a record is created", () => {
 
     toastLink()?.onClick();
     expect(push).toHaveBeenCalledWith("/created");
+  });
+
+  it("calls onCancel instead of router.back() when provided", () => {
+    const onCancel = mock();
+    render(
+      <Harness<Draft, Parsed>
+        fields={draftFields}
+        defaultValues={{ title: "", bpm: "" }}
+        submit={async () => okResult}
+        onCancel={onCancel}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(back).not.toHaveBeenCalled();
   });
 });

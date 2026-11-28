@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   bandLevels,
   blobColour,
+  configureAnalyser,
   fadeBlobs,
   restingBlobs,
   stepBlobs,
@@ -25,7 +26,7 @@ function run(
 
 describe("bandLevels", () => {
   it("averages each band", () => {
-    const data = new Uint8Array(128);
+    const data = new Uint8Array(256);
     data.fill(255);
     const out = new Float32Array(5);
     bandLevels(data, out);
@@ -83,6 +84,32 @@ describe("stepBlobs", () => {
     run(blobs, [0, 0, 0, 0, 1], 40, t);
     expect(blobs[4]!.env).toBeGreaterThan(blobs[0]!.env);
   });
+
+  it("evolves at the same physical speed at 120 Hz and 60 Hz", () => {
+    const blobs60 = restingBlobs();
+    const blobs120 = restingBlobs();
+    const hot = new Float32Array([0.85, 0.2, 0.2, 0.2, 0.2]);
+
+    // 320 ms at 60 Hz (20 * 16 ms) vs 120 Hz (40 * 8 ms)
+    for (let i = 0; i < 20; i++) stepBlobs(blobs60, hot, i * 16, 16);
+    for (let i = 0; i < 40; i++) stepBlobs(blobs120, hot, i * 8, 8);
+
+    expect(Math.abs(blobs120[0]!.env - blobs60[0]!.env)).toBeLessThan(0.03);
+    expect(Math.abs(blobs120[0]!.slow - blobs60[0]!.slow)).toBeLessThan(0.02);
+  });
+});
+
+describe("configureAnalyser", () => {
+  it("uses 512-point FFT matching the band table", () => {
+    const analyser = {
+      fftSize: 0,
+      minDecibels: 0,
+      maxDecibels: 0,
+      smoothingTimeConstant: 0,
+    } as AnalyserNode;
+    configureAnalyser(analyser);
+    expect(analyser.fftSize).toBe(512);
+  });
 });
 
 describe("fadeBlobs", () => {
@@ -92,14 +119,14 @@ describe("fadeBlobs", () => {
     const lit = blobs[0]!.env;
     expect(lit).toBeGreaterThan(0.3);
 
-    expect(fadeBlobs(blobs, (t + 1) * FRAME)).toBe(false);
+    expect(fadeBlobs(blobs, (t + 1) * FRAME, FRAME)).toBe(false);
     // One frame of fading keeps most of the glow.
     expect(blobs[0]!.env).toBeGreaterThan(lit * 0.9);
 
     let settled = false;
     let frames = 0;
     while (!settled && frames < 1000) {
-      settled = fadeBlobs(blobs, (t + 2 + frames) * FRAME);
+      settled = fadeBlobs(blobs, (t + 2 + frames) * FRAME, FRAME);
       frames++;
     }
     expect(settled).toBe(true);
@@ -108,6 +135,18 @@ describe("fadeBlobs", () => {
     expect(frames).toBeLessThan(300);
     expect(blobs.every((b) => b.env === 0)).toBe(true);
     expect(blobs[0]!.r).toBeCloseTo(blobs[0]!.rest);
+  });
+
+  it("fades over the same physical duration at 120 Hz and 60 Hz", () => {
+    const b60 = restingBlobs();
+    const b120 = restingBlobs();
+    run(b60, [1, 1, 1, 1, 1], 30);
+    run(b120, [1, 1, 1, 1, 1], 30);
+
+    for (let i = 0; i < 30; i++) fadeBlobs(b60, (100 + i) * 16, 16);
+    for (let i = 0; i < 60; i++) fadeBlobs(b120, (100 + i) * 8, 8);
+
+    expect(b120[0]!.env).toBeCloseTo(b60[0]!.env, 5);
   });
 });
 

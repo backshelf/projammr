@@ -44,6 +44,7 @@ function CardList<TData extends RowData, TChild = never>(): ReactNode {
     selectMode,
     exitSelectMode,
     rowActions,
+    reorder,
     loaded,
     loadMore,
     retryLoad,
@@ -71,6 +72,7 @@ function CardList<TData extends RowData, TChild = never>(): ReactNode {
       const peekRow = peek.toPeekRow(original);
       return {
         id: peekRow.id,
+        trackNumber: peekRow.trackNumber,
         href: peek.href(original),
         title: peekRow.title,
         subtitle: peekRow.subtitle,
@@ -188,6 +190,7 @@ function CardList<TData extends RowData, TChild = never>(): ReactNode {
       loaded={loaded}
       loadMore={loadMore}
       retryLoad={retryLoad}
+      reorder={reorder}
       scrollToIndex={scrollToIndex}
     />
   );

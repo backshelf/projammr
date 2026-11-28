@@ -1,9 +1,21 @@
 "use client";
 
-import { IconFilter, IconRestore, IconSearch } from "@tabler/icons-react";
+import {
+  IconFilter,
+  IconPlus,
+  IconRestore,
+  IconSearch,
+  IconX,
+} from "@tabler/icons-react";
 import type { RowData } from "@tanstack/react-table";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
 import { Input } from "@workspace/ui/components/input";
 import { cn } from "@workspace/ui/lib/utils";
 import dynamic from "next/dynamic";
@@ -78,6 +90,7 @@ export function Toolbar<TData extends RowData, TChild = never>({
     urlState,
     ownsUrl,
     filterColumns,
+    filterPresets,
     facets,
     groupByOptions,
     savedViews,
@@ -154,6 +167,8 @@ export function Toolbar<TData extends RowData, TChild = never>({
   // which never mounts the button that opens it.
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [filterSheetLoaded, setFilterSheetLoaded] = useState(false);
+  const [revealedFilters, setRevealedFilters] = useState<string[]>([]);
+  const [openFilterParam, setOpenFilterParam] = useState<string | null>(null);
   const sortableColumns = table
     .getAllLeafColumns()
     .filter((c: { getCanSort: () => boolean }) => c.getCanSort());
@@ -161,9 +176,61 @@ export function Toolbar<TData extends RowData, TChild = never>({
     urlState.state.columnFilters,
     ownsUrl ? filterColumns : undefined
   );
+  const presetKeys = useMemo(() => {
+    if (!filterPresets?.length) return [];
+    const keys = new Set<string>();
+    for (const preset of filterPresets) {
+      for (const key of Object.keys(preset.params)) keys.add(key);
+    }
+    return [...keys];
+  }, [filterPresets]);
+  const visibleDesktopFilters = useMemo(
+    () =>
+      filterColumns?.filter(
+        (fc) =>
+          Boolean(urlState.state.columnFilters[fc.param]) ||
+          revealedFilters.includes(fc.param)
+      ) ?? [],
+    [filterColumns, urlState.state.columnFilters, revealedFilters]
+  );
 
   return (
     <>
+      {ownsUrl && filterPresets && filterPresets.length > 0 && (
+        <div
+          role="group"
+          aria-label="Filter presets"
+          className="flex flex-wrap items-center gap-1.5 pt-1"
+        >
+          {filterPresets.map((preset) => {
+            const active = presetKeys.every((key) =>
+              preset.params[key]
+                ? urlState.state.columnFilters[key] === preset.params[key]
+                : !urlState.state.columnFilters[key]
+            );
+            return (
+              <Button
+                key={preset.id}
+                type="button"
+                variant={active ? "secondary" : "outline"}
+                size="sm"
+                aria-pressed={active}
+                className="rounded-full coarse:min-h-11"
+                onClick={() => {
+                  const patch: Record<string, string | null> = {};
+                  for (const key of presetKeys) {
+                    patch[key] = preset.params[key] ?? null;
+                  }
+                  urlState.setColumnFilters(patch);
+                }}
+              >
+                {preset.label}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="relative z-10 hidden flex-wrap items-center gap-2 py-2 md:flex">
         <TableSearch
           value={urlState.state.globalFilter}
@@ -173,15 +240,91 @@ export function Toolbar<TData extends RowData, TChild = never>({
         />
 
         {ownsUrl &&
-          filterColumns?.map((fc) => (
-            <FilterMenu
-              key={fc.param}
-              config={fc}
-              value={urlState.state.columnFilters[fc.param] ?? null}
-              counts={facets?.[fc.param] ?? {}}
-              onChange={(value) => urlState.setColumnFilter(fc.param, value)}
-            />
-          ))}
+          visibleDesktopFilters.map((fc) => {
+            const value = urlState.state.columnFilters[fc.param] ?? null;
+            return (
+              <div key={fc.param} className="inline-flex items-center gap-0.5">
+                <FilterMenu
+                  config={fc}
+                  value={value}
+                  counts={facets?.[fc.param] ?? {}}
+                  open={openFilterParam === fc.param}
+                  onOpenChange={(nextOpen) => {
+                    setOpenFilterParam((cur) => {
+                      if (nextOpen) return fc.param;
+                      return cur === fc.param ? null : cur;
+                    });
+                    if (!nextOpen && !urlState.state.columnFilters[fc.param]) {
+                      setRevealedFilters((prev) =>
+                        prev.filter((p) => p !== fc.param)
+                      );
+                    }
+                  }}
+                  onChange={(nextValue) => {
+                    urlState.setColumnFilter(fc.param, nextValue);
+                    if (!nextValue) {
+                      setRevealedFilters((prev) =>
+                        prev.filter((p) => p !== fc.param)
+                      );
+                    }
+                  }}
+                />
+                {value && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Clear ${fc.label} filter`}
+                    onClick={() => {
+                      urlState.setColumnFilter(fc.param, null);
+                      setRevealedFilters((prev) =>
+                        prev.filter((p) => p !== fc.param)
+                      );
+                    }}
+                  >
+                    <IconX className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+
+        {ownsUrl && filterColumns && filterColumns.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" aria-label="Add filter">
+                <IconPlus className="h-4 w-4" aria-hidden />
+                Filter
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="max-h-80 overflow-y-auto"
+            >
+              {filterColumns.map((fc) => {
+                const active = Boolean(urlState.state.columnFilters[fc.param]);
+                return (
+                  <DropdownMenuItem
+                    key={fc.param}
+                    onClick={() => {
+                      setRevealedFilters((prev) =>
+                        prev.includes(fc.param) ? prev : [...prev, fc.param]
+                      );
+                      setOpenFilterParam(fc.param);
+                    }}
+                  >
+                    <span className="flex-1">{fc.label}</span>
+                    {active && (
+                      <span className="ml-3 text-micro text-ink-soft">
+                        Active
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
         {ownsUrl && groupingEnabled && (
           <GroupByMenu

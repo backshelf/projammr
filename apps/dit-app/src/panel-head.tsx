@@ -14,6 +14,7 @@ export function PanelHead({
   lede,
   signedIn = true,
   back = false,
+  blocking = false,
 }: {
   title: ReactNode;
   lede?: ReactNode;
@@ -21,6 +22,8 @@ export function PanelHead({
   signedIn?: boolean;
   /** Whether the screen was navigated to and so has a screen to go back to. */
   back?: boolean;
+  /** True on blocking screens (`machine-name`, `restore`), hiding unreachable navigation items in the menu. */
+  blocking?: boolean;
 }): JSX.Element {
   const actions = usePanelActions();
 
@@ -39,7 +42,7 @@ export function PanelHead({
         <h1 className="min-w-0 flex-1 font-heading text-subtitle/none tracking-[-0.01em] text-balance text-ink">
           {title}
         </h1>
-        <PanelMenu signedIn={signedIn} />
+        <PanelMenu signedIn={signedIn} blocking={blocking} />
       </div>
       {lede && <p className="text-small text-pretty text-ink-soft">{lede}</p>}
     </header>

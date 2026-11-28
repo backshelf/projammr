@@ -18,14 +18,16 @@ export const InlineEditActions = ({
   /** Names the field in the two button labels, e.g. "title" or "ISRC". */
   label: string;
 }) => (
-  <div className={"flex shrink-0 gap-0.5"}>
+  <div className={"flex shrink-0 gap-0.5 coarse:gap-2"}>
     <Button
       variant={"ghost"}
       size={"icon-xs"}
       onClick={onConfirm}
       disabled={disabled}
       aria-label={`Save ${label}`}
-      className={"text-ink-soft hover:text-ink"}
+      className={
+        "text-ink-soft hover:text-ink coarse:size-11 coarse:after:inset-0"
+      }
     >
       <IconCheck size={14} />
     </Button>
@@ -35,7 +37,9 @@ export const InlineEditActions = ({
       onClick={onCancel}
       disabled={disabled}
       aria-label={`Cancel editing ${label}`}
-      className={"text-danger hover:opacity-80"}
+      className={
+        "text-danger hover:opacity-80 coarse:size-11 coarse:after:inset-0"
+      }
     >
       <IconX size={14} />
     </Button>

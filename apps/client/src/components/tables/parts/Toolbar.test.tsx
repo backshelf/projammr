@@ -138,11 +138,58 @@ describe("a table that does not own the URL", () => {
 });
 
 describe("a table that owns the URL", () => {
-  it("offers a filter menu for each filter column", async () => {
+  it("collapses filter columns behind Add filter and renders active inline filter pills with clear", async () => {
     await renderOwningUrl({ filterColumns });
 
-    expect(screen.getByRole("button", { name: /stage/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /style/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /stage/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /style/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+    await act(async () => {});
+
+    expect(screen.getByRole("menuitem", { name: "Stage" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Style" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Stage" }));
+    await act(async () => {});
+
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /mixing/i }));
+    await act(async () => {});
+
+    expect(screen.getByRole("button", { name: /stage: mixing/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear Stage filter" }));
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: /stage/i })).toBeNull();
+  });
+
+  it("renders filter preset pills and switches URL filter params atomically", async () => {
+    locate("?unassigned=true");
+    renderGrid(undefined, undefined, {
+      persistStateInUrl: true,
+      filterColumns,
+      filterPresets: [
+        { id: "all", label: "All", params: {} },
+        {
+          id: "unassigned",
+          label: "Unassigned",
+          params: { unassigned: "true" },
+        },
+        { id: "not-in-dit", label: "Not in dit", params: { inDit: "false" } },
+      ],
+    });
+    await act(async () => {});
+
+    const allBtn = screen.getByRole("button", { name: "All" });
+    const unassignedBtn = screen.getByRole("button", { name: "Unassigned" });
+    const notInDitBtn = screen.getByRole("button", { name: "Not in dit" });
+
+    expect(unassignedBtn.getAttribute("aria-pressed")).toBe("true");
+    expect(allBtn.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(notInDitBtn);
+    await act(async () => {});
+    expect(notInDitBtn.getAttribute("aria-pressed")).toBe("true");
+    expect(unassignedBtn.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("offers group-by and saved views when they are configured", async () => {

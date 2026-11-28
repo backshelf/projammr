@@ -1766,13 +1766,16 @@ ubuntu jobs and in the Docker image.
 package.json              scripts below; @tauri-apps/api and cli pinned to the crate's minor (~2.12)
 vite.config.ts            port 1420, strictPort (src-tauri/tauri.conf.json's devUrl); ignores src-tauri
 index.html, public/       the theme script, loaded before React, as the client's is
-src/app.css               the two @workspace/ui imports and an explicit @source
+src/app.css               @workspace/ui fonts + {foundation,atmosphere,motion}.css, explicit @source, thin scrollbars, skyline overflow clip
 src/main.tsx              ThemeProvider (bindThemeHotkey false: the panel has no hotkey registry), MotionProvider, Panel
 src/ipc.ts                the contract: Snapshot, Commands, STATE_EVENT; written by hand
 src/bridge.ts             call, onState, onFocus and pickFolders: typed invoke and listen over Commands, and the dialog plugin
 src/store.ts              the snapshot store; use-snapshot.ts is its useSyncExternalStore hook
-src/panel.tsx             the panel: snapshot, navigation, keys, focus on show, window height; screen.ts picks the screen
-src/screens/              sign-in, machine-name, repos, adopt, adopting, set (head only until the set screen), restore and settings
+src/use-panel-height.ts   rAF-coalesced ResizeObserver deduplicating rounded offsetHeight before calling resize_panel
+src/panel.tsx             the panel: snapshot, navigation (settingsTab), keys, mainRef focus on screen switches, window height; screen.ts picks the screen
+src/panel-menu.tsx        ⋯ menu (hides unreachable items during blocking/machine-name/restore, omits active screen, --art data-attention-dot)
+src/panel-head.tsx        sticky PanelHead shared by non-set screens
+src/screens/              sign-in, machine-name, repos, adopt, adopting, set, restore and 3-tab settings
 src/settings/             the settings row, the shortcut recorder and the folder list; accelerator.ts reads a press
 src/backfill/             the backfill window's entry (main.tsx, loaded by backfill.html) and screens; see _The backfill window's screens_
 src/backfill-ipc.ts      the window's contract: BackfillView, BACKFILL_EVENT, BackfillCommands; fixtures/backfill.json is its fixture
@@ -1798,90 +1801,64 @@ against `Snapshot` (a missing field, an extra one or a wrong shape fails the typ
 `ipc.ts`, the fixture and the Rust type changes in all three.
 
 **The panel.** One screen at a time, chosen by the pure `screenOf(snapshot, nav)`: sign-in while the machine is not
-signed in (idle, waiting with the code and "Open again", revoked, Keychain locked), the machine-name prompt when the hub
+signed in (idle, waiting with the code, `"Copy code"`, `"Open again"`, and `"Cancel"` → `cancel_sign_in` paired with `LoginFlight` generation tracking in `core.rs`, revoked, Keychain locked), the machine-name prompt when the hub
 refused the name (`machine.refused`), the restore screen while a `projammr://dit/checkout` link is pending, then the
-person's own navigation (`Nav`: home, repos, settings, from the `⋯`
+person's own navigation (`Nav`: home, repos, settings with active `settingsTab`, from the `⋯`
 menu and `⌘,`), and at home the adopt progress (`Snapshot.adopting`: the folder's sets, each "Saving…" or "Saved", as
-their first saves land, until the app clears it and the set screen takes over), the adopt offer, the open set, or the
-repo list. The `⋯` menu's Quit carries the line "Scheduled work stops until dit is opened again." Navigation is panel state and never
+their first saves land, until the app clears it and the set screen takes over), the adopt offer (`shortenHome(offer.folder)`, `--warn` `syncedBy`, 3-state project loading `Offline` / `Loading projects…` / `No project`), the open set, or the
+repo list (sticky head + filter, `"Track a folder…"` empty CTA, `IconArrowUpRight` `IconButton`). `PanelMenu` hides unreachable nav items (`Settings`, `Repos`, `Track a folder…`, `BackfillItem`) when `blocking || screen === "machine-name" || screen === "restore"`, omits the active screen, marks `⋯` with an `--art` `data-attention-dot` when update `available`/`failed` or `backfill?.state === "paused"`, and Quit carries the line "Scheduled work stops until dit is opened again." Navigation is panel state and never
 reaches the app. The keys are `createKeymap` bindings, `⌘↩` commit (claimed by the set screen's commit box), Esc
 (backs out of repos and settings, else `hide_panel`) and `⌘,`, all firing inside a field; a field that takes Esc itself
 (the shortcut recorder, an open menu) stops it first. A screen claims the field to focus when the panel is shown with
-`useFocusTarget`, and the panel reports its content height through `resize_panel` so the window follows it. The
+`useFocusTarget`, `Panel` focuses `mainRef` on `screenKind` changes, and `usePanelHeight` coalesces `ResizeObserver` via `requestAnimationFrame` + rounded `offsetHeight` deduping before calling `resize_panel`, where `src-tauri/src/panel.rs` clamps to `monitor_max.min(MAX_HEIGHT).max(MIN_HEIGHT)` (`MAX_HEIGHT = 600.0`) and skips `< 1.0` px resizes. The
 recorder sends the global shortcut as `Ctrl+Alt+Shift+Super` modifiers in that order then the key named from
 `KeyboardEvent.code` (`Alt+Shift+D`), and refuses a press without Ctrl, Alt or Super. A refused command's reason
 (the string the app rejected with) shows as a line under the control that sent it.
 
-**The set screen** (`screens/set.tsx`, parts in `src/set/`). The open set, top to bottom as a commit runs. The root
+**The set screen** (`screens/set.tsx`, parts in `src/set/`). The open set, top to bottom as a commit runs: masthead → skyline → commit box → waiting bounces (`RenderBand`) → saves (`SavesList`, capped at `VISIBLE_SAVE_CAP = 5` with `"Show all N saves"` / `"Show fewer saves"`). The root
 carries `artVarsFromAccent(artwork.accentHue, artwork.accentChroma, artUrl(artwork.assetPath, 800))`, so the cover
 reaches the masthead's blurred band and every `text-art` below it; with no artwork there is no band and the accent is
-grayscale. `SetMasthead` is the name, the branch and `timeInSet` since the last commit, and "Open on the web"
-(`open_web` with `open.webPath`, absent until a push made the set a session). `SkylineReadout` wraps `SetSkyline` in
-`group/save-diff` over `skylineStructure` (`skyline-model.ts`): `diffStructure(headMeta, liveTracks as a synthetic
+grayscale. `SetMasthead` is song-first: when assigned to a track (`open.track !== null`, from `TrackBody { id, title }`), it heads with a `"Song · {open.track.title}"` eyebrow and links `"Open song on the web"` (`open_web` with `open.webPath`), rendering the set name in `text-subtitle/[1.08]` with `.on-art` / `.on-art-soft`, the branch, and `timeInSet` since the last commit (`"Open on the web"` when unassigned). `SkylineReadout` wraps `SetSkyline` in
+`group/save-diff` (clipped in `.skyline-readout .skyline { overflow: clip; }` so `.skyline__bar::after` never overlaps the masthead) over `skylineStructure` (`skyline-model.ts`): `diffStructure(headMeta, liveTracks as a synthetic
 meta, else latestMeta)` (when `liveTracks` is used, `headMeta`'s XML track ids are stripped so the script's 0-based
 positional ids pair by name/auto-numbered key without colliding, and the script's `master` track is omitted when
 `headMeta` has none), a set with no commit diffed against an empty one (every track new), and the app's
 `tracksChanged` names promoting a `same` row to `changed` (a clip edit has no device change to light it). It is one tab
-stop: `←/→/Home/End` move the lit bar (written as `data-hot`, as the web's `SaveDiffControls` does), pointing does the
-same over a hit area wider than the 8px bar, and an `aria-live` line names the track ("Bass · +EQ Eight") or counts the
+stop: `←/→/Home/End` move the lit bar (written as `data-hot`, as the web's `SaveDiffControls` does), click pins the bar, pointing highlights over a hit area wider than the 8px bar, and an `aria-live` line names the track ("Bass · +EQ Eight") or counts the
 lit ones. With nothing lit it is in `data-mode="whole"` so no bar is ghosted. Under reduced motion (`useReducedMotion`,
-`data-reduced-motion`, a rule in `app.css`) the fade goes and `data-mark` stays. The commit box is a `Composer`
+`data-reduced-motion`, a rule in `app.css`) the fade goes and `data-mark` stays. The commit box (`CommitBox`) is a `Composer`
 (`suggestion.ts`): until the person types, the text is the snapshot's `clauses` joined with `, ` less the ones switched
-off; once they type it is theirs and a chip is pressed while its words are in the text, a click taking them out or
-appending them. The state is the set's draft in `localStorage` under `dit-app:commit-drafts:v1` (`draft.ts`; a draft
-the panel has not, the app's `Snapshot.draft`, is the fallback) and each change is mirrored to `set_draft`. `⌘↩` is
+off; once they type it is theirs and a `TogglePill` chip carries `IconCheck` + `data-pressed:bg-art/12 data-pressed:text-art` while its words are in the text, a click taking them out or
+appending them. Helper text is gated to `firstCommit`, `"Committing…"` renders while `pending`, and state is kept in `localStorage` under `dit-app:commit-drafts:v1` (`draft.ts`; fallback `Snapshot.draft`) mirrored to `set_draft`. `⌘↩` is
 claimed through `commit-shortcut.ts`: the panel's one keymap runs the claim, because a key one keymap matched is
 handled and a second listener never sees it. A blank message commits the cli's default; the refusal is the cli's
 line, shown in the danger ink. The saves are `SaveRowBody` rows (no `source`, its own `empty` copy) with
 `diffSaves` chips read against the next older readable save, the oldest against `headMeta`, and a status-pie dot for
 the push state. "Nothing to commit" with the last commit stands where the commit box and saves would be. The track
-proposal ("Which track is this?") answers with `propose_track`. Live, script, offline, refused and pushing lines come
+proposal (`TrackProposalCard`, `"Which track is this?"`, normal-case title) answers with `propose_track`. Live, script, offline, refused and pushing lines come
 from `set/status-model.ts` and are the snapshot's words in the spec's copy. "Track a folder…" in the `⋯` menu is the
 folder picker, then `track_folder`, then home (the app has raised the adopt offer); a refusal shows at the top of the
 panel through `PanelActions.report`.
 
-**The render cards** (`src/renders/`). Under the saves, or on the repo list when nothing is open, the band "New bounce"
-(`render-list.tsx`) lists `Snapshot.renders` less the `waiting` ones, which are the app's minute of holding a file back
-and have no card. One component (`render-card.tsx`) draws every state from `card.state`: `proposed` (the file name
-wrapped, never cut, its folder in faint ink, then one line of facts: its length, "bounced 4 min after your last save"
-(`bouncedAfterMs`, "before" when negative, left out while the daemon has not said), its size; the matched set and the
-reasons in the spec's words from `reasonKinds` ("named like the set", "in its folder", "4 min after your last save",
-only those that held; the `reasons` sentences are not shown), and the four decisions), `over-limit` (the same, "Over your size limit", "Add anyway" in
-place of "Add as version" — note that `dit-daemon`'s `renders/driver.rs` refuses `OverLimit` in `request_accept` and `begin` until the size limit is raised), `uploading` (a `Progress` line from `progress.sent` over `total` in place of the
-decisions), `queued-offline` ("Queued", uploads when the hub is back) and `added` ("Added as version"). A pair of
-formats is one card: `namesOf` writes "science123 v4.wav and .mp3", `uploadsLine` says "uploads the .wav (48 MB)" from
-`uploadedFile`, and a proposed pair adds "Only the largest file under your size limit is uploaded." "Not this set"
-(`not-this-set.tsx`) is a `Popover` over `otherSets`; the app has no per-set rejection, so choosing a set is
-`accept_render {id, session}` and the picker says so when the folder has no other set on the hub. "Not a bounce" and
-"Never here" are `reject_render` with that `mode`. The list is a listbox with one tab stop (roving `tabIndex`, the
-cursor kept as an id and an index so a card decided away hands the cursor to its neighbour and focus follows): `↑/↓`,
-`Home`/`End` move, `Y` adds, `N` is "Not a bounce", `Space` plays or pauses and `←/→` step ten seconds while that
-file is loaded; the keys act only when the event's target is inside the list in the DOM (a popover's arrive through
-React's tree), a key with a modifier is the panel's, and `Space` on a button inside a card presses the button. The
-decisions are real buttons inside the options, so a screen reader that treats an option's children as presentational
-meets the keys first; every decision stays reachable by `Tab`.
+**The render cards** (`src/renders/`). Above `SavesList` on the set screen, or on the repo list when nothing is open, `RenderBand` ("New bounce", `render-list.tsx`) lists `Snapshot.renders` less the `waiting` ones, which are the app's minute of holding a file back and have no card. `RenderList` uses `role="list"` with each `RenderCardView` (`render-card.tsx`) as `role="listitem"` and draws every state from `card.state`: `proposed` (the file name wrapped, never cut, its folder via `shortenHome` in faint ink, then a 2px clickable `role="slider"` scrub bar when previewing, one line of facts: its length, "bounced 4 min after your last save" from `bouncedAfterMs`, its size; the matched set and non-distance reasons from `reasonKinds` — save-distance stays in `factsOf` and is dropped from `reasonsOf` in `render-model.ts` — and compact `Decisions`: `Add as version`, `Not a bounce`, and `Other ▾` holding `Wrong set…` / `Never watch <folder>/`), `over-limit` (same layout, `"Over your size limit"`, an inline `"Raise limit"` link navigating straight to Settings → `"bounces"` tab, and `"Add anyway"` in place of `"Add as version"` — `dit-daemon`'s `renders/driver.rs` refuses `OverLimit` until the size limit is raised), `uploading` (a `Progress` line from `progress.sent` over `total` in place of decisions), `queued-offline` ("Queued", uploads when the hub is back), and `added` (muted `text-ink-soft` `"Added as version"`). A pair of formats is one card: `namesOf` writes "science123 v4.wav and .mp3", `uploadsLine` says "uploads the .wav (48 MB)" from `uploadedFile`, and a proposed pair adds "Only the largest file under your size limit is uploaded." `NotThisSet` ("Wrong set…", `not-this-set.tsx`) is a `Popover` over `otherSets`; the app has no per-set rejection, so choosing a set is `accept_render {id, session}` and the picker says so when the folder has no other set on the hub. "Not a bounce" and "Never watch …" are `reject_render` with `not-a-bounce` / `never-here`. The list uses roving `tabIndex` (the cursor kept as an id and an index so a decided card hands focus to its neighbour): `↑/↓`, `Home`/`End` move, `Y` adds, `N` is "Not a bounce", `Space` plays or pauses, and `←/→` seek ten seconds anywhere inside the active card (`inCard`). Every decision stays reachable by `Tab`.
 
 The player (`preview-player.ts`) is the retired scanner's render preview player, ported: one
 `<audio>` for the panel, `playFrom(path, 1/3)`, `seekBy`, `release`. Its source is asynchronous: `allow_media(path)`
 first, then `convertFileSrc` through `bridge.ts`, because the asset protocol serves only what the app has allowed.
 The panel pauses on window `blur` and releases the element when the band leaves.
 
-Settings (`screens/settings.tsx`) lists what the render watcher skips under "Bounces": the built-in exclusions
-(`Settings.builtInExcluded`) as fixed text under "Never look in" beside the person's own folders, then "Files marked Not
-a bounce" (`rejectedFiles`, by the file's name and folder, or its fingerprint when the ledger no longer holds a render
-of it) and "Folders marked Never here" (`neverHereFolders`), each with a Forget button that is `forget_rejection
-{fingerprint}` or `forget_never_here {folder}`. The "Live's dit script" row reads `Snapshot.script`: `connected`,
-`installed` and `not-installed` say so and `live-not-found` says "Live wasn't found."; `script.path`, when the script
-is installed, is the "Installed at <path>" line under the row. The Permissions button is "Open System Settings".
+Settings (`screens/settings.tsx`) keeps a sticky `PanelHead` over three `@workspace/ui` line `Tabs` (`General`, `Bounces`, `Live`):
+
+- **`General`:** `InstanceStrip` (`host`, `v{Host.app_version}`, `"Devices on web"` → `/settings/devices`), `MachineNameSetting` (with a 2s transient `"Saved"` status), `AutostartSetting`, `ShortcutSetting`, and `CliSetting` (single-line `"Installed at …"`).
+- **`Bounces`:** `MaxUploadSetting` (inline `MB`), `FoldersSetting` (`watchRoots` preserved as empty `[]` in `core.rs` rather than snapping back to `[home]`, formatted via `src/settings/paths.ts` `shortenHome`, with an `emptyNotice`), `ExcludedSetting` with a collapsed `"N built-in exclusions"` disclosure (`Settings.builtInExcluded`), and a collapsed `IgnoredDisclosure` (`"Ignored bounces & folders (count)"` noting `"Not-a-bounce choices sync across devices."` and `"Manage on web"`, listing `rejectedFiles` via `humanizeFingerprint` and `neverHereFolders` with Forget buttons `forget_rejection` / `forget_never_here`).
+- **`Live`:** `ScriptSetting` (updated `not-installed` copy + `shortenHome` for `script.path` when `connected`/`installed`, `"Live wasn't found."` for `live-not-found`) and `PermissionsSetting` (`"Open System Settings"` `self-start` below full-width description).
 
 **The restore screen** (`screens/restore.tsx`). `screenOf` returns it whenever `Snapshot.pendingRestore` is set, ahead of
-navigation, an adopt offer and the open set; the sign-in and machine-name screens still come first. The title is
-"Restore '<message>' as a new branch" (or "Restore this commit as a new branch" until the hub has answered, or "Can't
-restore this commit" with `pendingRestore.problem`, which shows its line and "Close"). The branch field starts on
+navigation, an adopt offer and the open set; the sign-in and machine-name screens still come first. The heading reads
+"Restore as a new branch" (`<blockquote>` shows the commit message once loaded, `<Progress>` fills the looking-up state, or "Can't restore this commit" with `pendingRestore.problem` and "Close"). The branch field starts on
 `pendingRestore.branch`, each edit asks the app (`validate_branch_name`, latest answer wins) and shows its refusal
 under the field with "Restore and open" disabled; the panel holds no branch-name rule. `Snapshot.restore` drives the
-rest: `fetching` ("Fetching the commit…" with the object count) and `writing` ("Writing science @restore-a1b2.als…")
-hide the form, say a restore cannot be stopped once started and offer "Close", which is `cancel_restore` (the app
+rest: `fetching` and `writing` render `<Progress>` bars ("Fetching the commit…" / "Writing science @restore-a1b2.als…") and hide the form, say a restore cannot be stopped once started and offer "Close", which is `cancel_restore` (the app
 keeps going and does not open Live); `opened` is "Opened in Live" with "Done", or "Restored <file>" and the app's
 note when Live could not be opened; `failed` keeps the form with the app's reason above it. When the file was in the way
 (`failed.existing`) and the app has a free name (`failed.suggestion`, a branch name), "Use <name>" refills the field and
@@ -1898,7 +1875,7 @@ did not change does not render again). `BackfillWindow` (`window.tsx`) shows the
 chosen folder on the right, the footer). Every command goes through `actions.ts` (`callBackfill`); a refusal is the line
 at the top of the right pane (`reported.ts`), and the new view arrives as the event, never as an answer. The window
 keeps only what the app does not: which found folders are **unticked** (folders are ticked until unticked, so one that
-turns up mid-search arrives ticked), sent as the ticked paths with `backfill_check`. `model.ts` is the pure copy: the
+turns up mid-search arrives ticked), sent as the ticked paths with `backfill_check`. `find.tsx` adds a `"Filter folders"` input and `"Tick all"` / `"Untick all"` actions; `check.tsx` adds `"Apply to all folders"` and a `"Uses the matched session's track."` caption under locked track pickers; `run.tsx` adds an overall footer `<Progress>` and `"Jump to active"`; `done.tsx` ends with `"Review unmatched sessions"`. `model.ts` is the pure copy: the
 state lines ("12 of 41 sets", "3.1 of 8.4 GB"), the storage line, the readout, and the picker options and the
 `BackfillTarget` each pick means (a matched set keeps its session's track; "New session" on a matched set is a new
 session on that session's track, else on the folder's new track). The folder list (`folder-list.tsx`) is one listbox for
@@ -2095,7 +2072,7 @@ switched on", "Live's script was installed", "Screen Recording was asked") is `A
 - _The set's session_ (`core/set_hub.rs`). The set is a hub session once a push has recorded it
   (`PushedSet.session_id`, the readout's `session_id`). On an open, a commit or a push the core reads `GET
 /sessions/<id>` on a thread of its own (a request while one runs is queued, never dropped) for the cover
-  (`Snapshot.artwork`, `OpenSet.webPath` = `/project/<p>/session/<id>`) and the session's track. A session with no
+  (`Snapshot.artwork`, `OpenSet.webPath` = `/project/<p>/session/<id>`) and the session's track (`SessionBody.track: Option<TrackBody { id, title }>`, feeding `OpenSet.track` for song-first display in `SetMasthead`). A session with no
   track whose set has no commit of the user's gets `Snapshot.trackProposal`: the project's unarchived tracks
   (`GET /projects/<p>/tracks/summary`) whose titles read like the set's name or its folder's
   (`dit_daemon::backfill::propose::track_ranking`, best first, five at most) and the title of a new track, the folder's name without ` Project`. `propose_track {set,

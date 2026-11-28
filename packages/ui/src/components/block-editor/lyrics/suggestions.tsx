@@ -7,7 +7,7 @@ import {
 } from "@blocknote/react";
 import { MENU_LABEL, OVERLAY_SURFACE } from "@workspace/ui/lib/overlay";
 import { cn } from "@workspace/ui/lib/utils";
-import { use, useId, useMemo } from "react";
+import { createContext, use, useId, useMemo, useState } from "react";
 import {
   LyricsContext,
   type LyricsDictionary,
@@ -36,6 +36,7 @@ export const rhymeItems = async (
   query: string,
   signal: AbortSignal
 ): Promise<LyricsSuggestion[]> => {
+  if (!query.trim()) return [];
   const { perfect, near } = await dictionary.rhymes(query, signal);
 
   const toItem =
@@ -58,6 +59,7 @@ export const synonymItems = async (
   query: string,
   signal: AbortSignal
 ): Promise<LyricsSuggestion[]> => {
+  if (!query.trim()) return [];
   const senses = await dictionary.synonyms(query, signal);
 
   return senses.flatMap((sense) =>
@@ -113,6 +115,8 @@ const groupRows = (items: LyricsSuggestion[]): [string, MenuRow[]][] =>
     return groups;
   }, []);
 
+const SuggestionQueryEmptyContext = createContext(false);
+
 /**
  * The rhyme and synonym popup. Selection lives in the editor: BlockNote's
  * wrapper owns the arrow keys and points the caret's `aria-activedescendant`
@@ -127,6 +131,7 @@ export function LyricsSuggestionMenu({
   label,
 }: SuggestionMenuProps<LyricsSuggestion> & { label: string }) {
   const groupId = useId();
+  const queryEmpty = use(SuggestionQueryEmptyContext);
   const groups = groupRows(items);
   const loading = loadingState !== "loaded";
 
@@ -163,7 +168,7 @@ export function LyricsSuggestionMenu({
                 role="option"
                 aria-selected={index === selectedIndex}
                 className={cn(
-                  "flex min-h-7 cursor-default items-center gap-3 rounded-md px-2 py-1",
+                  "flex min-h-7 cursor-default items-center gap-3 rounded-md px-2 py-1 phone:min-h-11 coarse:min-h-11",
                   index === selectedIndex &&
                     "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)]"
                 )}
@@ -191,7 +196,11 @@ export function LyricsSuggestionMenu({
       </div>
       {items.length === 0 && (
         <p role="status" className="px-2 py-1.5 text-micro text-ink-soft">
-          {loading ? "Looking up" : "Nothing found"}
+          {loading
+            ? "Looking up"
+            : queryEmpty
+              ? "Type a word…"
+              : "Nothing found"}
         </p>
       )}
     </div>
@@ -216,6 +225,7 @@ export function LyricsSuggestionMenus({ editor }: { editor: LyricsEditor }) {
   const lyrics = use(LyricsContext);
   const dictionary = lyrics?.dictionary;
   const prefixes = lyrics?.prefixes;
+  const [queryEmpty, setQueryEmpty] = useState(false);
 
   const slashItems = useMemo(
     () => async (query: string) =>
@@ -226,23 +236,25 @@ export function LyricsSuggestionMenus({ editor }: { editor: LyricsEditor }) {
   const rhymes = useMemo(
     () =>
       dictionary &&
-      abortable((query: string, signal: AbortSignal) =>
-        rhymeItems(editor, dictionary, query, signal)
-      ),
+      abortable((query: string, signal: AbortSignal) => {
+        setQueryEmpty(!query.trim());
+        return rhymeItems(editor, dictionary, query, signal);
+      }),
     [editor, dictionary]
   );
 
   const synonyms = useMemo(
     () =>
       dictionary &&
-      abortable((query: string, signal: AbortSignal) =>
-        synonymItems(editor, dictionary, query, signal)
-      ),
+      abortable((query: string, signal: AbortSignal) => {
+        setQueryEmpty(!query.trim());
+        return synonymItems(editor, dictionary, query, signal);
+      }),
     [editor, dictionary]
   );
 
   return (
-    <>
+    <SuggestionQueryEmptyContext value={queryEmpty}>
       <SuggestionMenuController triggerCharacter="/" getItems={slashItems} />
       {rhymes && prefixes && prefixes.rhyme !== null && (
         <SuggestionMenuController
@@ -260,6 +272,6 @@ export function LyricsSuggestionMenus({ editor }: { editor: LyricsEditor }) {
           suggestionMenuComponent={SynonymMenu}
         />
       )}
-    </>
+    </SuggestionQueryEmptyContext>
   );
 }

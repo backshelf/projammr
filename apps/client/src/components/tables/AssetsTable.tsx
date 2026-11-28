@@ -222,6 +222,7 @@ export function AssetsTable({
     <DataTable
       data={assets}
       columns={columns}
+      initiallyHiddenColumns={["id"]}
       emptyText="No files uploaded yet."
       // Files are deleted by id, so the "select all N" escalation — which
       // hands back a filter instead of ids — has nothing to resolve to.

@@ -45,6 +45,7 @@ export function SelectControl({
           options={[...options]}
           value={value}
           onValueChange={onChange}
+          className="scrollbar-none max-w-full overflow-x-auto [&>button]:phone:min-h-11 [&>button]:phone:px-3.5 [&>button]:phone:text-small [&>button]:coarse:min-h-11 [&>button]:coarse:px-3.5 [&>button]:coarse:text-small"
         />
       </fieldset>
     );
@@ -59,7 +60,7 @@ export function SelectControl({
     >
       <SelectTrigger
         id={id}
-        className="w-48"
+        className="w-48 max-w-full phone:min-h-11 phone:w-full"
         aria-invalid={invalid || undefined}
         aria-describedby={describedByOf(id)}
       >

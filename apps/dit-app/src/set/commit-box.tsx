@@ -1,4 +1,5 @@
 import { useId, useState, type JSX } from "react";
+import { IconCheck } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { Kbd } from "@workspace/ui/components/kbd";
 import { Textarea } from "@workspace/ui/components/textarea";
@@ -66,12 +67,17 @@ export function CommitBox({
 
   useCommitShortcut(() => void commit());
 
+  const describedBy =
+    [firstCommit ? helpId : null, error === null ? null : errorId]
+      .filter((part): part is string => part !== null)
+      .join(" ") || undefined;
+
   return (
     <div className="flex flex-col gap-3">
       <Textarea
         ref={focusTarget}
         aria-label="Commit message"
-        aria-describedby={`${helpId}${error === null ? "" : ` ${errorId}`}`}
+        aria-describedby={describedBy}
         aria-invalid={error !== null || undefined}
         rows={2}
         value={box.text}
@@ -81,26 +87,32 @@ export function CommitBox({
       />
       {clauses.length > 0 && (
         <ul aria-label="Suggested message" className="flex flex-wrap gap-1.5">
-          {clauses.map((clause) => (
-            <li key={clause.text} className="max-w-full">
-              <TogglePill
-                pressed={isOn(box, clause)}
-                onPressedChange={() => change(toggled(box, clauses, clause))}
-                className="min-h-7 max-w-full text-left data-pressed:bg-transparent data-pressed:text-art"
-              >
-                {clause.text}
-              </TogglePill>
-            </li>
-          ))}
+          {clauses.map((clause) => {
+            const pressed = isOn(box, clause);
+            return (
+              <li key={clause.text} className="max-w-full">
+                <TogglePill
+                  pressed={pressed}
+                  onPressedChange={() => change(toggled(box, clauses, clause))}
+                  className="min-h-7 max-w-full text-left data-pressed:bg-art/12 data-pressed:text-art"
+                >
+                  {pressed && <IconCheck aria-hidden className="size-3.5" />}
+                  {clause.text}
+                </TogglePill>
+              </li>
+            );
+          })}
         </ul>
       )}
       <ErrorLine error={error} id={errorId} />
-      <p id={helpId} className="text-small text-pretty text-ink-soft">
-        A commit names the set as it is now, so you can find it later.
-      </p>
+      {firstCommit && (
+        <p id={helpId} className="text-small text-pretty text-ink-soft">
+          A commit names the set as it is now, so you can find it later.
+        </p>
+      )}
       <div className="flex justify-end">
         <Button size="lg" disabled={pending} onClick={() => void commit()}>
-          Commit
+          {pending ? "Committing\u2026" : "Commit"}
           <Kbd variant="bare" className="text-inherit opacity-70">
             {"\u2318\u21a9"}
           </Kbd>

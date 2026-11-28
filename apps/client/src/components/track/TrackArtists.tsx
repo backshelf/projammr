@@ -11,17 +11,21 @@ import { useMutate } from "@/hooks/use-mutate";
 import { useProject } from "@/hooks/use-project-role";
 import { withFilters } from "@/lib/table-params";
 import { hrefFromParsedRoute } from "@/lib/utils";
-import { IconPencil, IconPlus, IconX } from "@tabler/icons-react";
+import { IconPencil, IconX } from "@tabler/icons-react";
 import type { ActionError } from "@workspace/api/api";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { IconButton } from "@workspace/ui/components/icon-button";
-import { Input } from "@workspace/ui/components/input";
 import { Loading } from "@workspace/ui/components/layout/loading";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@workspace/ui/components/popover";
+  ResponsivePicker,
+  ResponsivePickerContent,
+  ResponsivePickerCreate,
+  ResponsivePickerEmpty,
+  ResponsivePickerItem,
+  ResponsivePickerList,
+  ResponsivePickerSearch,
+  ResponsivePickerTrigger,
+} from "@workspace/ui/components/responsive-picker";
 import { Separator } from "@workspace/ui/components/separator";
 import { REVEAL_ON_HOVER } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
@@ -31,9 +35,6 @@ import { toast } from "sonner";
 type Vocabulary = Promise<string[] | ActionError>;
 
 const NO_ARTISTS: string[] = [];
-
-const OPTION =
-  "flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-small hover:bg-ink/4 disabled:opacity-50";
 
 /**
  * A track's credited artists in the masthead byline, each linking to the
@@ -79,7 +80,7 @@ export function TrackArtists({
           <AppLink
             href={withFilters(tracksHref, { artist })}
             className={
-              "rounded-sm underline-offset-2 motion-ink hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-none coarse:inline-flex coarse:min-h-11 coarse:items-center"
+              "rounded-sm underline-offset-2 motion-ink hover:text-ink hover:underline focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden coarse:inline-flex coarse:min-h-11 coarse:items-center"
             }
           >
             {artist}
@@ -110,8 +111,8 @@ function ArtistPicker({
   onChange: (next: string[]) => void;
 }) {
   return (
-    <Popover>
-      <PopoverTrigger asChild>
+    <ResponsivePicker closeOnSelect={false}>
+      <ResponsivePickerTrigger asChild>
         {credited.length > 0 ? (
           <IconButton
             aria-label={"Edit artists"}
@@ -127,14 +128,18 @@ function ArtistPicker({
           <button
             type={"button"}
             className={
-              "rounded-sm text-ink-faint italic motion-ink hover:text-ink-soft focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-none coarse:min-h-11"
+              "rounded-sm text-ink-faint italic motion-ink hover:text-ink-soft focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden coarse:min-h-11"
             }
           >
             Add artists
           </button>
         )}
-      </PopoverTrigger>
-      <PopoverContent align={"start"} className={"w-64 p-2"}>
+      </ResponsivePickerTrigger>
+      <ResponsivePickerContent
+        title="Artists"
+        align={"start"}
+        desktopClassName={"w-64 p-2"}
+      >
         <Loading>
           <ArtistPickerBody
             vocabulary={vocabulary}
@@ -143,8 +148,8 @@ function ArtistPicker({
             onChange={onChange}
           />
         </Loading>
-      </PopoverContent>
-    </Popover>
+      </ResponsivePickerContent>
+    </ResponsivePicker>
   );
 }
 
@@ -180,7 +185,7 @@ function ArtistPickerBody({
               <li
                 key={key}
                 className={
-                  "flex items-center gap-2 rounded px-1.5 py-0.5 text-small"
+                  "flex items-center gap-2 rounded px-1.5 py-0.5 text-small coarse:min-h-11 coarse:text-body"
                 }
               >
                 <span className={"min-w-0 flex-1 truncate"}>{artist}</span>
@@ -190,17 +195,19 @@ function ArtistPickerBody({
                   onClick={() =>
                     onChange(credited.filter((_, i) => i !== index))
                   }
-                  className={"size-5 [&_svg]:size-3.5"}
+                  className={
+                    "size-6 coarse:size-11 coarse:after:inset-0 [&_svg]:size-3.5"
+                  }
                 >
                   <IconX />
                 </IconButton>
               </li>
             ))}
           </ul>
-          <Separator className={"my-2"} />
+          <Separator className={"my-1"} />
         </>
       )}
-      <Input
+      <ResponsivePickerSearch
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
@@ -210,38 +217,32 @@ function ArtistPickerBody({
         }}
         placeholder={"Filter or add artist…"}
         aria-label={"Filter or add artist"}
-        className={"mb-2 h-7 text-small"}
-        autoFocus
+        className={"h-7"}
       />
-      <div className={"max-h-56 space-y-0.5 overflow-y-auto"}>
+      <ResponsivePickerList className={"max-h-56"}>
         {matches.map((artist) => (
-          <button
+          <ResponsivePickerItem
             key={artist}
-            type={"button"}
             disabled={disabled}
-            onClick={() => add(artist)}
-            className={OPTION}
+            onSelect={() => add(artist)}
           >
-            <span className={"truncate"}>{artist}</span>
-          </button>
+            {artist}
+          </ResponsivePickerItem>
         ))}
         {create && (
-          <button
-            type={"button"}
+          <ResponsivePickerCreate
             disabled={disabled}
-            onClick={() => add(create)}
-            className={OPTION}
+            onSelect={() => add(create)}
           >
-            <IconPlus size={14} />
             Add “{create}”
-          </button>
+          </ResponsivePickerCreate>
         )}
         {matches.length === 0 && !create && (
-          <p className={"px-1.5 py-1 text-small text-ink-soft"}>
+          <ResponsivePickerEmpty>
             {draft.trim() ? "Already credited." : "No other artists yet."}
-          </p>
+          </ResponsivePickerEmpty>
         )}
-      </div>
+      </ResponsivePickerList>
     </>
   );
 }

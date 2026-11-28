@@ -50,7 +50,6 @@ export function idColumn<T extends { id: number }>(helper: Helper<T>) {
   return helper.accessor((row) => row.id, {
     id: "id",
     header: "ID",
-    enableHiding: false,
     size: 72,
     minSize: 72,
     maxSize: 72,
@@ -94,8 +93,7 @@ export function titleColumn<T extends RowData>(
     id: config.id,
     header: config.header,
     enableHiding: false,
-    // The identity column carries a thumb and a link; it should give way
-    // last when the grid's other columns compete for width, not first.
+    size: 280,
     minSize: 160,
     cell: (info) => (
       <TitleCell row={info.row.original} config={config}>
@@ -156,8 +154,11 @@ export function priorityColumn<T extends { priority: PriorityLevel }>(
   return helper.accessor((row) => row.priority.name, {
     id: "priority",
     header: "Priority",
+    size: 96,
     sortFn: (a, b) => a.original.priority.rank - b.original.priority.rank,
-    cell: (info) => <PriorityBadge level={info.row.original.priority} />,
+    cell: (info) => (
+      <PriorityBadge level={info.row.original.priority} hideDefault />
+    ),
   });
 }
 

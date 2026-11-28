@@ -7,7 +7,7 @@
  */
 import type { PaletteColour } from "@/lib/cover-palette";
 
-const ANALYSER_FFT_SIZE = 256; // 128 bins; reduced to BANDS.length bands
+const ANALYSER_FFT_SIZE = 512; // 256 bins; reduced to BANDS.length bands
 /**
  * The byte range spans the whole usable dynamic range rather than the default
  * −100…−30 dB. Loud mixes sit well above −30 dBFS in the low bins, and against
@@ -34,17 +34,16 @@ export function configureAnalyser(analyser: AnalyserNode): void {
 }
 
 /**
- * Bin ranges [from, to) per blob, against `ANALYSER_FFT_SIZE` 256's ~172 Hz-wide
- * bins (44.1 kHz / 256). Bin 0 carries 0–172 Hz, so sub starts there rather
- * than at bin 1 — starting at 1 was silently dropping the bottom of the sub
- * range.
+ * Bin ranges [from, to) per blob, against `ANALYSER_FFT_SIZE` 512's ~86 Hz-wide
+ * bins (44.1 kHz / 512). Bin 0 carries 0–86 Hz, so sub starts there rather
+ * than at bin 1.
  */
 export const BANDS: readonly [number, number][] = [
-  [0, 1], // 0–172 Hz: sub
-  [1, 3], // 172–517 Hz: low mids
-  [3, 12], // 517 Hz–2.07 kHz: mids
-  [12, 35], // 2.07–6.03 kHz: high mids
-  [35, 128], // 6.03 kHz and up: treble
+  [0, 2], // 0–172 Hz: sub
+  [2, 6], // 172–517 Hz: low mids
+  [6, 24], // 517 Hz–2.07 kHz: mids
+  [24, 70], // 2.07–6.03 kHz: high mids
+  [70, 256], // 6.03 kHz and up: treble
 ];
 
 /**
@@ -120,8 +119,19 @@ const ATTACK = 0.5; // fraction of the gap the display energy closes per frame g
 const RELEASE = 0.15; // going down — a hit's glow lingers ~15 frames
 const FADE = 0.025; // release while paused: the field takes ~2 s to settle
 const IDLE_RATE = 0.00025; // radians per ms: one lap of the orbit ≈ 25 s
+const REF_FRAME_MS = 1000 / 60;
+const MAX_DT_MS = 100;
 
 const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
+
+function frameScale(dt: number): number {
+  if (!Number.isFinite(dt) || dt <= 0) return 0;
+  return Math.min(dt, MAX_DT_MS) / REF_FRAME_MS;
+}
+
+function stepEnvelope(ratePerFrame: number, scale: number): number {
+  return scale <= 0 ? 0 : 1 - Math.pow(1 - ratePerFrame, scale);
+}
 
 function layoutBlob(b: Blob, t: number): void {
   const ang = t * IDLE_RATE + b.phase;
@@ -140,9 +150,9 @@ function layoutBlob(b: Blob, t: number): void {
  * chorus that is already loud, which a single normalised level cannot do —
  * once a section pins it near the ceiling there is nowhere left to go.
  *
- * `dt` is unused in the position maths because time `t` is absolute; it stays
- * a parameter so a tab that was throttled does not jump — the envelopes are
- * per-frame, which is acceptable since rAF is paused in hidden tabs anyway.
+ * `dt` scales every envelope step and peak decay relative to a 60 Hz frame
+ * (clamped at 100 ms so a throttled tab never jumps), keeping physical motion
+ * identical across 60 Hz and high-refresh displays.
  */
 export function stepBlobs(
   blobs: Blob[],
@@ -150,17 +160,24 @@ export function stepBlobs(
   t: number,
   dt: number
 ): void {
-  void dt;
+  const scale = frameScale(dt);
+  const fastAttack = stepEnvelope(FAST_ATTACK, scale);
+  const fastRelease = stepEnvelope(FAST_RELEASE, scale);
+  const slowRate = stepEnvelope(SLOW_RATE, scale);
+  const peakDecay = PEAK_DECAY * scale;
+  const attack = stepEnvelope(ATTACK, scale);
+  const release = stepEnvelope(RELEASE, scale);
+
   blobs.forEach((b, i) => {
     const raw = levels[i] ?? 0;
-    b.fast += (raw - b.fast) * (raw > b.fast ? FAST_ATTACK : FAST_RELEASE);
-    b.slow += (b.fast - b.slow) * SLOW_RATE;
-    b.peak = Math.max(b.fast, b.peak - PEAK_DECAY, PEAK_FLOOR);
+    b.fast += (raw - b.fast) * (raw > b.fast ? fastAttack : fastRelease);
+    b.slow += (b.fast - b.slow) * slowRate;
+    b.peak = Math.max(b.fast, b.peak - peakDecay, PEAK_FLOOR);
 
     const base = clamp01((b.slow - (b.peak - BASE_RANGE)) / BASE_RANGE);
     const accent = clamp01((b.fast - b.slow) / ACCENT_RANGE);
     const target = base * BASE_WEIGHT + accent * ACCENT_WEIGHT;
-    b.env += (target - b.env) * (target > b.env ? ATTACK : RELEASE);
+    b.env += (target - b.env) * (target > b.env ? attack : release);
 
     layoutBlob(b, t);
   });
@@ -172,12 +189,17 @@ export function stepBlobs(
  * colour dimming rather than the picture being swapped. Returns true once
  * every blob has settled and the caller can stop drawing.
  */
-export function fadeBlobs(blobs: Blob[], t: number): boolean {
+export function fadeBlobs(
+  blobs: Blob[],
+  t: number,
+  dt: number = REF_FRAME_MS
+): boolean {
+  const fade = stepEnvelope(FADE, frameScale(dt));
   let settled = true;
   for (const b of blobs) {
     b.fast = 0;
     b.slow = 0;
-    b.env -= b.env * FADE;
+    b.env -= b.env * fade;
     if (b.env < 0.005) b.env = 0;
     else settled = false;
     layoutBlob(b, t);

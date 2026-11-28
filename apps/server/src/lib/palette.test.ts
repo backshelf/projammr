@@ -24,7 +24,7 @@ describe("extractPalette", () => {
       expect(p.accentHue).not.toBeNull();
       expect(Math.abs(p.accentHue! - hue)).toBeLessThan(1.5);
       expect(p.accentChroma).toBeGreaterThan(0.04);
-      expect(p.light).toMatch(/^oklch\(0\.55 0\.\d+ \d/);
+      expect(p.light).toMatch(/^oklch\(0\.50 0\.\d+ \d/);
       expect(p.dark).toMatch(/^oklch\(0\.78 /);
       expect(p.glowLight).toMatch(/^oklch\(0\.72 /);
       expect(p.glowDark).toMatch(/^oklch\(0\.45 /);

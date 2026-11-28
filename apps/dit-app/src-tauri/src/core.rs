@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
@@ -98,7 +98,7 @@ pub struct Core {
     /// Held for each read-modify-write of the user config, so two commands never lose each other's change.
     config: Mutex<()>,
     /// The address that finishes the sign-in in flight; empty until the instance has issued its code.
-    login: Mutex<Option<String>>,
+    login: LoginFlight,
     serving: Mutex<Option<Serving>>,
     /// What the machine says of the settings the config does not hold.
     host: Mutex<Host>,
@@ -122,6 +122,52 @@ pub struct Core {
     pub backfill: Arc<crate::backfill::Backfill>,
 }
 
+/// Tracks the active device-grant sign-in attempt by generation so cancelling invalidates any stale thread.
+#[derive(Default)]
+struct LoginFlight {
+    generation: AtomicU64,
+    uri: Mutex<Option<String>>,
+}
+
+impl LoginFlight {
+    fn start_or_uri(&self) -> Result<u64, Option<String>> {
+        let mut waiting = lock(&self.uri);
+        if let Some(uri) = &*waiting {
+            return Err((!uri.is_empty()).then(|| uri.clone()));
+        }
+        let attempt = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        *waiting = Some(String::new());
+        Ok(attempt)
+    }
+
+    fn is_current(&self, attempt: u64) -> bool {
+        self.generation.load(Ordering::SeqCst) == attempt
+    }
+
+    fn set_uri(&self, attempt: u64, uri: String) -> bool {
+        let mut waiting = lock(&self.uri);
+        if !self.is_current(attempt) {
+            return false;
+        }
+        *waiting = Some(uri);
+        true
+    }
+
+    fn finish(&self, attempt: u64) -> bool {
+        let mut waiting = lock(&self.uri);
+        if !self.is_current(attempt) {
+            return false;
+        }
+        *waiting = None;
+        true
+    }
+
+    fn cancel(&self) {
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        *lock(&self.uri) = None;
+    }
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
@@ -141,19 +187,19 @@ pub struct Host {
     /// What the producer turned down, from the render ledger.
     pub rejected_files: Vec<crate::snapshot::RememberedFile>,
     pub never_here_folders: Vec<String>,
+    /// The running app version.
+    pub app_version: String,
 }
 
-/// The settings the config holds, with what an empty list of watch roots means, and what `host` says.
+/// The settings the config holds, along with host facts and home path.
+/// Empty `watch_roots` means watching the whole home folder; we preserve `[]` instead of substituting `home`
+/// so clearing explicit roots never snaps back to `[home]`.
 pub fn settings_of(config: &UserConfig, home: &Path, host: &Host) -> Settings {
     Settings {
         shortcut: config.shortcut.clone(),
         shortcut_error: host.shortcut_error.clone(),
         max_upload_mb: config.max_upload_mb.unwrap_or(0),
-        watch_roots: if config.watch_roots.is_empty() {
-            vec![home.display().to_string()]
-        } else {
-            config.watch_roots.clone()
-        },
+        watch_roots: config.watch_roots.clone(),
         excluded: config.excluded.clone(),
         autostart: host.autostart,
         machine_name: config.machine(),
@@ -161,6 +207,12 @@ pub fn settings_of(config: &UserConfig, home: &Path, host: &Host) -> Settings {
         built_in_excluded: host.built_in_excluded.clone(),
         rejected_files: host.rejected_files.clone(),
         never_here_folders: host.never_here_folders.clone(),
+        home: home.display().to_string(),
+        app_version: if host.app_version.is_empty() {
+            env!("CARGO_PKG_VERSION").to_string()
+        } else {
+            host.app_version.clone()
+        },
     }
 }
 
@@ -191,10 +243,12 @@ impl Core {
         });
         let (rejected_files, never_here_folders) =
             crate::renders::remembered(&Ledger::beside(&paths.config));
+        let app_version = app.package_info().version.to_string();
         let host = Host {
             built_in_excluded: crate::renders::built_in_excluded(&registry),
             rejected_files,
             never_here_folders,
+            app_version: app_version.clone(),
             ..Host::default()
         };
         let mut snapshot = Snapshot::empty(settings_of(&config, &home, &host));
@@ -205,7 +259,7 @@ impl Core {
             let backfill = Core::backfill_for(weak, &paths, &registry);
             Core {
                 remote: AppRemote::for_app(paths.config.clone(), paths.dev),
-                app_version: app.package_info().version.to_string(),
+                app_version,
                 reducer: Mutex::new(Reducer::new(
                     snapshot,
                     Arc::new(RepoReadout::new(registry.clone())),
@@ -218,7 +272,7 @@ impl Core {
                 live: Mutex::default(),
                 reading_set: Mutex::default(),
                 config: Mutex::default(),
-                login: Mutex::default(),
+                login: LoginFlight::default(),
                 serving: Mutex::default(),
                 host: Mutex::new(host),
                 links: Waiting::default(),
@@ -604,16 +658,15 @@ impl Core {
             .map(Instance::parse)
             .transpose()
             .map_err(|e| e.to_string())?;
-        {
-            let mut waiting = lock(&self.login);
-            if let Some(uri) = &*waiting {
-                if !uri.is_empty() {
-                    open_url(uri)?;
+        let attempt = match self.login.start_or_uri() {
+            Ok(attempt) => attempt,
+            Err(uri) => {
+                if let Some(uri) = uri {
+                    open_url(&uri)?;
                 }
                 return Ok(());
             }
-            *waiting = Some(String::new());
-        }
+        };
         let shown = instance
             .map(|instance| instance.url().to_string())
             .or_else(|| self.snapshot().auth.host);
@@ -627,8 +680,10 @@ impl Core {
         });
         let core = self.clone();
         thread::spawn(move || {
-            let result = core.log_in(host.as_deref());
-            *lock(&core.login) = None;
+            let result = core.log_in(host.as_deref(), attempt);
+            if !core.login.finish(attempt) {
+                return;
+            }
             match result {
                 Ok(()) => core.reconcile(),
                 Err(error) => core.login_failed(&error),
@@ -637,27 +692,49 @@ impl Core {
         Ok(())
     }
 
-    fn log_in(&self, host: Option<&str>) -> Result<(), RemoteError> {
+    /// Cancels an in-flight device-grant sign-in immediately, returning the panel to `SignedOut` and ignoring any
+    /// later outcome from the superseded polling thread.
+    pub fn cancel_sign_in(&self) {
+        self.login.cancel();
+        let host = self.snapshot().auth.host;
+        self.with_reducer(|reducer| {
+            reducer.set_auth(Auth {
+                state: AuthState::SignedOut,
+                host,
+                pending: None,
+            });
+            reducer.clear_notices();
+        });
+    }
+
+    fn log_in(&self, host: Option<&str>, attempt: u64) -> Result<(), RemoteError> {
         let tokens = self.remote.tokens()?;
         remote::login(
             &self.paths.config,
             tokens.as_ref(),
             &remote::SystemClock,
             host,
-            |code| self.show_code(code),
+            |code| self.show_code(code, attempt),
             |error| {
-                self.with_reducer(|reducer| {
-                    reducer.notice(format!(
-                        "The previous session may still be open on the instance: {error}"
-                    ));
-                });
+                if self.login.is_current(attempt) {
+                    self.with_reducer(|reducer| {
+                        reducer.notice(format!(
+                            "The previous session may still be open on the instance: {error}"
+                        ));
+                    });
+                }
             },
         )
         .map(|_| ())
     }
 
-    fn show_code(&self, code: &DeviceCode) {
-        *lock(&self.login) = Some(code.verification_uri_complete.clone());
+    fn show_code(&self, code: &DeviceCode, attempt: u64) {
+        if !self
+            .login
+            .set_uri(attempt, code.verification_uri_complete.clone())
+        {
+            return;
+        }
         self.with_reducer(|reducer| {
             let host = reducer.snapshot().auth.host.clone();
             reducer.set_auth(Auth {
@@ -759,11 +836,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_home_folder_is_the_watch_root_until_roots_are_chosen() {
+    fn watch_roots_stay_empty_until_explicit_roots_are_chosen_and_home_is_kept() {
         let home = Path::new("/Users/me");
         let host = Host::default();
         let mut config = UserConfig::default();
-        assert_eq!(settings_of(&config, home, &host).watch_roots, ["/Users/me"]);
+        let defaults = settings_of(&config, home, &host);
+        assert!(defaults.watch_roots.is_empty());
+        assert_eq!(defaults.home, "/Users/me");
+        assert_eq!(defaults.app_version, env!("CARGO_PKG_VERSION"));
 
         config.watch_roots = vec!["/Volumes/Music".to_string()];
         config.excluded = vec!["/Volumes/Music/old".to_string()];
@@ -955,5 +1035,26 @@ mod tests {
             join_url(origin, Some("sessions/4")),
             "https://projammr.example/sessions/4"
         );
+    }
+
+    #[test]
+    fn cancelling_sign_in_invalidates_stale_attempts() {
+        let flight = LoginFlight::default();
+        let first = flight.start_or_uri().unwrap();
+        assert!(flight.set_uri(first, "https://example.com/device".to_string()));
+        assert_eq!(
+            flight.start_or_uri(),
+            Err(Some("https://example.com/device".to_string()))
+        );
+
+        flight.cancel();
+        assert!(!flight.is_current(first));
+        assert!(!flight.set_uri(first, "https://example.com/stale".to_string()));
+        assert!(!flight.finish(first));
+
+        let second = flight.start_or_uri().unwrap();
+        assert_ne!(second, first);
+        assert!(flight.is_current(second));
+        assert!(flight.finish(second));
     }
 }

@@ -116,13 +116,12 @@ export function ShareRoomProvider({
   const select = useCallback(
     (next: number) => {
       setPicked(next);
-      if (loaded)
-        playNow(
-          entries.map((candidate) => candidate.playable),
-          next
-        );
+      playNow(
+        entries.map((candidate) => candidate.playable),
+        next
+      );
     },
-    [loaded, playNow, entries]
+    [playNow, entries]
   );
 
   const start = useCallback(

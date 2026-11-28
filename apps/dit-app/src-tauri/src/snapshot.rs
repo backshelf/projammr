@@ -68,6 +68,13 @@ impl From<dit_core::Signal> for Signal {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct OpenTrack {
+    pub id: i64,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OpenSet {
     pub path: String,
     pub name: String,
@@ -76,6 +83,8 @@ pub struct OpenSet {
     pub signal: Signal,
     /// The set's page on the instance, for `open_web`; `None` until a push has made the set a session there.
     pub web_path: Option<String>,
+    /// The track the set's hub session is linked to, when assigned.
+    pub track: Option<OpenTrack>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -276,6 +285,10 @@ pub struct Settings {
     pub rejected_files: Vec<RememberedFile>,
     /// The folders marked "Never here", each removable.
     pub never_here_folders: Vec<String>,
+    /// The user's home folder, for `~/` shortening and naming the default watch scope.
+    pub home: String,
+    /// The running app version.
+    pub app_version: String,
 }
 
 /// A set of the hub the render could be a version of instead: the session it is on the hub and the set's name.

@@ -1,6 +1,6 @@
 # Reference: Shared packages (`packages/*`)
 
-_Updated 2026-11-27._
+_Updated 2026-11-28._
 
 ## packages/ui (`@workspace/ui`)
 
@@ -83,15 +83,11 @@ Test devDeps:
 
 ### `cn()` — not a plain tailwind-merge wrap
 
-`src/lib/utils.ts` calls `extendTailwindMerge` with a custom `font-size` class group covering the type
-scale (`text-micro…text-display`). Without that registration tailwind-merge treats any unrecognised
-`text-*` as a _colour_ utility, so `text-small text-ink` looks like two colours to it and drops the size —
-an element silently falls back to its inherited font size. Any new type-scale step must be added to this
-list or the same bug reappears.
+`src/lib/utils.ts` calls `extendTailwindMerge` with custom `font-size` (`text-micro`…`text-display`, including `text-subtitle`) and `shadow` (`shadow-overlay`, `shadow-menu`, `shadow-float`) class groups. Without that registration tailwind-merge treats any unrecognised `text-*` or `shadow-*` as a _colour_ utility, so `text-small text-ink` looks like two colours to it and drops the size — an element silently falls back to its inherited font size. Any new type-scale step or shadow token must be added to this list or the same bug reappears.
 
 ### Components (`src/components/`)
 
-shadcn set (mostly stock, `data-slot="..."`, CVA variants, `cn()`): alert-dialog, avatar,
+shadcn set (mostly stock, `data-slot="..."`, CVA variants, `cn()`, with `coarse:min-h-11 coarse:text-base` touch sizing on `input`, `select`, `combobox`, `tabs` (`TabsList` `coarse:h-auto`), and `slider` (`bg-paper` thumb + `coarse:after:-inset-4`)): alert-dialog, avatar,
 badge, breadcrumb, button, card, chart, checkbox (native input tinted `--art`; the table select column and
 checkbox cells use it), collapsible, combobox, command, context-menu, dialog,
 dropdown-menu, empty, field, input-group, input, item, label, popover, progress (used by `apps/dit-app` render cards and backfill window), select,
@@ -108,7 +104,7 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
   (a state dot elsewhere).
 - **`table.tsx`** — `Table variant="entity"` (the `entityTable` class set: sticky Departure-caps `th`,
   hairline rows, flat 4% ink-over-paper hover, dead below the layout breakpoint via horizontal scroll
-  rather than reflow), `TableScroll`, `PinnedCell`/`PinnedHead`/`PINNED_CELL` (`data-slot="pinned"`),
+  rather than reflow), `TableScroll` (`tabIndex={0}`, `role="region"`, `aria-label="Scrollable table"` when no `aria-labelledby`, focus ring for keyboard horizontal scrolling), `PinnedCell`/`PinnedHead`/`PINNED_CELL` (`data-slot="pinned"`),
   `TrackCell` (thumb + title, `size="sm"|"lg"|"xl"` — `xl` is the 44px phone row-card thumb; `wrapThumb` wraps the
   thumb alone, which the client uses to name it for a view transition),
   `RowPlay`/`rowPlay` (hover/focus-revealed, `fine:`-gated so a coarse pointer keeps it visible),
@@ -156,8 +152,8 @@ Projammr-specific components (see `DESIGN.md` for the language they implement):
     `WaveMarks({ marks, duration, onMarkerClick? })` (`CommentMark = { id, positionMs, author?,
 excerpt?, resolved?, resolvedBy? }` pins with a drop-line and a `FloatingNote` on hover/focus; each pin is
     one `<button>` on the `MARK` class constant holding an `<i>` dot and a `<span>` drop-line, so a pin has no
-    per-mark style. A `resolved` mark sets `data-resolved` on its button: the dot goes `--ink-faint`, the
-    drop-line retracts to `scale-y-0` from its top edge on `--ease-leave` (`transform`, never `height`), the
+    per-mark style, and `clusterMarks` (`CLUSTER_THRESHOLD_FRACTION = 0.025`, `CLUSTER_MARK`, `ClusterNote`) collapses pins within 2.5% width into count badges. A `resolved` mark sets `data-resolved` on its button: the dot goes `--ink-faint`, the
+    drop-line shortens into a faint 8px hairline stem rather than retracting completely, the
     `aria-label` reads `Resolved comment …`, and the note ends `Resolved · <resolvedBy>` (or `Resolved`); it
     still seeks. Each child carries one transition list: the dot `motion-press` (colour survives reduced
     motion), the drop-line `motion-move` (snaps under it)). `Waveform({ peaks,
@@ -210,10 +206,10 @@ asOf, onReveal, onCompare, onClear })` (client, router-free) draws the session's
     times by; a static page passes `timeZone` instead (the defaults in that zone, the runtime's own when
     absent), so it renders the same HTML on any build machine. The data they draw comes from
     `@workspace/session-diff`.
+- **`responsive-picker.tsx`** — `ResponsivePicker` (+ `ResponsivePickerTrigger`, `ResponsivePickerContent`, `ResponsivePickerSearch`, `ResponsivePickerList`, `ResponsivePickerItem`, `ResponsivePickerCreate`, `ResponsivePickerEmpty`, `ResponsivePickerClear`): adaptive picker rendering a swipeable bottom `Sheet` (`max-h-[85dvh]`, `min-h-11` hairline items, `text-base` search not auto-focused on mobile) below `MOBILE_BREAKPOINT` (`768px`) and a `Popover` (`w-64`, `max-h-[min(24rem,70dvh)]`) above; supports keyboard `ArrowUp`/`ArrowDown`/`Home`/`End` listbox navigation, `createLabel`/`onCreate`, and `clearLabel`/`onClear`.
 - **`block-editor/`** — see the dedicated section below.
 - **`forms/`** — `form-controller.tsx` (`FormController<T>`, `FormControllerType = "title" | "input" |
-"select" | "blocknote"`, a `trailing` prop that switches the default case to an
-  `InputGroup` for an inline remove/action button), `auth-card.tsx` (`AuthCard` — tabs
+"select" | "blocknote"`, `"title"` uses `font-heading text-title/[1.05] text-ink` + mono `text-lead` placeholder, a `trailing` prop switches the default case to an `InputGroup` for an inline remove/action button), `auth-card.tsx` (`AuthCard` — tabs
   composed from children: `AuthCard.Guest`, `AuthCard.SignIn` (`recovery?`, `defaultEmail?`, `lockEmail?`) and
   `AuthCard.Register` (`defaultEmail?`, `lockEmail?`) are the only legal children, recognised by component
   identity; anything else, or no child at all, throws. Children order is tab order and the first is selected;
@@ -289,7 +285,7 @@ transition={SPRING.control}`, whose `reducedMotion` follows `data-motion` on `<h
   threaded through the server components between them; it carries `data-arrival="load"|"nav"` until its own
   and every propagated child animation has completed, which is what scopes the status pie sweep in
   `globals.css` to a first load. `useArrivalKind()` returns `"load"` when the mount's first client render
-  was the hydration pass and `"nav"` when it mounted after (pure `arrivalKind(hydratedAtMount)` beside it).
+  was the hydration pass and `"nav"` when it mounted after (pure `arrivalKind(hydratedAtMount)` beside it). `ArrivalRoot` tracks `useReducedMotion()`, `<Activity>` hide/reveal via `hiddenAtRef`, and a duration-bounded fallback timer (`1200ms` load / `350ms` nav) transitioning to `settled` so children never stall at `opacity: 0`.
   `ARRIVAL` is the spec — one `{ delay, dur, motion: "bloom" | "rise" | "fade" }` per part (art, wash,
   crumbs, eyebrow, title, byline, audio, rail) — and `useArrival(part)` returns the `{ initial, variants }`
   a part spreads onto its `m.*` element: the load plays the stagger, a navigation crossfades over
@@ -393,7 +389,7 @@ transition={SPRING.control}`, whose `reducedMotion` follows `data-motion` on `<h
   `md:contents` above it; uses the `hidden` _class_, not the `hidden` _attribute_, because Tailwind
   preflight's `[hidden]{display:none!important}` beats any utility), `rows.tsx` (`Rows`/`Row`/`RowMain`/
   `RowTitle`/`RowMeta`/`RowNum` — polymorphic `as` prop, hairline-divided list rows), `collapsible-section.tsx`
-  (`CollapsibleSection`, `keepMounted` prop for content holding state a remount would lose, `prominence`; the
+  (`CollapsibleSection` wraps `<CollapsibleTrigger>` in `<h2>`, `keepMounted` prop for content holding state a remount would lose, `prominence`; the
   head drops its bottom margin while folded), `empty-section.tsx` (`"use client"`; the fold mechanism.
   `SectionFold` is a page-scoped provider rendering no element; it holds a small external store read with
   `useSyncExternalStore`, so a section joining or leaving re-renders only `AddLine`, not the page.
@@ -438,8 +434,8 @@ initial={false}` so a dropped entry leaves with `OPTICAL.leaving`; nothing when 
   `sectionTitle(prominence)`, `SectionCount`).
 - `lib/overlay.ts` (no `"use client"`: client components import its plain constants, and the directive
   would turn them into client references for a server importer) — `OVERLAY_SURFACE`, `OVERLAY_TITLE`,
-  `OVERLAY_DESC`, `MENU_LABEL` class strings for one dialog/popover/menu treatment; `BACKDROP` (modal scrim,
-  static blur, unselectable) and `POPUP` (centred modal panel; centring is Tailwind's `translate`
+  `OVERLAY_DESC`, `MENU_LABEL` class strings for one dialog/popover/menu treatment (`alert-dialog.tsx` uses `OVERLAY_TITLE` / `OVERLAY_DESC`); `BACKDROP` (modal scrim,
+  static blur, unselectable) and `POPUP` (centred modal panel with `max-h-[85dvh] overflow-y-auto overscroll-contain`; centring is Tailwind's `translate`
   property, which composes with the `transform` Motion writes, so a consumer's `translate-y-0` /
   `top-*` override still works); `ENTRANCE` (`pop` = `SURFACE`, `sheet` = rise from 24px below);
   `composeRender(props)` turns `asChild` + a single child into Base UI's `render` prop, so wrappers keep
@@ -509,9 +505,9 @@ entrance, reducedMotion)`: slide on `SPRING.drawer`, leave on `LEAVE.settle`, a 
   `dismissOnOutside` (default `true`), `swipe` (default `true`; `false` sets `data-base-ui-swipe-ignore` on
   the Popup), `entrance: "slide" | "fade"`, `modalScope` (default `true`: the sheet pushes the client's modal
   command scope while open through `lib/modal-scope.tsx`, silencing the page's keys as a dialog does; `false`
-  for a sheet beside content still in use, the peek panel), `ref` (the Popup). `SheetOverlay`/`SheetContent` are
+  for a sheet beside content still in use, the peek panel), `ref` (the Popup). `SheetOverlay` and `SheetHandle` (exported drag grabber) are
   `select-none [-webkit-touch-callout:none]` (a long-press opening a sheet must not let WebKit's selection
-  recognizer anchor to the page behind the scrim); `DialogContent` stays selectable because it hosts inputs.
+  recognizer anchor to the page behind the scrim); `SheetContent`'s `PANEL` and `DialogContent` stay selectable.
 - **item.tsx**: shadcn primitive.
 - **chart.tsx**: `ChartConfig = Record<string, {label?, icon?} & ({color?} | {theme:{light,dark}})>`;
   `ChartContainer` wraps Recharts `ResponsiveContainer`, injects `--color-<key>` vars.
@@ -682,9 +678,8 @@ inputProps}`; drives `DropZone`.
   them.
 - `hooks/use-hydrated.ts` — `useHydrated()`: false for the server render and hydration pass, true after;
   read browser-only state (URL, viewport) once it is true, often with a render-time state adjustment.
-- `hooks/use-keyboard-inset.ts` — `keyboardInset(layoutHeight, {height, offsetTop})` (pure) and
-  `useKeyboardInset()` via `useSyncExternalStore` over `visualViewport`'s `resize`/`scroll`, server
-  snapshot `0`. `Dock.tsx` is its only consumer, writing `data-keyboard` and `--keyboard` on `body`.
+- `hooks/use-keyboard-inset.ts` — `keyboardInset(layoutHeight, {height, offsetTop})` (pure), `isEditableElement`, and
+  `useKeyboardInset()` via `useSyncExternalStore` over `visualViewport` `resize`/`scroll` plus `focusin`/`focusout`/`resize` baseline `innerHeight` tracking (`MIN_KEYBOARD_DROP_PX = 120`) so Android `interactiveWidget: "resizes-content"` detects the soft keyboard even when `visualViewport.height` shrinks in step with `innerHeight`. `Dock.tsx` and `EditorAccessoryBar` consume it.
 - `hooks/use-scroll-restoration.ts` — `useScrollRestoration(ref, pane?)`: saves an inner scroll
   container's offset under the history entry it belongs to (`sessionStorage`, `pj:scroll`; the
   Navigation API's entry key, or a `__pjEntry` stamp in `history.state` re-applied with the same value
@@ -717,22 +712,21 @@ reduced-motion rule as `@variant motion-reduce { … }` except the two on pseudo
 and the `data-motion="reduce"` twin, pinned equal by `styles/appearance.test.ts`). `:root`/
 `.dark` declare the neutral spine (`--paper/-sunk`, `--ink/-soft/-faint`, `--rule/-strong`, `--glass/
 -edge`), the artwork channel (`--art/-glow/-ink/-image`, resolved from inline `--art-light`/`--art-dark`
-pairs an `ArtProvider` sets — never `--art` directly), `--warn`/`--danger`, the type scale (`--t-micro`…
+pairs an `ArtProvider` sets — never `--art` directly), `--warn` (`oklch(0.53 0.16 65)` light) / `--danger`, the type scale (`--t-micro`…
 `--t-display`), layout tokens (`--column`, `--rail`, `--gutter`, `--measure`, `--menubar`, `--player-card`,
-`--density`, the entity masthead's `--masthead-band`/`--masthead-head`), the body face (`--font-body`, with
+`--density`, the entity masthead's `--masthead-band`/`--masthead-head`, where phones lower `--masthead-head` to `30vh`), the body face (`--font-body`, with
 `--font-system-sans`/`--font-system-serif` beside it),
 motion (`--dur-instant/-quick/-move/-settle/-arrive/-bloom`, `--ease-arrive`/`-leave`), and the phone-only
 `--dock`/`--tabbar`/`--miniplayer` chrome-height variables (declared on `body`, not `:root`, because a
-custom property is substituted on the element that declares it). `@theme inline` maps the spine onto
+custom property is substituted on the element that declares it; `body[data-keyboard]` zeroes all three). `@theme inline` maps the spine onto
 shadcn's colour tokens, the two ease tokens (so `ease-arrive`/`ease-leave` exist as Tailwind utilities) and
 the four font vars (injected by the client's `next/font/local`). Also here: `.wash` page-light (relative-colour
-`--wash-core/-deep/-lift` off `--art`, dithered via an SVG noise mask), `body::after` grain, the `.doc`
-BlockNote-output treatment (including `.doc[data-variant="lyrics"]`'s syllable/rhyme gutter, rhyme colour
-hue-rotated off `--art`), `.wave` bars, `.masthead__art` / `__tone` / `__field` blur and drift, the
+`--wash-core/-deep/-lift` off `--art`, dithered via a pre-baked PNG noise mask), `body::after` grain (the same seamless PNG tile), `.on-art` (75% paper shadow) / `.on-art-soft` (90% ink), `.masthead__scrim` (48%→64%→86% light, 46%→62%→86% dark), the `.doc`
+BlockNote-output treatment (`--font-doc: var(--font-system-sans)` proportional sans by default, `data-font="serif"` override, `--art` links, `1px solid var(--rule)` `<code>`, mono lyrics gutter counts including `.doc[data-variant="lyrics"]`'s syllable/rhyme gutter and phone `padding-right: 9rem` on `[data-section-lines]`), `.wave` bars, `.masthead__art` / `__tone` / `__field` blur and drift, the
 `motion-ink`/`-reveal`/`-move`/`-press`/`-settle` utilities, the running-order and cover-morph
 `::view-transition-*` keyframes, `@media (min-width: 1800px)`/`(width < 768px)` layout overrides, and the
 ambient-loop reduced-motion block.
-`@layer base`: border reset, `html { @apply font-mono }`, `body { touch-action: manipulation }`, pointer
+`@layer base`: border reset, `* { scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }`, `html { @apply font-mono }`, `body { touch-action: manipulation }`, pointer
 cursor on enabled buttons/`[role=button]`.
 
 **Appearance attributes.** One attribute per appearance preference on `<html>` (`APPEARANCE` in
@@ -777,8 +771,9 @@ reconciliation.
 
 - `frame.tsx` — `EditorFrame` (generic over BlockNote's schema types): chrome off
   (`formattingToolbar/linkToolbar/filePanel/sideMenu/tableHandles={false}`), `slashMenu?: boolean`
-  (`false` for a variant that mounts its own slash-menu controller), `children` for variant-mounted
+  (`false` for a variant that mounts its own slash-menu controller), renders `EditorAccessoryBar` on mobile when focused, and `children` for variant-mounted
   suggestion-menu controllers.
+- `accessory-bar.tsx` — `EditorAccessoryBar`: fixed mobile `role="toolbar"` portaled to `document.body` while the editor has focus, positioned above the soft keyboard (`useKeyboardInset`) or `var(--dock, 0px)`, offering `+ Section`, `Rhymes`, `Synonyms` (when `LyricsContext` is present), `Checklist`, `Bold`, `Italic`, `Undo`, and `Redo` without stealing `.ProseMirror` focus (`onMouseDown` `preventDefault`).
 - `lib/block-document.ts` (pure, server-safe) — `parseInitialValue(raw)`: unwraps up to two layers of
   `JSON.stringify` (some rows were double-encoded by a prior save path) and falls back to a plain-text
   paragraph; `isBlankDocument(blocks)`; `isBlankStoredDocument(raw)`. `lib/reveal-focus.ts` — `REVEAL_FOCUS`,
@@ -825,7 +820,7 @@ reconciliation.
 - `lyrics/slash-menu.tsx` — `lyricsSlashMenuItems(editor)`: BlockNote's default items plus "Section".
 - `lyrics/suggestions.tsx` — `LyricsSuggestion`, `rhymeItems`/`synonymItems` (dictionary-backed loaders),
   `abortable(load)` (cancels the previous keystroke's in-flight request; a rejection resolves to `[]`
-  since BlockNote calls `getItems` with no catch), `LyricsSuggestionMenu` (presentation), and
+  since BlockNote calls `getItems` with no catch), `LyricsSuggestionMenu` (presentation, with `phone:min-h-11 coarse:min-h-11` suggestion rows and a `"Type a word…"` empty-query status), and
   `LyricsSuggestionMenus` (mounts the `/`, `\`, and `~` `SuggestionMenuController`s — the two dictionary
   menus mount only when a dictionary is present, so the prefixes type as themselves without one).
 - `lyrics/index.tsx` — the assembled `LyricsEditor` (default export): reads the dictionary once at
@@ -979,6 +974,7 @@ src/host/bun.ts            dspWasmUrl, loadDsp()
 src/host/browser.ts        dspModuleUrl, compileDsp(), loadDsp()
 src/host/worklet.ts        DspProcessorOptions, loadDsp(options)
 src/spectrum.ts            SPECTRUM_LAYOUT and the spectrum meter, band centres, window and envelope helpers
+src/version.ts             ANALYSIS_VERSION (currently 5; tracks stored analysis format changes)
 src/analysis.ts            AnalysisSession: the typed wrapper over one analysis_* session (see below)
 src/offline.ts             OfflineAnalyses (getters over a finished session), FeatureSet, alignFeatures, diffFeatures
 src/live.ts                createLiveLoudnessMeter/createLiveSpectrumMeter: process/take meters on it
@@ -1224,8 +1220,7 @@ the session mixes to mono once for the front end and the pitch track.
   local maxima above `mean + 1σ` and above 0, greedily by height, at least 8 s from each other and from both
   ends. Groups: agglomerative merging of segment centroids while the best cosine is ≥ 0.85, lettered by first
   appearance (`sectionGroupLetter`: A…Z, AA…).
-- **`spectrogram.rs`** — 128 mel bands 20 Hz–20 kHz from the front end's power, mean power per 100 ms column
-  (by hop centre), dB clamped [−90, 0] → `u8`; column-major, lowest band first.
+- **`spectrogram.rs`** — `SPECTROGRAM_BANDS = 160` log-spaced bands (`20 Hz`–`20 kHz`) over a 4096-pt Hann STFT at 10 ms hops (480 samples at 48 kHz) with `+4.0 dB/oct` spectral tilt around 1 kHz, peak-weighted hop aggregation (`0.65 * max + 0.35 * mean`) per 50 ms column (`SPECTROGRAM_COLUMN_MS = 50`), clamped to `[−80, 0]` dB (`u8`, column-major, lowest band first) for the server's grayscale PNG encoder (`ANALYSIS_VERSION = 5`).
 - **`curves.rs` (`Timeline`)** — feeds the session's `Loudness` itself, splitting each chunk at every 50 ms bin
   (`rate / 20`, the peaks' bin) and second boundary: the curve reads `Loudness::short_term` (primed and gated at
   −70) at each second's end, and a bin is `over` when `prev_true_peak` of any of its pieces exceeds 1. Clipping
@@ -1593,6 +1588,7 @@ would hand the choice back to an instance default.
 and `editor.syllableCounts` / `editor.rhymeLetters` (booleans, default `true`, control toggle, each with a
 `document` entry — `data-lyrics-syllables` / `data-lyrics-rhymes`, `"off"` when hidden — that
 `packages/ui/src/styles/doc.css` reads to blank the lyrics gutter's columns).
+`groups/layout.ts` declares the song-first navigation defaults: `SIDEBAR_SECTIONS` (`collections`, `tracks`, `studio`, `notebook`, with `studio` collapsed by default) and `DOCK_TABS` (`home`, `collections`, `tracks`, `notes`, `search`, `studio`, with `studio` `shown: false` by default). `groups/pages.ts` declares each entity page's section registry: `PROJECT_HOME_SECTIONS` (adds `"unassigned-sets"`, removes `"recent-activity"`), `PROJECT_HOME_HIDDEN_SECTIONS` (`plugins`, `samples`, `heatmap`, default `shown: false`), `COLLECTION_PAGE_SECTIONS` (`overview`, `tracks`, `attachments`, `comments`, `add`, `activity`), and `TRACK_PAGE_SECTIONS` (`overview`, `lyrics`, `relations`, `attachments`, `comments`, `add`, `activity`). `groups/visuals.ts` defaults `visuals.strips` to `[]` (no strips open until the viewer clicks `Analysis`).
 
 **`appearance.ts`** (package root, not a group file) holds `APPEARANCE`: plain data, no imports, mapping each
 appearance preference (`density`, `text`, `grain`, …) to its `<html>` attribute, its values and its default —

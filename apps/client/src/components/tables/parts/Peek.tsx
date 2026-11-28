@@ -28,6 +28,9 @@ export function Peek<TData extends RowData, TChild = never>(): ReactNode {
     renaming,
     setRenaming,
     handleCellSave,
+    canSave,
+    orderedStatuses,
+    cards,
     entityLabel,
     loaded,
     ensureLoaded,
@@ -126,10 +129,25 @@ export function Peek<TData extends RowData, TChild = never>(): ReactNode {
         ? () => setPeekId(nextStep)
         : null;
 
+  const activeRow = resolvedPeek.row;
+  const playTarget = activeRow ? (cards?.play?.(activeRow) ?? null) : null;
+  const statusEdit =
+    canSave &&
+    orderedStatuses &&
+    orderedStatuses.length > 0 &&
+    activeRow &&
+    table.getAllLeafColumns().some((col: { id: string }) => col.id === "status")
+      ? {
+          statuses: orderedStatuses,
+          onSelect: (statusId: number) =>
+            handleCellSave(activeRow.id, "statusId", statusId),
+        }
+      : undefined;
+
   return (
     <PeekPanel
-      row={resolvedPeek.row ? peek.toPeekRow(resolvedPeek.row) : null}
-      href={resolvedPeek.row ? peek.href(resolvedPeek.row) : "#"}
+      row={activeRow ? peek.toPeekRow(activeRow) : null}
+      href={activeRow ? peek.href(activeRow) : "#"}
       entityLabel={entityLabel}
       onClose={() => setPeekId(null)}
       position={
@@ -140,11 +158,13 @@ export function Peek<TData extends RowData, TChild = never>(): ReactNode {
       onPrevious={previousId != null ? () => setPeekId(previousId) : null}
       onNext={onNext}
       nextLoading={nextLoading}
+      play={playTarget}
+      statusEdit={statusEdit}
       rename={{
         active: renaming,
         onSave: async (title) =>
-          resolvedPeek.row != null &&
-          (await handleCellSave(resolvedPeek.row.id, peek.titleField, title)),
+          activeRow != null &&
+          (await handleCellSave(activeRow.id, peek.titleField, title)),
         onEnd: () => setRenaming(false),
       }}
     />

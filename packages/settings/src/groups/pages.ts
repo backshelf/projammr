@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineGroup, defineSetting } from "../define.js";
-import { allShown, arrangedList, optionsOf } from "../options.js";
+import { arrangedList, optionsOf } from "../options.js";
 
 /**
  * The project home's sections, top to bottom. `overview` is the description
@@ -9,9 +9,9 @@ import { allShown, arrangedList, optionsOf } from "../options.js";
  */
 export const PROJECT_HOME_SECTIONS = [
   "new",
+  "unassigned-sets",
   "quiet",
   "jobs",
-  "recent-activity",
   "overview",
   "collections",
   "plugins",
@@ -24,11 +24,16 @@ export const PROJECT_HOME_SECTIONS = [
   "activity",
 ] as const;
 
+export const PROJECT_HOME_HIDDEN_SECTIONS = [
+  "plugins",
+  "samples",
+  "heatmap",
+] as const;
+
 /** A collection page's sections, top to bottom. */
 export const COLLECTION_PAGE_SECTIONS = [
   "overview",
   "tracks",
-  "repositories",
   "attachments",
   "comments",
   "add",
@@ -39,8 +44,6 @@ export const COLLECTION_PAGE_SECTIONS = [
 export const TRACK_PAGE_SECTIONS = [
   "overview",
   "lyrics",
-  "sessions",
-  "repositories",
   "relations",
   "attachments",
   "comments",
@@ -62,9 +65,9 @@ export const SESSION_PAGE_SECTIONS = [
 /** Every section's name, across the pages that share some. */
 const SECTION_LABELS = {
   new: "New",
+  "unassigned-sets": "Unassigned DAW sets",
   quiet: "Gone quiet",
   jobs: "Jobs",
-  "recent-activity": "Recent activity",
   overview: "Overview",
   collections: "Collections",
   plugins: "Plugins",
@@ -77,8 +80,6 @@ const SECTION_LABELS = {
   activity: "Activity",
   tracks: "Tracks",
   lyrics: "Lyrics",
-  sessions: "Sessions",
-  repositories: "Repositories",
   relations: "Relations",
   notes: "Notes",
   structure: "Structure",
@@ -88,10 +89,14 @@ const SECTION_LABELS = {
 type SectionId = keyof typeof SECTION_LABELS;
 
 /** A page's sections as a list the viewer arranges, labelled. */
-function sectionList<const Id extends SectionId>(ids: readonly [Id, ...Id[]]) {
+function sectionList<const Id extends SectionId>(
+  ids: readonly [Id, ...Id[]],
+  hiddenByDefault: readonly Id[] = []
+) {
+  const hidden = new Set<Id>(hiddenByDefault);
   return {
     schema: arrangedList(z.object({ id: z.enum(ids), shown: z.boolean() })),
-    default: allShown(ids),
+    default: ids.map((id) => ({ id, shown: !hidden.has(id) })),
     control: {
       kind: "custom",
       component: "ordered-list",
@@ -117,7 +122,7 @@ export const settings = [
     description: "The sections a project's home shows, in what order.",
     keywords: ["project", "home", "sections", "order", "hide"],
     scopes: ["user", "instance"],
-    ...sectionList(PROJECT_HOME_SECTIONS),
+    ...sectionList(PROJECT_HOME_SECTIONS, PROJECT_HOME_HIDDEN_SECTIONS),
     audience: "all",
   }),
   defineSetting({

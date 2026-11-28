@@ -2,6 +2,8 @@ import { memo, useId, useMemo, type JSX } from "react";
 import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { Kbd } from "@workspace/ui/components/kbd";
+import { LABEL } from "@workspace/ui/lib/shell";
+import { cn } from "@workspace/ui/lib/utils";
 
 import type {
   BackfillChosen,
@@ -43,7 +45,7 @@ function StackedLabel({ children }: { children: string }): JSX.Element {
   return (
     <span
       aria-hidden
-      className="mb-1 block font-sub text-micro tracking-[0.12em] text-ink-soft uppercase @xl/sets:hidden"
+      className={cn(LABEL, "mb-1 block text-ink-soft @xl/sets:hidden")}
     >
       {children}
     </span>
@@ -121,6 +123,11 @@ const SetRow = memo(function SetRow({
                 )
               }
             />
+            {track.locked && (
+              <p className="mt-1 text-micro text-ink-soft">
+                {"Uses the matched session\u2019s track."}
+              </p>
+            )}
           </div>
           <div
             role="cell"
@@ -155,7 +162,10 @@ function ColumnHeads(): JSX.Element {
   return (
     <div
       role="row"
-      className={`hidden pb-2 font-sub text-micro tracking-[0.12em] text-ink-soft uppercase @xl/sets:grid ${WIDE_COLUMNS}`}
+      className={cn(
+        LABEL,
+        `hidden pb-2 text-ink-soft @xl/sets:grid ${WIDE_COLUMNS}`
+      )}
     >
       <div role="columnheader">Set</div>
       <div role="columnheader">Backups</div>
@@ -208,10 +218,7 @@ function ChosenBlock({
     <>
       <ChosenHead name={chosen.name} path={chosen.folder}>
         <div className="flex w-52 shrink-0 flex-col gap-1">
-          <span
-            id={projectLabelId}
-            className="font-sub text-micro tracking-[0.12em] text-ink-soft uppercase"
-          >
+          <span id={projectLabelId} className={cn(LABEL, "text-ink-soft")}>
             Goes into
           </span>
           <Picker
@@ -224,6 +231,26 @@ function ChosenBlock({
               void actions.setProject(chosen.folder, Number(value))
             }
           />
+          {proposals && view.folders.length > 1 && chosen.project !== null && (
+            <Button
+              variant="link"
+              className="h-auto self-start p-0 text-micro text-ink-soft"
+              onClick={() => {
+                const project = chosen.project;
+                if (project === null) return;
+                const folders = view.folders.map((folder) => folder.path);
+                if (actions.applyProjectToAll) {
+                  void actions.applyProjectToAll(folders, project);
+                } else {
+                  void Promise.all(
+                    folders.map((folder) => actions.setProject(folder, project))
+                  );
+                }
+              }}
+            >
+              Apply to all folders
+            </Button>
+          )}
         </div>
       </ChosenHead>
       {synced != null && <Notice>{syncWarning(synced)}</Notice>}

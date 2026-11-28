@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { MotionProvider } from "./motion-provider";
-import { playedBars, WaveMarks, Waveform } from "./waveform";
+import { clusterMarks, playedBars, WaveMarks, Waveform } from "./waveform";
 
 afterEach(cleanup);
 
@@ -203,6 +203,53 @@ describe("WaveMarks", () => {
 
     expect(screen.getByText("Kick is loud")).toBeTruthy();
     expect(screen.queryByText(/Resolved/)).toBeNull();
+  });
+
+  it("keeps a faint 8px hairline stem on resolved pins instead of collapsing to zero", () => {
+    const html = renderToStaticMarkup(
+      <Waveform
+        peaks={PEAKS}
+        count={4}
+        duration={120}
+        marks={[{ id: 1, positionMs: 30_000, resolved: true }]}
+        label="Wave"
+      />
+    );
+    expect(html).not.toContain("scale-y-0");
+    expect(html).toContain("[&amp;&gt;span]:h-2");
+  });
+
+  it("clusters adjacent pins within ~2.5% duration into a count badge", () => {
+    const clustered = clusterMarks(
+      [
+        { id: 1, positionMs: 30_000 },
+        { id: 2, positionMs: 31_000 },
+        { id: 3, positionMs: 90_000 },
+      ],
+      100
+    );
+    expect(clustered).toHaveLength(2);
+    expect(clustered[0]!.ids).toEqual([1, 2]);
+    expect(clustered[1]!.ids).toEqual([3]);
+
+    const onMarkerClick = mock();
+    render(
+      <WaveMarks
+        marks={[
+          { id: 1, positionMs: 30_000, author: "Sam", excerpt: "First" },
+          { id: 2, positionMs: 31_000, author: "Alex", excerpt: "Second" },
+          { id: 3, positionMs: 90_000, author: "Jo", excerpt: "Far away" },
+        ]}
+        duration={100}
+        onMarkerClick={onMarkerClick}
+      />
+    );
+
+    const buttons = screen.getAllByRole("button");
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0]!.textContent).toBe("2");
+    fireEvent.click(buttons[0]!);
+    expect(onMarkerClick).toHaveBeenCalledWith([1, 2]);
   });
 
   it("dismisses an open comment note on Escape and provides a coarse touch hit halo", async () => {

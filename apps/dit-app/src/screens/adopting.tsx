@@ -6,7 +6,7 @@ import {
   RowTitle,
   Rows,
 } from "@workspace/ui/components/layout/rows";
-import { Spinner } from "@workspace/ui/components/spinner";
+import { Progress } from "@workspace/ui/components/progress";
 
 import type { Adopting as AdoptingState } from "../ipc";
 import { PanelHead } from "../panel-head";
@@ -29,15 +29,29 @@ export function Adopting({
 }: {
   adopting: AdoptingState;
 }): JSX.Element {
+  const saved = adopting.sets.filter((set) => set.state === "saved").length;
+  const percent =
+    adopting.setCount > 0
+      ? Math.min(100, Math.round((saved / adopting.setCount) * 100))
+      : 0;
+
   return (
     <div className="flex flex-col gap-4">
       <PanelHead
         title={`Tracking ${adopting.name}`}
         lede="dit records a save of every set as it stands."
       />
-      <p role="status" className="text-small text-ink tabular-nums">
-        {progressLine(adopting)}
-      </p>
+      <div className="flex flex-col gap-1.5">
+        <Progress
+          value={percent}
+          aria-label="Tracking progress"
+          aria-valuenow={percent}
+          indicatorClassName="bg-art"
+        />
+        <p role="status" className="text-small text-ink tabular-nums">
+          {progressLine(adopting)}
+        </p>
+      </div>
       {adopting.sets.length > 0 && (
         <Rows
           as="ul"
@@ -55,13 +69,8 @@ export function Adopting({
                   Saved
                 </span>
               ) : (
-                <span className="flex shrink-0 items-center gap-1.5 text-small text-ink-soft">
-                  <Spinner
-                    role="presentation"
-                    aria-hidden
-                    className="size-3.5"
-                  />
-                  Saving…
+                <span className="shrink-0 text-small text-ink-soft">
+                  {"Saving\u2026"}
                 </span>
               )}
             </Row>

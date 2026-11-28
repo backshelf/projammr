@@ -9,6 +9,7 @@ import {
   IconStarFilled,
 } from "@tabler/icons-react";
 import type { Facets, SavedView } from "@workspace/api/api";
+import { Button } from "@workspace/ui/components/button";
 import {
   Collapsible,
   CollapsibleChevron,
@@ -235,9 +236,21 @@ export function FilterSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[85dvh] gap-0 rounded-t-lg p-0">
-        <SheetHeader className="border-b border-rule px-4 py-3 pr-12">
+      <SheetContent
+        side="bottom"
+        className="h-auto max-h-[85dvh] gap-0 rounded-t-lg p-0"
+      >
+        <SheetHeader className="flex-row items-center justify-between border-b border-rule px-4 py-3 pr-12">
           <SheetTitle className="text-small">Filter &amp; sort</SheetTitle>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="coarse:min-h-11"
+            onClick={() => onApplyView("")}
+          >
+            Reset all
+          </Button>
         </SheetHeader>
         <div className="flex-1 overflow-y-auto overscroll-contain pb-4">
           {filterColumns && filterColumns.length > 0 && (

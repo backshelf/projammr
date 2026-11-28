@@ -21,8 +21,8 @@ export const STRIP_EXPLAINERS: Record<StripId, string> = {
 };
 
 /** What a page shows before a visitor has chosen anything of their own —
- *  every strip there is, since there are only the three. */
-export const DEFAULT_STRIP_IDS: readonly StripId[] = STRIP_IDS;
+ *  analysis strips stay tucked behind the Analysis disclosure until asked for. */
+export const DEFAULT_STRIP_IDS: readonly StripId[] = [];
 
 const isStripId = (value: unknown): value is StripId =>
   typeof value === "string" && (STRIP_IDS as readonly string[]).includes(value);

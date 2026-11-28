@@ -40,6 +40,7 @@ type TableViewInput<TData extends RowData, TChild = never> = Pick<
   | "cards"
   | "emptyText"
   | "filterColumns"
+  | "filterPresets"
   | "facets"
   | "savedViews"
   | "serverGroups"
@@ -70,6 +71,7 @@ export function useTableView<TData extends RowData, TChild = never>(
     cards,
     emptyText = "No results.",
     filterColumns,
+    filterPresets,
     facets,
     savedViews,
     serverGroups,
@@ -227,6 +229,7 @@ export function useTableView<TData extends RowData, TChild = never>(
       activeGroupKey,
       emptyText,
       filterColumns,
+      filterPresets,
       facets,
       savedViews,
       serverGroups,
@@ -250,6 +253,7 @@ export function useTableView<TData extends RowData, TChild = never>(
       activeGroupKey,
       emptyText,
       filterColumns,
+      filterPresets,
       facets,
       savedViews,
       serverGroups,

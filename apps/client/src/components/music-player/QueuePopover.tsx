@@ -40,7 +40,7 @@ export function QueuePopover({ children }: { children: React.ReactNode }) {
             "flex items-center justify-between border-b border-rule px-3 py-2 text-small font-medium"
           }
         >
-          <span>Queue ({upcoming.length})</span>
+          <span>Up next ({upcoming.length})</span>
           <Button
             variant={"ghost"}
             size={"xs"}

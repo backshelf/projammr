@@ -33,6 +33,7 @@ export async function writeSpectrogramPng(
   const buffer = await sharp(toRowMajor(bytes, columns), {
     raw: { width: columns, height: SPECTROGRAM_BANDS, channels: 1 },
   })
+    .toColourspace("b-w")
     .png()
     .toBuffer();
   await storeBytes(key, buffer, "image/png");

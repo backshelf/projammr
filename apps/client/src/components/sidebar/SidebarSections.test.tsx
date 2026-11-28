@@ -84,15 +84,14 @@ const section = (label: string) => ({
 const ALL = {
   collections: section("Collections"),
   tracks: section("Tracks"),
-  notebook: section("Notebook"),
-  sessions: section("Sessions"),
+  studio: { label: "Studio", separator: true, children: <p>Studio list</p> },
+  notebook: { ...section("Notebook"), separator: true, hint: "Personal" },
 };
 
 const headings = () =>
   screen
-    .getAllByRole("link")
-    .map((link) => link.textContent)
-    .filter((text) => text && !text.endsWith("list"));
+    .getAllByText(/^(Collections|Tracks|Studio|Notebook)$/)
+    .map((node) => node.textContent);
 
 const toggle = (label: string) =>
   act(async () => {
@@ -118,7 +117,9 @@ describe("CollapsibleGroup", () => {
       </Shell>
     );
 
-    expect(screen.getByRole("button", { name: "Expand Tracks" })).toBeTruthy();
+    const expand = screen.getByRole("button", { name: "Expand Tracks" });
+    expect(expand).toBeTruthy();
+    expect(expand.className).toContain("size-6");
 
     await toggle("Tracks");
 
@@ -178,29 +179,27 @@ describe("CollapsibleGroup", () => {
 });
 
 describe("SidebarSections", () => {
-  it("lists every section open, in the order they have always stood, by default", () => {
+  it("lists song-first sections with Studio collapsed by default", () => {
     render(
       <Shell>
         <SidebarSections sections={ALL} />
       </Shell>
     );
 
-    expect(headings()).toEqual([
-      "Collections",
-      "Tracks",
-      "Notebook",
-      "Sessions",
-    ]);
-    expect(screen.queryAllByRole("button", { name: /^Expand/ })).toHaveLength(
-      0
-    );
+    expect(headings()).toEqual(["Collections", "Tracks", "Studio", "Notebook"]);
+    expect(screen.getByText("Personal")).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole("button", { name: /^Expand/ })
+        .map((b) => b.getAttribute("aria-label"))
+    ).toEqual(["Expand Studio"]);
   });
 
   it("orders, hides and folds the sections as the policy says", () => {
     render(
       <Shell
         sidebarSections={[
-          { id: "sessions", shown: true, collapsed: true },
+          { id: "studio", shown: true, collapsed: true },
           { id: "tracks", shown: true, collapsed: false },
           { id: "collections", shown: false, collapsed: false },
           { id: "notebook", shown: true, collapsed: false },
@@ -210,10 +209,8 @@ describe("SidebarSections", () => {
       </Shell>
     );
 
-    expect(headings()).toEqual(["Sessions", "Tracks", "Notebook"]);
-    expect(
-      screen.getByRole("button", { name: "Expand Sessions" })
-    ).toBeTruthy();
+    expect(headings()).toEqual(["Studio", "Tracks", "Notebook"]);
+    expect(screen.getByRole("button", { name: "Expand Studio" })).toBeTruthy();
   });
 
   it("shows only the sections it was given, whatever the policy lists", () => {
@@ -236,11 +233,9 @@ describe("SidebarSections", () => {
 
     await toggle("Tracks");
     expect(screen.getByRole("button", { name: "Expand Tracks" })).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Collapse Sessions" })
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Expand Studio" })).toBeTruthy();
 
-    await toggle("Sessions");
+    await toggle("Studio");
     await toggle("Tracks");
     expect(
       screen.getByRole("button", { name: "Collapse Tracks" })
@@ -259,8 +254,8 @@ describe("SidebarSections", () => {
           "layout.sidebarSections": [
             { id: "collections", shown: true, collapsed: false },
             { id: "tracks", shown: true, collapsed: false },
+            { id: "studio", shown: true, collapsed: false },
             { id: "notebook", shown: true, collapsed: false },
-            { id: "sessions", shown: true, collapsed: true },
           ],
         },
       },

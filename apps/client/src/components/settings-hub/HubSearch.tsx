@@ -106,7 +106,7 @@ export function HubSearchResults({
           <button
             type="button"
             onClick={onClear}
-            className="cursor-pointer text-small text-art underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
+            className="cursor-pointer text-small text-art underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-hidden"
           >
             Clear the search
           </button>

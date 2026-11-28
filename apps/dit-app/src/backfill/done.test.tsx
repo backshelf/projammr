@@ -71,13 +71,13 @@ describe("Done", () => {
     ).toBeTruthy();
   });
 
-  test("See sessions not in dit opens the instance's filtered list, and Done closes the window", async () => {
+  test("Review unmatched sessions opens the instance's filtered list, and Done closes the window", async () => {
     const view = doneView();
     const calls = mockBackfillApp(view);
     renderWindow(view);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "See sessions not in dit" })
+      screen.getByRole("button", { name: "Review unmatched sessions" })
     );
     await waitFor(() =>
       expect(argsOf(calls, "open_web")).toEqual([

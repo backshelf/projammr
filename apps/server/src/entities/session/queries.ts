@@ -194,7 +194,8 @@ async function clearTrackMain(
 }
 
 /**
- * Locks `trackIds` `FOR SHARE`, in id order, until `tx` ends, and answers the
+ * Locks `trackIds` (`FOR SHARE` by default, or `FOR NO KEY UPDATE` when changing
+ * a track's main session), in id order, until `tx` ends, and answers the
  * project each one found is in. Every write that links a session to a track
  * takes this lock before it touches a session row, which is the order a move
  * takes its own locks in (`closeMoveSet`): a write that holds it commits
@@ -203,7 +204,8 @@ async function clearTrackMain(
  */
 async function lockTracks(
   tx: Tx,
-  trackIds: readonly (number | null | undefined)[]
+  trackIds: readonly (number | null | undefined)[],
+  strength: "share" | "no key update" = "share"
 ): Promise<Map<number, number>> {
   const distinct = [...new Set(trackIds.filter((id) => id != null))];
   if (distinct.length === 0) return new Map();
@@ -212,7 +214,7 @@ async function lockTracks(
     .from(tracks)
     .where(inArray(tracks.id, distinct))
     .orderBy(tracks.id)
-    .for("share");
+    .for(strength);
   return new Map(rows.map((row) => [row.id, row.projectId]));
 }
 
@@ -220,9 +222,10 @@ async function lockTracks(
 async function lockTracksIn(
   tx: Tx,
   trackIds: readonly (number | null | undefined)[],
-  projectId: number
+  projectId: number,
+  strength: "share" | "no key update" = "share"
 ): Promise<void> {
-  const held = await lockTracks(tx, trackIds);
+  const held = await lockTracks(tx, trackIds, strength);
   for (const id of trackIds) {
     if (id != null && held.get(id) !== projectId) throw notInProject("Track");
   }
@@ -289,6 +292,8 @@ export function updateSession(
   return db.transaction((tx) => patchSession(tx, sessionId, session));
 }
 
+class RetryTrackLock extends Error {}
+
 /** `updateSession`'s writes, inside a transaction the caller owns. */
 async function patchSession(
   tx: Tx,
@@ -296,12 +301,85 @@ async function patchSession(
   session: WithSamples<Partial<NewSession>>
 ): Promise<Session> {
   const { samples, ...columns } = session;
-  const trackProjects = await lockTracks(tx, [columns.trackId]);
+  const setColumns: Partial<NewSession> = { ...columns };
+  let trackProjects: Map<number, number> = new Map();
+
+  if (columns.trackId !== undefined) {
+    // Lock the target track before touching any session row so every
+    // session-to-track link takes locks in `tracks -> sessions` order,
+    // matching `closeMoveSet`. `FOR NO KEY UPDATE` serializes concurrent
+    // `one_main` checks/promotions on the same track; ownership
+    // (`result.projectId`) is verified after `tx.update` acquires the row lock.
+    const needsExclusiveTrack =
+      columns.trackId != null &&
+      (columns.main === true || columns.main === undefined);
+    trackProjects = await lockTracks(
+      tx,
+      [columns.trackId],
+      needsExclusiveTrack ? "no key update" : "share"
+    );
+    if (columns.trackId != null && columns.main === true) {
+      await clearTrackMain(tx, columns.trackId);
+    } else if (columns.trackId != null && columns.main === undefined) {
+      // An unlinked session (or one moved from another track) may carry
+      // `main = true`; normalize to `false` if the target track already has
+      // a main so linking never violates `one_main`.
+      const [existing] = await tx
+        .select({ trackId: sessions.trackId, main: sessions.main })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .for("update");
+      if (!existing) throw new HTTPException(404);
+      if (existing.main && existing.trackId !== columns.trackId) {
+        const [targetMain] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(
+            and(eq(sessions.trackId, columns.trackId), eq(sessions.main, true))
+          )
+          .limit(1);
+        if (targetMain) setColumns.main = false;
+      }
+    }
+  } else if (columns.main === true) {
+    // Promoting a session whose `trackId` is unchanged must clear its track's
+    // previous main before `UPDATE` hits `one_main`. Lock the track `FOR NO KEY
+    // UPDATE` and `sessionId` `FOR UPDATE` inside a savepoint so concurrent
+    // promotions serialize and any concurrent `trackId` change (including from
+    // `null`) rolls back both locks without inverting `tracks -> sessions`.
+    for (;;) {
+      const [current] = await tx
+        .select({ trackId: sessions.trackId })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId));
+      if (!current) throw new HTTPException(404);
+      const trackId = current.trackId;
+
+      try {
+        await tx.transaction(async (sp) => {
+          trackProjects = await lockTracks(sp, [trackId], "no key update");
+          const [locked] = await sp
+            .select({ trackId: sessions.trackId })
+            .from(sessions)
+            .where(eq(sessions.id, sessionId))
+            .for("update");
+          if (!locked) throw new HTTPException(404);
+          if (locked.trackId !== trackId) throw new RetryTrackLock();
+          if (trackId != null) await clearTrackMain(sp, trackId);
+        });
+        break;
+      } catch (err) {
+        if (err instanceof RetryTrackLock) continue;
+        throw err;
+      }
+    }
+  }
+
   // `updatedAt` is named because a patch of only `samples` has no column to
   // set, and drizzle refuses an empty update.
   const [result] = await tx
     .update(sessions)
-    .set({ ...columns, updatedAt: new Date() })
+    .set({ ...setColumns, updatedAt: new Date() })
     .where(eq(sessions.id, sessionId))
     .returning();
 
@@ -546,7 +624,8 @@ export async function bulkMoveSessions(
     await lockTracksIn(
       tx,
       moves.map((move) => move.trackId),
-      projectId
+      projectId,
+      mainDestinations.length > 0 ? "no key update" : "share"
     );
     const locked = await tx
       .select({
@@ -659,6 +738,15 @@ function inDitFilterSql(inDit: boolean | undefined): SQL | undefined {
       : isNull(sessions.repoId);
 }
 
+/** The `unassigned` filter's predicate; absent is no filter. */
+function unassignedFilterSql(unassigned: boolean | undefined): SQL | undefined {
+  return unassigned == null
+    ? undefined
+    : unassigned
+      ? isNull(sessions.trackId)
+      : isNotNull(sessions.trackId);
+}
+
 export const sessionSortColumns = {
   id: sessions.id,
   name: sessions.name,
@@ -734,6 +822,7 @@ type SessionFilters = {
   track?: number;
   archived?: ArchivedScope;
   inDit?: boolean;
+  unassigned?: boolean;
 };
 
 /** Query parameters `GET /projects/:id/sessions/paginated` takes. */
@@ -775,7 +864,8 @@ function sessionsWhere(projectId: number, f: SessionFilters): SQL | undefined {
     f.daw ? eq(sessions.daw, f.daw) : undefined,
     membershipFilterSql(sessions.priorityId, f.priority),
     f.track != null ? eq(sessions.trackId, f.track) : undefined,
-    inDitFilterSql(f.inDit)
+    inDitFilterSql(f.inDit),
+    unassignedFilterSql(f.unassigned)
   );
 }
 
@@ -801,13 +891,15 @@ export async function getSessionsPage(
   const trackFilter =
     query.track != null ? eq(sessions.trackId, query.track) : undefined;
   const inDitFilter = inDitFilterSql(query.inDit);
+  const unassignedFilter = unassignedFilterSql(query.unassigned);
   const where = and(
     base,
     qFilter,
     dawFilter,
     priorityFilter,
     trackFilter,
-    inDitFilter
+    inDitFilter,
+    unassignedFilter
   );
 
   const orderKey = sort
@@ -900,22 +992,43 @@ export async function getSessionsPage(
     facetCounts(
       sessions.daw,
       sessions,
-      and(base, qFilter, priorityFilter, trackFilter, inDitFilter)
+      and(
+        base,
+        qFilter,
+        priorityFilter,
+        trackFilter,
+        inDitFilter,
+        unassignedFilter
+      )
     ),
     facetCounts(
       sessions.priorityId,
       sessions,
-      and(base, qFilter, dawFilter, trackFilter, inDitFilter)
+      and(base, qFilter, dawFilter, trackFilter, inDitFilter, unassignedFilter)
     ),
     facetCounts(
       sessions.trackId,
       sessions,
-      and(base, qFilter, dawFilter, priorityFilter, inDitFilter)
+      and(
+        base,
+        qFilter,
+        dawFilter,
+        priorityFilter,
+        inDitFilter,
+        unassignedFilter
+      )
     ),
     facetCounts(
       inDitSql,
       sessions,
-      and(base, qFilter, dawFilter, priorityFilter, trackFilter)
+      and(
+        base,
+        qFilter,
+        dawFilter,
+        priorityFilter,
+        trackFilter,
+        unassignedFilter
+      )
     ),
   ]);
 
@@ -934,8 +1047,8 @@ function dawFilterValue(raw: string | number | undefined): string | undefined {
     : undefined;
 }
 
-/** A selection's `inDit` filter, ignored unless it is `true` or `false`. */
-function inDitFilterValue(
+/** A selection's boolean filter (`inDit`, `unassigned`), ignored unless `"true"` or `"false"`. */
+function booleanFilterValue(
   raw: string | number | undefined
 ): boolean | undefined {
   const value = selectionString(raw);
@@ -953,7 +1066,8 @@ function sessionSelectionFilters(selection: BulkSelection): SessionFilters {
   return {
     q: selectionString(f.q),
     daw: dawFilterValue(f.daw),
-    inDit: inDitFilterValue(f.inDit),
+    inDit: booleanFilterValue(f.inDit),
+    unassigned: booleanFilterValue(f.unassigned),
     priority: selectionIds(f.priority),
     track,
     archived:

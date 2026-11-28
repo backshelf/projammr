@@ -33,6 +33,14 @@ describe("the filter list", () => {
     expect(parseTableQuery({ explicit: "maybe" }).explicit).toBeUndefined();
   });
 
+  it("reads the unassigned filter from the URL and drops invalid values", () => {
+    expect(parseTableQuery({ unassigned: "true" }).unassigned).toBe("true");
+    expect(parseTableQuery({ unassigned: "false" }).unassigned).toBe("false");
+    expect(
+      parseTableQuery({ unassigned: "sometimes" }).unassigned
+    ).toBeUndefined();
+  });
+
   it("keeps the Explicit filter when a view is saved", () => {
     expect(filterViewQuery("explicit=false&page=2")).toBe("explicit=false");
   });

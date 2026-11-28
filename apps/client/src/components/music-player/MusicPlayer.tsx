@@ -4,6 +4,7 @@ import { ArtField } from "@/components/music-player/ArtField";
 import {
   useCurrentArt,
   useCurrentTrack,
+  useLabAltering,
 } from "@/components/music-player/player-hooks";
 import { useNowPlaying } from "@/components/music-player/now-playing-context";
 import { ownerRoute } from "@/components/music-player/owners";
@@ -21,6 +22,7 @@ import { hrefFromParsedRoute } from "@/lib/utils";
 import { IconArrowsDiagonal, IconPlaylist } from "@tabler/icons-react";
 import { IconButton } from "@workspace/ui/components/icon-button";
 import { useSidebar } from "@workspace/ui/components/sidebar";
+import { LABEL } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
 
 /**
@@ -54,7 +56,7 @@ const CARD_ANCHORED = cn(
 /** Detached, glass replaces the solid fill because what the card now sits over
  *  is page content, and a shadow makes it an object resting on the page. */
 const CARD_DETACHED = cn(
-  "bottom-3 left-3 min-h-0 w-60 rounded-lg border-glass-edge bg-glass",
+  "bottom-3 left-3 min-h-0 w-64 rounded-lg border-glass-edge bg-glass",
   "shadow-float backdrop-blur-[20px] backdrop-saturate-[1.3]"
 );
 
@@ -62,11 +64,15 @@ export const MusicPlayer = () => {
   const current = useCurrentTrack();
   const art = useCurrentArt();
   const { state } = useSidebar();
-  const { setOpen } = useNowPlaying();
+  const { setOpen, setView } = useNowPlaying();
+  const labAltering = useLabAltering();
 
   // A closed sidebar is what makes this a card: the panel it was part of is
   // gone, so it detaches from the corner.
   const detached = state === "collapsed";
+
+  // Nothing playing while the sidebar is collapsed: keep the canvas clear.
+  if (!current && detached) return null;
 
   // Nothing playing, or a track with no cover: no artwork theatre, just the
   // panel. The scrim goes with the art — over a bare panel it would only mute
@@ -89,42 +95,68 @@ export const MusicPlayer = () => {
       {!bare && <ArtField cover={current?.cover ?? null} scrim={"card"} />}
 
       <div className={cn("flex flex-col gap-2", !bare && "on-art")}>
-        <div className={"min-w-0"}>
-          <span
-            className={
-              "block truncate text-small text-ink [&_a:hover]:underline"
-            }
-          >
-            {current ? (
-              trackHref ? (
-                <AppLink href={trackHref}>{trackLabel(current)}</AppLink>
+        <div className={"flex min-w-0 items-start justify-between gap-1.5"}>
+          <div className={"min-w-0 flex-1"}>
+            <span
+              className={
+                "block truncate text-small text-ink [&_a:hover]:underline"
+              }
+            >
+              {current ? (
+                trackHref ? (
+                  <AppLink href={trackHref}>{trackLabel(current)}</AppLink>
+                ) : (
+                  trackLabel(current)
+                )
               ) : (
-                trackLabel(current)
-              )
-            ) : (
-              "Nothing playing"
-            )}
-            {current?.trackAudio && (
-              <VersionBadge
-                version={current.trackAudio.version}
-                active
-                className={"ml-1.5 align-middle"}
-              />
-            )}
-          </span>
-          <span
-            className={cn(
-              "block truncate text-micro",
-              bare ? "text-ink-soft" : "on-art-soft"
-            )}
-          >
-            {current &&
-              [current.album, artistLabel(current)].filter(Boolean).join(" · ")}
-          </span>
+                "Nothing playing"
+              )}
+              {current?.trackAudio && (
+                <VersionBadge
+                  version={current.trackAudio.version}
+                  active
+                  className={"ml-1.5 align-middle"}
+                />
+              )}
+            </span>
+            <span
+              className={cn(
+                "block truncate text-micro",
+                bare ? "text-ink-soft" : "on-art-soft"
+              )}
+            >
+              {current &&
+                [current.album, artistLabel(current)]
+                  .filter(Boolean)
+                  .join(" · ")}
+            </span>
+          </div>
+          {(labAltering || detached) && (
+            <div className={"flex shrink-0 items-center gap-1"}>
+              {labAltering && (
+                <button
+                  type={"button"}
+                  onClick={() => {
+                    setView("lab");
+                    setOpen(true);
+                  }}
+                  aria-label={"Lab active, open Lab"}
+                  className={cn(
+                    LABEL,
+                    "inline-flex h-4 shrink-0 items-center rounded-sm bg-art px-1 leading-none text-paper",
+                    "motion-press hover:opacity-85 focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden"
+                  )}
+                >
+                  LAB
+                </button>
+              )}
+              {detached && <SidebarReveal />}
+            </div>
+          )}
         </div>
 
         {/* The transport is centred under the identity, with the queue and the
-            sidebar reveal pushed to the trailing edge, so the play button
+            now-playing expand pushed to the trailing edge, so the play button
             stays the optical centre of the card. */}
         <div className={"flex items-center justify-center gap-0.5"}>
           <SecondaryControls.Volume size={"card"} />
@@ -138,11 +170,10 @@ export const MusicPlayer = () => {
               <IconArrowsDiagonal />
             </IconButton>
             <QueuePopover>
-              <IconButton aria-label={"Queue"}>
+              <IconButton aria-label={"Up next"}>
                 <IconPlaylist />
               </IconButton>
             </QueuePopover>
-            <SidebarReveal />
           </span>
         </div>
       </div>

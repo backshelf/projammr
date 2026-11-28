@@ -4,6 +4,7 @@ import { ShareComments } from "@/components/share/ShareComments";
 import { ShareFooter } from "@/components/share/ShareFooter";
 import { ShareMasthead } from "@/components/share/ShareMasthead";
 import { ShareRoomProvider } from "@/components/share/ShareRoom";
+import { ShareStickyTransport } from "@/components/share/ShareStickyTransport";
 import { ShareTrackList } from "@/components/share/ShareTrackList";
 import { getCachedSession, sessionUser } from "@/lib/session";
 import { SHARE_UNAVAILABLE, shareErrorKind } from "@/lib/share-links";
@@ -52,6 +53,7 @@ export default async function SharePage({ params }: Props) {
       sharelink={sharelink}
       viewerId={sessionUser(session)?.id ?? null}
     >
+      <ShareStickyTransport />
       <ShareMasthead />
       <div className={cn(COLUMN, "flex flex-col gap-10 px-(--gutter) py-10")}>
         <ShareTrackList />

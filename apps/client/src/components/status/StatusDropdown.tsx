@@ -9,13 +9,14 @@ import {
 } from "@/components/status/StatusDisplay";
 import { StatusMenuList } from "@/components/status/components/StatusMenu";
 import { ENTITIES, StatusKind } from "@/entities";
+import { useProjectRole } from "@/hooks/use-project-role";
 import { ActionError } from "@workspace/api/api";
 import { isActionError } from "@workspace/api/lib/action-result";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
+  ResponsivePicker,
+  ResponsivePickerContent,
+  ResponsivePickerTrigger,
+} from "@workspace/ui/components/responsive-picker";
 import { cn } from "@workspace/ui/lib/utils";
 import { PropsWithChildren, use, useOptimistic, useTransition } from "react";
 import { toast } from "sonner";
@@ -78,18 +79,35 @@ export const StatusDropdown = (props: StatusDropdownProps) => {
     });
   };
 
+  const canEdit = useProjectRole()?.can?.("editor") ?? true;
+
+  if (!canEdit) {
+    if (shown) {
+      const display = <StatusDisplay status={shown} variant={variant} />;
+      return className ? <span className={className}>{display}</span> : display;
+    }
+    return children ? <span className={className}>{children}</span> : null;
+  }
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className={cn("cursor-pointer text-left", className)}
+    <ResponsivePicker>
+      <ResponsivePickerTrigger asChild>
+        <button
+          type="button"
+          className={cn("cursor-pointer text-left coarse:min-h-11", className)}
+        >
+          {shown ? (
+            <StatusDisplay status={shown} variant={variant} />
+          ) : (
+            (children ?? <span className={"text-ink-faint"}>Set status</span>)
+          )}
+        </button>
+      </ResponsivePickerTrigger>
+      <ResponsivePickerContent
+        title="Status"
+        align="start"
+        desktopClassName="w-56 gap-0 p-0"
       >
-        {shown ? (
-          <StatusDisplay status={shown} variant={variant} />
-        ) : (
-          (children ?? <span className={"text-ink-faint"}>Set status</span>)
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="overflow-visible p-0">
         <Loading>
           <ResolvedStatusMenu
             statuses={statuses}
@@ -97,8 +115,8 @@ export const StatusDropdown = (props: StatusDropdownProps) => {
             currentId={shown?.id}
           />
         </Loading>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </ResponsivePickerContent>
+    </ResponsivePicker>
   );
 };
 

@@ -1,7 +1,7 @@
-import { useId, useState, type JSX, type SubmitEvent } from "react";
+import { useEffect, useId, useState, type JSX, type SubmitEvent } from "react";
+import { IconCheck, IconCopy } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { Field, FieldLabel } from "@workspace/ui/components/field";
-import { Spinner } from "@workspace/ui/components/spinner";
 
 import { call } from "../bridge";
 import { ErrorLine } from "../error-line";
@@ -81,6 +81,20 @@ function InstanceForm({ auth }: { auth: Auth }): JSX.Element {
 
 function Waiting({ auth }: { auth: Auth }): JSX.Element {
   const { run, pending, error } = useCommand();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  async function copyCode(): Promise<void> {
+    const code = auth.pending?.userCode;
+    if (!code) return;
+    await navigator.clipboard?.writeText(code);
+    setCopied(true);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -88,18 +102,37 @@ function Waiting({ auth }: { auth: Auth }): JSX.Element {
         Approve this computer in your browser.
       </p>
       <div className="flex flex-col gap-1">
-        <p
-          aria-label="Code"
-          className="font-mono text-subtitle/none tracking-[0.12em] text-ink"
-        >
-          {auth.pending?.userCode}
-        </p>
+        <div className="flex items-center gap-2">
+          <p
+            aria-label="Code"
+            className="font-mono text-subtitle/none tracking-[0.12em] text-ink"
+          >
+            {auth.pending?.userCode}
+          </p>
+          <Button
+            variant="ghost"
+            disabled={!auth.pending?.userCode}
+            onClick={() => void copyCode()}
+          >
+            {copied ? (
+              <>
+                <IconCheck aria-hidden className="size-3.5 text-art" />
+                Copied
+              </>
+            ) : (
+              <>
+                <IconCopy aria-hidden className="size-3.5" />
+                Copy code
+              </>
+            )}
+          </Button>
+        </div>
         <p className="truncate text-micro text-ink-soft">
           {auth.pending?.verificationUri}
         </p>
       </div>
       <ErrorLine error={error} />
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <Button
           size="lg"
           variant="outline"
@@ -108,11 +141,18 @@ function Waiting({ auth }: { auth: Auth }): JSX.Element {
         >
           Open again
         </Button>
-        <Spinner
-          aria-label="Waiting for approval"
-          className="size-3.5 text-ink-soft"
-        />
+        <Button
+          size="lg"
+          variant="ghost"
+          disabled={pending}
+          onClick={() => void run(() => call("cancel_sign_in"))}
+        >
+          Cancel
+        </Button>
       </div>
+      <p role="status" className="text-small text-ink-soft">
+        {"Waiting for approval\u2026"}
+      </p>
     </div>
   );
 }

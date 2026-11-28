@@ -20,7 +20,11 @@
     "repo": "/Users/me/Music/science Project",
     "branch": "main",
     "signal": "script",
-    "webPath": "/project/4/session/812"
+    "webPath": "/project/4/track/12",
+    "track": {
+      "id": 12,
+      "title": "Science"
+    }
   },
   "saves": [
     {
@@ -394,7 +398,9 @@
         "folder": null
       }
     ],
-    "neverHereFolders": ["/Users/me/Music/Samples from friends"]
+    "neverHereFolders": ["/Users/me/Music/Samples from friends"],
+    "home": "/Users/me",
+    "appVersion": "1.0.0"
   },
   "notices": [
     "Another of your machines is called Studio Mac. Pick another name."

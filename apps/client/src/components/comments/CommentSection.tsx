@@ -7,6 +7,7 @@ import {
 } from "@workspace/ui/components/layout/section-head";
 import CommentCompose, { type CommentEntityType } from "./CommentCompose";
 import CommentList from "./CommentList";
+import { TrackCommentsSection } from "./TrackCommentsSection";
 import { Arrive } from "@workspace/ui/components/layout/arrive";
 
 export default async function CommentSection({
@@ -47,5 +48,31 @@ export default async function CommentSection({
         <CommentCompose entityType={entityType} entityId={entityId} />
       </section>
     </EmptySection>
+  );
+}
+
+/** Server wrapper that fetches the track's general comments and hands them to
+ *  the unified client `TrackCommentsSection` inside `TrackAudioProvider`. */
+export async function TrackCommentSection({
+  trackId,
+  trackTitle,
+  artists,
+}: {
+  trackId: number;
+  trackTitle: string;
+  artists: string[];
+}) {
+  const comments = await getCommentsForTarget("track", trackId);
+  const roots = isActionError(comments)
+    ? comments
+    : comments.filter((c) => c.parentId === null);
+
+  return (
+    <TrackCommentsSection
+      trackId={trackId}
+      trackTitle={trackTitle}
+      artists={artists}
+      generalComments={roots}
+    />
   );
 }

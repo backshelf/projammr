@@ -31,6 +31,11 @@ pub fn sign_in(core: Shared, host: Option<String>) -> Answer {
     core.inner().sign_in(host)
 }
 
+#[tauri::command]
+pub fn cancel_sign_in(core: Shared) {
+    core.cancel_sign_in();
+}
+
 #[tauri::command(async)]
 pub fn sign_out(core: Shared) -> Answer {
     core.inner().sign_out()

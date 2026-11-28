@@ -37,15 +37,20 @@ export const CollapsibleSection = ({
     {/* Folded, the head has nothing below it to bind to, so it gives up the
         margin and the section is one line in the page's rhythm. */}
     <div className={cn(SECTION_HEAD, "group-data-closed/section:mb-0")}>
-      <CollapsibleTrigger
-        className={"flex min-h-11 items-center gap-1.5 text-left md:min-h-0"}
-      >
-        <CollapsibleChevron />
-        <h2 className={sectionTitle(prominence)}>
-          {label}
-          {count != null && <SectionCount>{count}</SectionCount>}
-        </h2>
-      </CollapsibleTrigger>
+      <h2 className={sectionTitle(prominence)}>
+        <CollapsibleTrigger
+          className={cn(
+            sectionTitle(prominence),
+            "flex min-h-11 items-center gap-1.5 text-left md:min-h-0"
+          )}
+        >
+          <CollapsibleChevron />
+          <span>
+            {label}
+            {count != null && <SectionCount>{count}</SectionCount>}
+          </span>
+        </CollapsibleTrigger>
+      </h2>
       {action}
     </div>
     <CollapsibleContent keepMounted={keepMounted}>

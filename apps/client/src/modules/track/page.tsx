@@ -4,8 +4,7 @@ import { cn } from "@workspace/ui/lib/utils";
 import { BODY, CANVAS, MASTHEAD_AREA, SPLIT } from "@/components/layout/shell";
 import { getLabels } from "@/actions/labels";
 import { getPriorityLevels } from "@/actions/priorities";
-import { getProjectArtists, getSessionDaws } from "@/actions/projects";
-import { getMachines, getSessionsPageForProject } from "@/actions/sessions";
+import { getProjectArtists } from "@/actions/projects";
 import { getStatuses } from "@/actions/statuses";
 import { getTracksForCollection } from "@/actions/tracks";
 import {
@@ -14,12 +13,13 @@ import {
   cachedProject,
   cachedTrack,
 } from "@/lib/server-data";
+import { getCachedSession, sessionUser } from "@/lib/session";
 import { ActivityFeed } from "@/components/activity/ActivityFeed";
 import { LinkToDialog } from "@/components/product-linking/LinkToDialog";
 import { AttachmentList } from "@/components/attachments/AttachmentList";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { CollapsibleSection } from "@workspace/ui/components/layout/collapsible-section";
-import CommentSection from "@/components/comments/CommentSection";
+import { TrackCommentSection } from "@/components/comments/CommentSection";
 import Description from "@/components/editing/Description";
 import { ImageUploader } from "@/components/uploads/ImageUploader";
 import { CustomFieldsBlock } from "@/components/editing/CustomFieldsBlock";
@@ -48,9 +48,7 @@ import {
 } from "@workspace/ui/components/layout/empty-section";
 import { SectionHead } from "@workspace/ui/components/layout/section-head";
 import { isBlankStoredDocument } from "@workspace/ui/lib/block-document";
-import { EntityTable } from "@/components/tables/EntityTable";
 import { SharingRail } from "@/components/sharing/SharingRail";
-import { StatusDisplay } from "@/components/status/StatusDisplay";
 import { StatusDropdown } from "@/components/status/StatusDropdown";
 import { DetectedMeta } from "@/components/track-audio/DetectedMeta";
 import { TrackAudioProvider } from "@/components/track-audio/TrackAudioContext";
@@ -67,23 +65,20 @@ import { TrackLyrics } from "@/components/track/TrackLyrics";
 import { TrackPrioritySection } from "@/components/track/TrackPrioritySection";
 import { TrackRelationsSection } from "@/components/track/TrackRelationsSection";
 import { TrackRunningOrder } from "@/components/track/TrackRunningOrder";
+import { TrackStudioDrawer } from "@/components/track/TrackStudioDrawer";
+import {
+  TrackStudioEmptyControl,
+  TrackStudioRailBlock,
+} from "@/components/track/TrackStudioRailBlock";
 import { runningOrder } from "@/components/track/running-order";
 import { TrackWorkHeatmap } from "@/components/work-heatmap/TrackWorkHeatmap";
-import { getTrackRepos } from "@/actions/repos";
-import { RepositoriesSection } from "@/components/repo/RepositoriesSection";
 import { cachedFormatters } from "@/lib/formatters";
 import { cachedPolicies } from "@/lib/policies/server";
-import { cachedEffectiveSettings } from "@/lib/settings/server";
 import { PageSections } from "@/components/layout/PageSections";
 import { createBreadcrumbs, hrefFromParsedRoute } from "@/lib/utils";
-import { IconPlus } from "@tabler/icons-react";
-import { TableSkeleton } from "@/components/tables/TableSkeleton";
-import type { Label, PriorityScaleLevel } from "@workspace/api/api";
 import { isActionError } from "@workspace/api/lib/action-result";
 import { loaded } from "@/lib/loaded";
-import { Button } from "@workspace/ui/components/button";
-import { type ReactNode, Suspense } from "react";
-import { Arrive } from "@workspace/ui/components/layout/arrive";
+import { Suspense } from "react";
 
 export default async function TrackPage({
   projectId,
@@ -104,7 +99,7 @@ export default async function TrackPage({
     siblingTracksResult,
     format,
     { shell },
-    settings,
+    session,
   ] = await Promise.all([
     cachedProject(projectId),
     cachedTrack(trackId),
@@ -117,25 +112,15 @@ export default async function TrackPage({
     collectionId ? getTracksForCollection(collectionId) : undefined,
     cachedFormatters(projectId),
     cachedPolicies(projectId),
-    cachedEffectiveSettings(projectId),
+    getCachedSession(),
   ]);
 
   const project = loaded(projectResult);
   const track = loaded(trackResult);
   const collection = collectionResult ? loaded(collectionResult) : undefined;
+  const viewerId = sessionUser(session)?.id ?? null;
 
-  // The sessions table and the collection picker fetch behind their own
-  // boundaries, so the masthead and rail paint without waiting on them.
   const statusProm = getStatuses(projectId);
-  // The track's own sessions list, so an archived track still shows them.
-  const sessionsPagePromise = getSessionsPageForProject(projectId, {
-    track: trackId,
-    archived: "include",
-    pageSize: settings.values["tables.rowsPerLoad"],
-  });
-  const dawsPromise = getSessionDaws(projectId);
-  const machinesPromise = getMachines();
-  const reposPromise = getTrackRepos(trackId);
 
   const projectLabels = isActionError(labelsResult) ? [] : labelsResult;
   const priorityLevels = isActionError(levelsResult) ? [] : levelsResult;
@@ -143,20 +128,6 @@ export default async function TrackPage({
   const canEdit = roleSatisfies(project.role, "editor");
   const archived = track.archivedAt !== null;
   const trackRef = { projectId, trackId, title: track.title };
-
-  const sessionsAction = canEdit ? (
-    <Button variant="ghost" size={"icon-sm"} className="h-fit" asChild>
-      <AppLink
-        href={hrefFromParsedRoute(
-          { kind: "session-new", collectionId, trackId },
-          projectId
-        )}
-        aria-label="New session"
-      >
-        <IconPlus />
-      </AppLink>
-    </Button>
-  ) : undefined;
 
   const createdAt = new Date(track.createdAt);
   const updatedAt = new Date(track.updatedAt);
@@ -230,7 +201,6 @@ export default async function TrackPage({
                     canEdit ? getProjectArtists(projectId) : undefined
                   }
                 />
-                {track.status && <StatusDisplay status={track.status} />}
                 <NowPlayingFlag
                   owner={{ kind: "track", id: trackId }}
                   projectId={projectId}
@@ -303,39 +273,6 @@ export default async function TrackPage({
                       <TrackLyrics trackId={trackId} note={track.note} />
                     </Suspense>
                   ),
-                  sessions: (
-                    <Suspense
-                      fallback={
-                        <section>
-                          <SectionHead action={sessionsAction}>
-                            SESSIONS
-                          </SectionHead>
-                          <TableSkeleton rows={4} />
-                        </section>
-                      }
-                    >
-                      <TrackSessionsSection
-                        pagePromise={sessionsPagePromise}
-                        dawsPromise={dawsPromise}
-                        machinesPromise={machinesPromise}
-                        projectId={projectId}
-                        collectionId={collectionId}
-                        trackId={trackId}
-                        projectLabels={projectLabels}
-                        priorityLevels={priorityLevels}
-                        canEdit={canEdit}
-                        action={sessionsAction}
-                      />
-                    </Suspense>
-                  ),
-                  repositories: (
-                    <Suspense fallback={null}>
-                      <RepositoriesSection
-                        reposPromise={reposPromise}
-                        projectId={projectId}
-                      />
-                    </Suspense>
-                  ),
                   relations: (
                     <TrackRelationsSection
                       trackId={trackId}
@@ -361,13 +298,10 @@ export default async function TrackPage({
                   ),
                   comments: (
                     <Suspense fallback={null}>
-                      <CommentSection
-                        entityType="track"
-                        entityId={trackId}
-                        prominence={"primary"}
-                        hint={
-                          "About the song as a whole. Timestamped mix notes go on an audio version."
-                        }
+                      <TrackCommentSection
+                        trackId={trackId}
+                        trackTitle={track.title}
+                        artists={track.artists ?? []}
                       />
                     </Suspense>
                   ),
@@ -384,24 +318,34 @@ export default async function TrackPage({
                   ),
                 }}
               />
+              {track.studio.sessionCount === 0 && canEdit && (
+                <EmptySection
+                  label="STUDIO / DAW"
+                  empty
+                  addControl={<TrackStudioEmptyControl />}
+                >
+                  {null}
+                </EmptySection>
+              )}
             </SectionFold>
           </div>
+          <Suspense fallback={null}>
+            <TrackStudioDrawer
+              projectId={projectId}
+              trackId={trackId}
+              collectionId={collectionId}
+              trackTitle={track.title}
+              studio={track.studio}
+              canEdit={canEdit}
+              viewerId={viewerId}
+            />
+          </Suspense>
           {/* Inside the provider so the rail's loudness block follows the
             version picked in the masthead. */}
           <RightSideBlur
             more={
               <>
-                <DetectedMeta
-                  ownKey={{ tonic: track.keyTonic, scale: track.keyScale }}
-                  ownBpm={track.bpm}
-                  detectedKey={track.primaryAudio?.musicalKey ?? null}
-                  keyConfidence={track.primaryAudio?.keyConfidence ?? null}
-                  detectedBpm={track.primaryAudio?.bpm ?? null}
-                  bpmConfidence={track.primaryAudio?.bpmConfidence ?? null}
-                  mainSessionId={
-                    track.sessions.find((session) => session.main)?.id ?? null
-                  }
-                />
+                <TrackStudioRailBlock studio={track.studio} />
                 {track.audios.length > 0 && (
                   <>
                     <RailBlock>
@@ -412,10 +356,7 @@ export default async function TrackPage({
                     </RailBlock>
                   </>
                 )}
-                <RailBlock>
-                  <RailLabel>WORKED ON</RailLabel>
-                  <TrackWorkHeatmap projectId={projectId} trackId={trackId} />
-                </RailBlock>
+                <TrackWorkHeatmap projectId={projectId} trackId={trackId} />
                 {canEdit && (
                   <RailBlock>
                     <Suspense fallback={<RailLabel>SHARING</RailLabel>}>
@@ -508,21 +449,25 @@ export default async function TrackPage({
                 levels={priorityLevels}
               />
             </RailBlock>
-            <RailBlock>
-              <TrackExplicitToggle
-                trackId={trackId}
-                explicit={track.explicit}
-              />
-            </RailBlock>
+            {canEdit && (
+              <RailBlock>
+                <TrackExplicitToggle
+                  trackId={trackId}
+                  explicit={track.explicit}
+                />
+              </RailBlock>
+            )}
             <RailBlock>
               <RailLabel
                 action={
-                  <LinkToDialog
-                    targetKind="track"
-                    targetId={trackId}
-                    defaultTab="collection"
-                    linkedCollectionIds={track.collections?.map((c) => c.id)}
-                  />
+                  canEdit ? (
+                    <LinkToDialog
+                      targetKind="track"
+                      targetId={trackId}
+                      defaultTab="collection"
+                      linkedCollectionIds={track.collections?.map((c) => c.id)}
+                    />
+                  ) : undefined
                 }
               >
                 COLLECTIONS
@@ -551,73 +496,20 @@ export default async function TrackPage({
                 projectLabels={projectLabels}
               />
             </RailBlock>
+            <DetectedMeta
+              ownKey={{ tonic: track.keyTonic, scale: track.keyScale }}
+              ownBpm={track.bpm}
+              detectedKey={track.primaryAudio?.musicalKey ?? null}
+              keyConfidence={track.primaryAudio?.keyConfidence ?? null}
+              detectedBpm={track.primaryAudio?.bpm ?? null}
+              bpmConfidence={track.primaryAudio?.bpmConfidence ?? null}
+              mainSessionId={
+                track.sessions.find((session) => session.main)?.id ?? null
+              }
+            />
           </RightSideBlur>
         </TrackAudioProvider>
       </EntitySurfaceProvider>
     </ArtProvider>
-  );
-}
-
-async function TrackSessionsSection({
-  pagePromise,
-  dawsPromise,
-  machinesPromise,
-  projectId,
-  collectionId,
-  trackId,
-  projectLabels,
-  priorityLevels,
-  canEdit,
-  action,
-}: {
-  pagePromise: ReturnType<typeof getSessionsPageForProject>;
-  dawsPromise: ReturnType<typeof getSessionDaws>;
-  machinesPromise: ReturnType<typeof getMachines>;
-  projectId: number;
-  collectionId?: number;
-  trackId: number;
-  projectLabels: Label[];
-  priorityLevels: PriorityScaleLevel[];
-  canEdit: boolean;
-  action: ReactNode;
-}) {
-  const [result, dawsResult, machines] = await Promise.all([
-    pagePromise,
-    dawsPromise,
-    machinesPromise,
-  ]);
-  const sessionsPage = isActionError(result) ? null : result;
-
-  return (
-    <EmptySection
-      label={"SESSIONS"}
-      empty={sessionsPage?.rowCount === 0}
-      add={canEdit ? "Session" : undefined}
-    >
-      <Arrive>
-        <section>
-          <SectionHead action={action}>SESSIONS</SectionHead>
-          <EntityTable
-            kind="session"
-            rows={sessionsPage?.rows ?? []}
-            rowCount={sessionsPage?.rowCount ?? 0}
-            pageSize={sessionsPage?.pageSize}
-            facets={sessionsPage?.facets}
-            groups={sessionsPage?.groups}
-            projectId={projectId}
-            projectLabels={projectLabels}
-            priorityLevels={priorityLevels}
-            embedded
-            scope={{
-              trackId,
-              collectionId,
-              tracks: [],
-              daws: isActionError(dawsResult) ? [] : dawsResult,
-              machines,
-            }}
-          />
-        </section>
-      </Arrive>
-    </EmptySection>
   );
 }

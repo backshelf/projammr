@@ -111,8 +111,12 @@ describe("unmatchedCompareLine", () => {
 describe("compareStripProps", () => {
   it("passes the pair's change map and summary, labelled with B's version", () => {
     expect(compareStripProps({ b, diff })).toEqual({
-      label: "Change to v4",
+      label: "Change",
+      vsVersion: 4,
+      aligned: true,
+      offsetMs: 1500,
       change: [0, 0.5, 1],
+      loudnessDelta: [],
       summary: diff.summary,
     });
   });

@@ -186,6 +186,7 @@ export const sessions = pgTable(
     trackId: integer("track_id").references(() => tracks.id, {
       onDelete: "set null",
     }),
+    inboxDismissedAt: timestamp("inbox_dismissed_at"),
     projectId: integer("project_id")
       .references(() => projects.id, { onDelete: "cascade" })
       .notNull(),
@@ -302,6 +303,19 @@ export const epochDate = z
     description: "Epoch milliseconds.",
   });
 
+const isoDateTime = z
+  .preprocess((v) => {
+    if (v == null || v instanceof Date) return v;
+    if (typeof v !== "string") return v;
+    const parsed = Date.parse(v);
+    return Number.isNaN(parsed) ? v : new Date(parsed);
+  }, z.date())
+  .meta({
+    type: "string",
+    format: "date-time",
+    description: "ISO 8601 date-time string.",
+  });
+
 /**
  * The twelve pitch classes a session's root note may be, in the one spelling
  * they are stored as: sharps throughout, no flats.
@@ -408,6 +422,7 @@ export const scaleWireSchema = z
 const sessionWireFields = {
   localFileCreatedAt: epochDate.nullable().optional(),
   localFileUpdatedAt: epochDate.nullable().optional(),
+  inboxDismissedAt: isoDateTime.nullable().optional(),
   samples: z.array(sessionSampleSchema).max(MAX_SAMPLES).nullable().optional(),
   notes: blockDocumentSchema.nullish(),
   structure: sessionStructureSchema.nullish(),

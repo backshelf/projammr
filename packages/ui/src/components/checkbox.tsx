@@ -11,7 +11,7 @@ function Checkbox({
       type="checkbox"
       data-slot="checkbox"
       className={cn(
-        "block flex-none cursor-pointer accent-[var(--art)] motion-ink focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+        "block flex-none cursor-pointer accent-[var(--art)] motion-ink focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
       {...props}

@@ -115,8 +115,8 @@ export function ResetGroupButton({ group }: { group: HubGroupEntry }) {
           className={cn(
             LABEL,
             "relative cursor-pointer text-ink-soft motion-ink hover:text-ink",
-            "rounded-sm focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-none",
-            "coarse:after:absolute coarse:after:-inset-3"
+            "rounded-sm focus-visible:ring-2 focus-visible:ring-art focus-visible:outline-hidden",
+            "phone:inline-flex phone:min-h-11 phone:items-center coarse:inline-flex coarse:min-h-11 coarse:min-w-11 coarse:items-center coarse:justify-center coarse:px-2 coarse:after:inset-0"
           )}
         >
           Reset all

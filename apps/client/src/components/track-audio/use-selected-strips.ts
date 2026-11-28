@@ -11,14 +11,15 @@ import { useCallback } from "react";
 
 /**
  * The strips shown under the track page's waveform, read by
- * `TrackAudioSection` and handed down to `MeasureStack`'s legend: the visuals
- * policy's `strips`, whose unknown ids the policy has already dropped. A pill
- * toggled on the legend writes the viewer's strips setting, which every track
- * page follows at once.
+ * `TrackAudioSection` and handed down to `MeasureStack`: the visuals policy's
+ * `strips`, whose unknown ids the policy has already dropped. Toggling a pill
+ * or clearing strips on phone writes the viewer's strips setting, which every
+ * track page follows at once.
  */
 export function useSelectedStrips(): [
   readonly StripId[],
   (id: StripId) => void,
+  () => void,
 ] {
   const { strips } = useVisualsPolicy();
   const write = useUserSettingsWrite();
@@ -32,5 +33,9 @@ export function useSelectedStrips(): [
     [strips, write]
   );
 
-  return [strips, toggle];
+  const clear = useCallback(() => {
+    write({ "visuals.strips": [] }).catch(toastRefusedWrite);
+  }, [write]);
+
+  return [strips, toggle, clear];
 }

@@ -1,5 +1,23 @@
 "use client";
 
+import { useDragSensors } from "@/lib/drag-sensors";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  DragOverlay,
+  type DragStartEvent,
+  KeyboardSensor,
+  useSensor,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button } from "@workspace/ui/components/button";
 import { useCanvasRoot } from "@workspace/ui/components/layout/scroll-root";
@@ -118,6 +136,37 @@ function SectionHeading({ section }: { section: RowCardSection }) {
  * list falls back to its original, un-virtualised markup so a grouped list's
  * per-section `role="list"` stays intact there.
  */
+function SortableRowCard({
+  row,
+  entityLabel,
+}: {
+  row: RowCardModel;
+  entityLabel: string;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: row.id });
+
+  return (
+    <RowCard
+      cardRef={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      isDragging={isDragging}
+      row={row}
+      entityLabel={entityLabel}
+      dragHandle={{ attributes, listeners }}
+    />
+  );
+}
+
 export function RowCardList({
   sections,
   entityLabel,
@@ -128,6 +177,7 @@ export function RowCardList({
   loaded,
   loadMore,
   retryLoad,
+  reorder,
   scrollToIndex,
 }: {
   sections: RowCardSection[];
@@ -142,6 +192,9 @@ export function RowCardList({
   loaded: LoadedStatus;
   loadMore: () => Promise<void>;
   retryLoad: () => Promise<void>;
+  reorder?: {
+    onMove: (rowId: number, trackNumber: number) => Promise<boolean>;
+  };
   scrollToIndex: RefObject<((index: number) => void) | null>;
 }) {
   // The row whose sheet is open, and whether it is showing. The two are
@@ -150,6 +203,58 @@ export function RowCardList({
   // for to still be there while it leaves.
   const [sheetRowId, setSheetRowId] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [reorderMode, setReorderMode] = useState(false);
+  const [activeDragId, setActiveDragId] = useState<number | null>(null);
+  const [optimisticRows, setOptimisticRows] = useState<{
+    base: RowCardModel[];
+    rows: RowCardModel[];
+  } | null>(null);
+
+  const sourceRows = useMemo(() => sections[0]?.rows ?? [], [sections]);
+  const canReorder = Boolean(
+    reorder && !grouped && !selection && sourceRows.length > 0
+  );
+  const isReordering = canReorder && reorderMode;
+  const reorderRows =
+    optimisticRows?.base === sourceRows ? optimisticRows.rows : sourceRows;
+  const activeDragRow =
+    activeDragId == null
+      ? null
+      : (reorderRows.find((r) => r.id === activeDragId) ?? null);
+
+  const keyboardSensor = useSensor(KeyboardSensor, {
+    coordinateGetter: sortableKeyboardCoordinates,
+  });
+  const sensors = useDragSensors(keyboardSensor);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragId(Number(event.active.id));
+  }, []);
+
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      setActiveDragId(null);
+      const { active, over } = event;
+      if (!over || active.id === over.id || !reorder) return;
+      const oldIndex = reorderRows.findIndex((r) => r.id === Number(active.id));
+      const newIndex = reorderRows.findIndex((r) => r.id === Number(over.id));
+      if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+
+      const targetTrackNumber =
+        reorderRows[newIndex]?.trackNumber ?? newIndex + 1;
+      const nextRows = arrayMove(reorderRows, oldIndex, newIndex).map(
+        (r, i) => ({
+          ...r,
+          trackNumber: i + 1,
+        })
+      );
+      setOptimisticRows({ base: sourceRows, rows: nextRows });
+
+      const ok = await reorder.onMove(Number(active.id), targetTrackNumber);
+      if (!ok) setOptimisticRows(null);
+    },
+    [reorder, reorderRows, sourceRows]
+  );
 
   const openSheet = useCallback((id: number) => {
     setSheetRowId(id);
@@ -280,9 +385,62 @@ export function RowCardList({
             Done
           </Button>
         </div>
+      ) : isReordering ? (
+        <div className="flex min-h-11 items-center justify-between gap-2 border-b border-rule px-(--gutter) py-1.5">
+          <span className={cn(LABEL, "text-ink-soft")}>Reorder</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="coarse:min-h-11"
+            onClick={() => setReorderMode(false)}
+          >
+            Done
+          </Button>
+        </div>
+      ) : canReorder ? (
+        <div className="flex min-h-11 items-center justify-end gap-2 border-b border-rule px-(--gutter) py-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="coarse:min-h-11"
+            onClick={() => setReorderMode(true)}
+          >
+            Reorder
+          </Button>
+        </div>
       ) : null}
 
-      {windowed ? (
+      {isReordering ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={(e) => void handleDragEnd(e)}
+          onDragCancel={() => setActiveDragId(null)}
+        >
+          <SortableContext
+            items={reorderRows.map((r) => r.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div role="list">
+              {reorderRows.map((row) => (
+                <SortableRowCard
+                  key={row.id}
+                  row={row}
+                  entityLabel={entityLabel}
+                />
+              ))}
+            </div>
+          </SortableContext>
+          <DragOverlay>
+            {activeDragRow ? (
+              <div className="rounded-md border border-rule bg-paper shadow-overlay">
+                <RowCard row={activeDragRow} entityLabel={entityLabel} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : windowed ? (
         <div ref={listRef}>
           <div
             role="list"

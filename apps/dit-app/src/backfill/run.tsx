@@ -124,6 +124,20 @@ export function Run({
   const chosen = view.folders.find(
     (folder) => folder.path === view.chosen?.folder
   );
+  const activeFolder = view.folders.find(
+    (folder) =>
+      folder.state.state === "committing" ||
+      folder.state.state === "uploading" ||
+      folder.state.state === "waiting-for-hub"
+  );
+  const overallPercent = useMemo(() => {
+    if (view.folders.length === 0) return 0;
+    const sum = view.folders.reduce((total, folder) => {
+      if (folder.state.state === "done") return total + 100;
+      return total + (progressPercent(folder.state) ?? 0);
+    }, 0);
+    return Math.min(100, Math.round(sum / view.folders.length));
+  }, [view.folders]);
   const paused = view.run?.paused === true;
 
   return (
@@ -143,22 +157,43 @@ export function Run({
           <FolderProgress folder={chosen} view={view} actions={actions} />
         )
       }
-      line={runLine(view)}
+      line={
+        <div className="flex flex-col gap-1.5">
+          <Progress
+            value={overallPercent}
+            aria-label="Overall progress"
+            aria-valuenow={overallPercent}
+            indicatorClassName="bg-art"
+          />
+          <span>{runLine(view)}</span>
+        </div>
+      }
       actions={
-        paused ? (
-          <Button size="lg" onClick={() => void actions.resume()}>
-            Resume
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="lg"
-            disabled={view.run === null}
-            onClick={() => void actions.pause()}
-          >
-            Pause
-          </Button>
-        )
+        <>
+          {activeFolder && activeFolder.path !== chosen?.path && (
+            <Button
+              variant="ghost"
+              size="lg"
+              onClick={() => void actions.choose(activeFolder.path)}
+            >
+              Jump to active
+            </Button>
+          )}
+          {paused ? (
+            <Button size="lg" onClick={() => void actions.resume()}>
+              Resume
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="lg"
+              disabled={view.run === null}
+              onClick={() => void actions.pause()}
+            >
+              Pause
+            </Button>
+          )}
+        </>
       }
     />
   );

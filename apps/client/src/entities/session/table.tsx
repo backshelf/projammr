@@ -4,6 +4,7 @@ import type { NewRowConfig } from "@/components/tables/DraftRow";
 import type {
   EditableCellConfig,
   FilterColumnConfig,
+  FilterPreset,
 } from "@/components/tables/generic-table-types";
 import { draftFieldsFrom } from "@/components/tables/new-row";
 import type { PeekField, PeekRow } from "@/components/tables/PeekPanel";
@@ -139,12 +140,45 @@ export const sessionTable = {
             { value: "false", label: inDitLabel(false) },
           ],
         },
+        {
+          id: "unassigned",
+          label: "Track link",
+          param: "unassigned",
+          counted: false,
+          options: [
+            { value: "true", label: "Unassigned" },
+            { value: "false", label: "Assigned" },
+          ],
+        },
       ],
       [tracks, daws, priorityLevels]
     );
 
+    const filterPresets: FilterPreset[] | undefined = useMemo(
+      (): FilterPreset[] | undefined =>
+        embedded || trackId != null
+          ? undefined
+          : [
+              { id: "all", label: "All", params: {} },
+              {
+                id: "unassigned",
+                label: "Unassigned",
+                params: { unassigned: "true" },
+              },
+              {
+                id: "not-in-dit",
+                label: "Not in dit",
+                params: { inDit: "false" },
+              },
+            ],
+      [embedded, trackId]
+    );
+
     const initiallyHiddenColumns = useMemo(
-      () => (embedded ? ["createdAt", "track", "collection"] : ["createdAt"]),
+      () =>
+        embedded
+          ? ["id", "createdAt", "track", "collection"]
+          : ["id", "createdAt"],
       [embedded]
     );
 
@@ -218,6 +252,7 @@ export const sessionTable = {
       columns,
       editableCells,
       filterColumns,
+      filterPresets,
       newRow,
       groupByOptions,
       getRowGroupKey,

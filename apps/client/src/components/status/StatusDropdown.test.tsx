@@ -26,6 +26,7 @@ mock.module("next/navigation", () => ({
   usePathname: mock(),
 }));
 
+const { ProjectProvider } = await import("@/hooks/use-project-role");
 const { StatusDropdown } = await import("./StatusDropdown");
 
 afterEach(cleanup);
@@ -39,6 +40,19 @@ const mixing = (
   colourHex: "#336699",
   percentage: 40,
   ...overrides,
+});
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+}
+
+const originalWidth = window.innerWidth;
+afterEach(() => {
+  setViewportWidth(originalWidth);
 });
 
 function renderDropdown(
@@ -66,6 +80,7 @@ async function openMenu() {
 
 describe("StatusDropdown", () => {
   beforeEach(() => {
+    setViewportWidth(1024);
     patchField.mockReset();
     toastError.mockReset();
   });
@@ -75,7 +90,7 @@ describe("StatusDropdown", () => {
     renderDropdown();
 
     await openMenu();
-    const item = await screen.findByRole("menuitem", { name: /mixing/i });
+    const item = await screen.findByRole("option", { name: /mixing/i });
     fireEvent.click(item);
 
     await waitFor(() =>
@@ -88,7 +103,7 @@ describe("StatusDropdown", () => {
     renderDropdown({ targetKind: "collection" });
 
     await openMenu();
-    const item = await screen.findByRole("menuitem", { name: /mixing/i });
+    const item = await screen.findByRole("option", { name: /mixing/i });
     fireEvent.click(item);
 
     await waitFor(() =>
@@ -96,5 +111,39 @@ describe("StatusDropdown", () => {
         "Failed to update collection status."
       )
     );
+  });
+
+  it("shows status descriptions inline in the mobile sheet", async () => {
+    setViewportWidth(390);
+    renderDropdown({
+      statuses: Promise.resolve([
+        mixing({ description: "Balancing levels and panning" }),
+      ]),
+    });
+
+    await openMenu();
+    expect(
+      document.querySelector('[data-slot="responsive-picker-sheet"]')
+    ).not.toBeNull();
+    expect(
+      await screen.findByText("Balancing levels and panning")
+    ).toBeTruthy();
+  });
+
+  it("renders the status read-only without a menu trigger for viewers", () => {
+    render(
+      <ProjectProvider project={{ id: 1, name: "P", role: "viewer" }}>
+        <StatusDropdown
+          statuses={Promise.resolve([mixing()])}
+          targetId={7}
+          targetKind="track"
+          current={mixing()}
+        />
+      </ProjectProvider>,
+      { wrapper: MotionProvider }
+    );
+
+    expect(screen.getByText(/mixing/i)).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

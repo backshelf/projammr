@@ -38,6 +38,7 @@ export function MachineName({
       <PanelHead
         title="Name this computer"
         lede={`Another of your machines is called ${refused}. Pick another name.`}
+        blocking
       />
       <form onSubmit={submit} className="flex flex-col gap-4">
         <Field>

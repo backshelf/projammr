@@ -114,6 +114,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::get_snapshot,
             commands::sign_in,
+            commands::cancel_sign_in,
             commands::sign_out,
             commands::adopt,
             commands::decline_folder,

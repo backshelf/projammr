@@ -139,7 +139,7 @@ export function storageLine(
   }
   const left = format.bytes(storage.remaining, 1);
   return storage.bytes > storage.remaining
-    ? `These folders need ${needs} and you have ${left} left. Untick folders until they fit.`
+    ? `These folders need ${needs} and you have ${left} left. Go back (⌘[) to untick folders until they fit.`
     : `Needs ${needs} of your ${left} left.`;
 }
 

@@ -97,7 +97,7 @@ const settle = () =>
   act(
     () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   );
-const statusMenu = () => document.querySelector('[role="menu"]');
+const statusMenu = () => document.querySelector('[role="listbox"]');
 
 describe("the table's status and priority keys", () => {
   it("opens the cursor row's status control on s", async () => {

@@ -54,9 +54,12 @@ describe("Adopting", () => {
     expect(screen.getByRole("status").textContent).toBe("All 2 sets saved");
   });
 
-  test("draws no list before the first set starts", () => {
+  test("draws no list before the first set starts and renders a progress bar", () => {
     show({ ...adopting, sets: [] });
 
+    expect(
+      screen.getByRole("progressbar", { name: "Tracking progress" })
+    ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("0 of 3 sets saved");
     expect(screen.queryByRole("list")).toBeNull();
   });

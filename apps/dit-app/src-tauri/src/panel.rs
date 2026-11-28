@@ -28,6 +28,7 @@ const WIDTH: f64 = 400.0;
 const INITIAL_HEIGHT: f64 = 480.0;
 /// The shortest and tallest the web may make it.
 const MIN_HEIGHT: f64 = 120.0;
+const MAX_HEIGHT: f64 = 600.0;
 /// A click on the bar item takes key from the panel, and so hides it, an instant before the click arrives: a
 /// click this soon after a hide is the one that hid it.
 const CLICK_AFTER_HIDE: Duration = Duration::from_millis(250);
@@ -239,11 +240,21 @@ pub fn resize(app: &AppHandle, height: f64) {
             };
             max_height(area, top.map(|position| f64::from(position.y)), scale)
         });
-    let height = height.clamp(MIN_HEIGHT, max.max(MIN_HEIGHT));
+    let height = clamp_height(height, max);
+    if let Ok(current) = window.inner_size() {
+        let current_height = f64::from(current.height) / scale;
+        if (current_height - height).abs() < 1.0 {
+            return;
+        }
+    }
     let _ = window.set_size(LogicalSize::new(WIDTH, height));
     if let Some(top) = top {
         let _ = window.set_position(top);
     }
+}
+
+fn clamp_height(requested: f64, monitor_max: f64) -> f64 {
+    requested.clamp(MIN_HEIGHT, monitor_max.min(MAX_HEIGHT).max(MIN_HEIGHT))
 }
 
 /// The tallest logical height the panel may take inside `work_area`, given its top edge `top_y` in physical pixels:
@@ -438,6 +449,10 @@ mod tests {
         // Tiny working area still respects MIN_HEIGHT.
         let tiny = Area { h: 100.0, ..work };
         assert_eq!(max_height(tiny, Some(56.0), 2.0), MIN_HEIGHT);
+        // Logical panel height never exceeds MAX_HEIGHT even on tall displays.
+        assert_eq!(clamp_height(900.0, 874.0), MAX_HEIGHT);
+        assert_eq!(clamp_height(900.0, 480.0), 480.0);
+        assert_eq!(clamp_height(50.0, 874.0), MIN_HEIGHT);
     }
 
     #[test]

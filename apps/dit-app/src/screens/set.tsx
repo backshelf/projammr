@@ -81,6 +81,7 @@ export function SetScreen({
         <NothingToCommit lastCommit={snapshot.lastCommit} />
       )}
       <StatusLines lines={pushLines(snapshot)} />
+      <RenderBand cards={snapshot.renders} />
       {snapshot.saves.length > 0 && (
         <SavesList
           saves={snapshot.saves}
@@ -88,7 +89,6 @@ export function SetScreen({
           lastCommit={snapshot.lastCommit}
         />
       )}
-      <RenderBand cards={snapshot.renders} />
     </div>
   );
 }

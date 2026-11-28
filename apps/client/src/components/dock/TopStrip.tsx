@@ -1,15 +1,19 @@
 import { AccountSheet } from "@/components/dock/AccountSheet";
 import { ProjectSwitcherSheet } from "@/components/dock/ProjectSwitcherSheet";
+import { QuickCreateSheet } from "@/components/dock/QuickCreateSheet";
 import { JobsTraySheet } from "@/components/jobs/JobsTray";
 import { AppLink } from "@/components/navigation/AppLink";
+import { roleSatisfies } from "@/lib/roles";
 import { cachedShellData } from "@/lib/server-data";
 import { hrefFromParsedRoute } from "@/lib/utils";
 import { IconChevronLeft } from "@tabler/icons-react";
-import type { Project } from "@workspace/api/api";
+import type { MemberRole, Project } from "@workspace/api/api";
 import { LABEL } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
 
-type ProjectSummary = Pick<Project, "id" | "name" | "image">;
+type ProjectSummary = Pick<Project, "id" | "name" | "image"> & {
+  role?: MemberRole;
+};
 
 /**
  * The phone's top chrome: the project switcher on the left, the account menu
@@ -34,6 +38,10 @@ export async function TopStrip({
   back?: boolean;
 }) {
   const { user, projects, currentProject } = await cachedShellData();
+  const activeProject = project ?? currentProject;
+  const canEdit = activeProject?.role
+    ? roleSatisfies(activeProject.role, "editor")
+    : false;
 
   return (
     <div
@@ -46,10 +54,16 @@ export async function TopStrip({
       ) : (
         <ProjectSwitcherSheet
           projects={projects}
-          currentProject={project ?? currentProject}
+          currentProject={activeProject}
         />
       )}
       <div className={"flex items-center gap-1"}>
+        {user && (
+          <QuickCreateSheet
+            projectId={activeProject?.id ?? null}
+            canEdit={canEdit}
+          />
+        )}
         <JobsTraySheet />
         {user && <AccountSheet user={user} />}
       </div>

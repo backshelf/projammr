@@ -13,8 +13,14 @@
    simply pass down is inherited rather than restated. */
 
 .doc {
+  --font-doc: var(--font-system-sans);
+  font-family: var(--font-doc);
   color: var(--ink-soft);
   line-height: 1.75;
+}
+
+:root[data-font="serif"] .doc {
+  --font-doc: var(--font-system-serif);
 }
 
 /* The page's own reading surface: capped to the measure, bled into the gutter
@@ -62,7 +68,7 @@
 }
 
 .doc :is(.bn-default-styles, .bn-default-styles :is(p, li)) {
-  font-family: var(--font-body) !important;
+  font-family: var(--font-doc) !important;
 }
 
 /* Editor typography: `reading` (`data-editor` on <html>) sets notes and
@@ -102,10 +108,23 @@
   color: var(--ink-soft);
 }
 
+.doc a {
+  color: var(--art);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--art) 55%, transparent);
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color var(--dur-instant) var(--ease-arrive);
+}
+
+.doc a:hover {
+  text-decoration-color: var(--art);
+}
+
 .doc code {
   font-family: var(--font-mono) !important;
   font-size: 0.875em;
   background: var(--paper-sunk);
+  border: 1px solid var(--rule);
   padding: 0.0625rem 0.3125rem;
   border-radius: var(--radius-sm);
   color: var(--ink);
@@ -186,6 +205,7 @@
 .doc[data-variant="lyrics"]
   .bn-block-content[data-content-type="paragraph"]::after {
   align-self: baseline;
+  font-family: var(--font-mono);
   font-size: var(--t-micro);
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
@@ -332,6 +352,7 @@ html[data-lyrics-rhymes="off"]
   position: absolute;
   right: 0;
   bottom: 0;
+  font-family: var(--font-mono);
   font-size: var(--t-micro);
   letter-spacing: 0.06em;
   text-transform: none;
@@ -344,4 +365,10 @@ html[data-lyrics-rhymes="off"]
 .doc[data-variant="lyrics"]
   [data-section-lines]:not([data-section-average])::after {
   content: attr(data-section-lines) " lines";
+}
+
+@media (width < 768px) {
+  .doc[data-variant="lyrics"] [data-section-lines] {
+    padding-right: 9rem;
+  }
 }

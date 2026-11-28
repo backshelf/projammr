@@ -6,7 +6,7 @@ import { AnimatePresence } from "@workspace/ui/lib/motion";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 
 import { useDataTable } from "../data-table-context";
-import { DraftRow, type NewRowConfig } from "../DraftRow";
+import { DraftCardForm, DraftRow, type NewRowConfig } from "../DraftRow";
 import type { Section } from "../group-sections";
 
 /**
@@ -93,12 +93,12 @@ export function sectionSeed(
  * Absent for a viewer, who has no `newRow`, and on the card tier.
  */
 export function Draft<TData extends RowData, TChild = never>(): ReactNode {
-  const { newRow, showCards, entityLabel, draft } = useDataTable<
+  const { table, newRow, showCards, entityLabel, draft } = useDataTable<
     TData,
     TChild
   >();
-  if (!newRow || showCards) return null;
-  const { drafting, toggleRef, toggleDraft } = draft;
+  if (!newRow) return null;
+  const { drafting, toggleRef, toggleDraft, closeDraft } = draft;
 
   return (
     <div className="sticky left-0 px-2 pt-2">
@@ -111,6 +111,15 @@ export function Draft<TData extends RowData, TChild = never>(): ReactNode {
       >
         {drafting ? "Cancel" : `+ Add ${entityLabel}`}
       </button>
+      {showCards && drafting && (
+        <DraftCardForm
+          config={newRow}
+          columnIds={table.getVisibleLeafColumns().map((c) => c.id)}
+          autoFocus
+          onCreated={closeDraft}
+          onCancel={closeDraft}
+        />
+      )}
     </div>
   );
 }

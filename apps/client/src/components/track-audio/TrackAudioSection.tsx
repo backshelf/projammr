@@ -1,6 +1,5 @@
 "use client";
 
-import { unpinPrimaryTrackAudio } from "@/actions/track-audios";
 import { useEntityKey } from "@/components/commands/entity-surface";
 import { PlayAffordance } from "@/components/music-player/PlayAffordance";
 import {
@@ -11,47 +10,125 @@ import {
   usePlayerActions,
 } from "@/components/music-player/player-hooks";
 import type { MusicPlayerTrack } from "@/components/music-player/types";
+import { usePlayback } from "@/components/music-player/use-playback";
 import { analysisOutstanding } from "@/components/track-audio/analysis-outstanding";
 import { AudioAnalysisWatcher } from "@/components/track-audio/AudioAnalysisWatcher";
+import { AudioCommentPanel } from "@/components/track-audio/AudioCommentPanel";
 import {
   AudioCompareControls,
   CompareChangeStrip,
 } from "@/components/track-audio/AudioCompareControls";
-import { AudioCommentPanel } from "@/components/track-audio/AudioCommentPanel";
-import { FromCommitLink } from "@/components/track-audio/FromCommitLink";
 import { DuplicateFlag } from "@/components/track-audio/DuplicateFlag";
+import { FromCommitLink } from "@/components/track-audio/FromCommitLink";
+import { LoudnessLabel } from "@/components/track-audio/LoudnessLabel";
 import { MeasureStack } from "@/components/track-audio/MeasureStack";
 import { useTrackAudio } from "@/components/track-audio/TrackAudioContext";
 import { TrackAudioDialog } from "@/components/track-audio/TrackAudioDialog";
-import { LoudnessLabel } from "@/components/track-audio/LoudnessLabel";
 import { TrackAudioDropdown } from "@/components/track-audio/TrackAudioDropdown";
-import { useTrackAudioMeasure } from "@/components/track-audio/measures";
-import { useSelectedStrips } from "@/components/track-audio/use-selected-strips";
-import { useVisualsPolicy } from "@/lib/policies/provider";
-import { swapVersion } from "@/components/track-audio/use-version-switch";
-import { duplicateOfVersion } from "@/components/track-audio/version-rows";
 import { VersionBadge } from "@/components/track-audio/VersionBadge";
-import { TrackWaveform } from "@/components/track/TrackWaveform";
-import { peakCeiling } from "@workspace/ui/lib/waveform-bars";
 import {
   AUDIO_PILL,
   VERSION_CHEVRON,
   VERSION_TRIGGER,
 } from "@/components/track-audio/audio-ui";
+import { useTrackAudioMeasure } from "@/components/track-audio/measures";
+import { useSelectedStrips } from "@/components/track-audio/use-selected-strips";
+import { swapVersion } from "@/components/track-audio/use-version-switch";
+import { duplicateOfVersion } from "@/components/track-audio/version-rows";
+import { TrackWaveform } from "@/components/track/TrackWaveform";
+import { DownloadAssetDialog } from "@/components/uploads/DownloadAssetDialog";
 import { useProjectRole } from "@/hooks/use-project-role";
-import { IconChevronRight } from "@tabler/icons-react";
-import { StatusChip } from "@workspace/ui/components/status-chip";
+import { useVisualsPolicy } from "@/lib/policies/provider";
+import {
+  IconChevronRight,
+  IconDotsVertical,
+  IconDownload,
+  IconPinFilled,
+} from "@tabler/icons-react";
+import type { TrackAudioWithAsset } from "@workspace/api/api";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
+import { HeightReveal } from "@workspace/ui/components/height-reveal";
 import { useArrival } from "@workspace/ui/components/motion/arrival";
 import { m } from "@workspace/ui/lib/motion";
 import { cn } from "@workspace/ui/lib/utils";
-import { isActionError } from "@workspace/api/lib/action-result";
-import type { TrackAudioWithAsset } from "@workspace/api/api";
+import { peakCeiling } from "@workspace/ui/lib/waveform-bars";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 /** A stable empty array, so a version with no peaks yet does not hand
  *  `peakCeiling`'s memo a fresh reference every render. */
 const NO_PEAKS: number[] = [];
+
+function VersionOverflowMenu({
+  trackId,
+  title,
+  playable,
+  canEdit,
+  onManage,
+}: {
+  trackId: number;
+  title: string;
+  playable: MusicPlayerTrack;
+  canEdit: boolean;
+  onManage: () => void;
+}) {
+  const { queueNext, queueLast } = usePlayback({
+    kind: "track",
+    id: trackId,
+    title,
+    playable,
+  });
+  const [downloadOpen, setDownloadOpen] = useState(false);
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="More version actions"
+            className={cn(AUDIO_PILL, "px-1.5")}
+          >
+            <IconDotsVertical aria-hidden />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => void queueNext()}>
+            Play next
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void queueLast()}>
+            Add to queue
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setDownloadOpen(true)}>
+            <IconDownload aria-hidden />
+            Download
+          </DropdownMenuItem>
+          {canEdit && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={onManage}>
+                Manage versions…
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DownloadAssetDialog
+        assetId={playable.asset.id}
+        assetPath={playable.asset.assetPath}
+        fileName={playable.asset.name}
+        open={downloadOpen}
+        onOpenChange={setDownloadOpen}
+      />
+    </>
+  );
+}
 
 export function TrackAudioSection({
   trackId,
@@ -64,7 +141,6 @@ export function TrackAudioSection({
 }) {
   const canEdit = useProjectRole()?.can("editor") ?? false;
   const [manageOpen, setManageOpen] = useState(false);
-  const [unpinning, setUnpinning] = useState(false);
   useEntityKey("upload", () => setManageOpen(true), canEdit);
 
   const store = useMusicPlayerStore();
@@ -101,21 +177,6 @@ export function TrackAudioSection({
   // The playhead runs along whichever side is audible; the other stays behind.
   const hearingB = comparing?.active === "b";
 
-  // Clicking a pin opens the panel and scrolls to the thread it belongs to.
-  const handleMarkerClick = useCallback(
-    (ids: number[]) => {
-      const first = ids[0];
-      if (first === undefined) return;
-
-      const mark = commentMarks.find((candidate) => candidate.id === first);
-      if (mark) store.actions.seek(mark.positionMs / 1000);
-
-      setCommentsOpen(true);
-      scrollToComment(first);
-    },
-    [commentMarks, store, setCommentsOpen, scrollToComment]
-  );
-
   const toPlayable = useCallback(
     (audio: TrackAudioWithAsset): MusicPlayerTrack => ({
       title,
@@ -142,6 +203,34 @@ export function TrackAudioSection({
   const isActiveAsset =
     !!selected && currentAssetId === selected.assetId && !hearingB;
 
+  // Clicking a pin opens the panel, scrolls to the thread, and moves playback
+  // to that moment (starting playback if the version was idle).
+  const handleMarkerClick = useCallback(
+    (ids: number[]) => {
+      const first = ids[0];
+      if (first === undefined) return;
+
+      const mark = commentMarks.find((candidate) => candidate.id === first);
+      if (mark) {
+        const at = mark.positionMs / 1000;
+        if (isActiveAsset) store.actions.seek(at);
+        else if (selectedPlayable) playAt(selectedPlayable, at);
+      }
+
+      setCommentsOpen(true);
+      scrollToComment(first);
+    },
+    [
+      commentMarks,
+      isActiveAsset,
+      selectedPlayable,
+      store,
+      playAt,
+      setCommentsOpen,
+      scrollToComment,
+    ]
+  );
+
   const getSeconds = useCallback(
     () => (isActiveAsset ? store.getProgress() : 0),
     [isActiveAsset, store]
@@ -158,14 +247,19 @@ export function TrackAudioSection({
 
   // The version immediately behind the one shown, if the page knows of one:
   // what `ChangeStrip`'s consecutive diff compares against.
-  const previousAudioId =
+  const previousAudio =
     selected == null
       ? null
       : (audios
           .filter((audio) => audio.version < selected.version)
-          .sort((a, b) => b.version - a.version)[0]?.id ?? null);
+          .sort((a, b) => b.version - a.version)[0] ?? null);
+  const previousAudioId = previousAudio?.id ?? null;
+  const previousVersion = previousAudio?.version ?? null;
 
-  const [selectedStrips, toggleStrip] = useSelectedStrips();
+  const [selectedStrips, toggleStrip, clearStrips] = useSelectedStrips();
+  const [analysisOpen, setAnalysisOpen] = useState(
+    () => selectedStrips.length > 0
+  );
   const { waveformHeight } = useVisualsPolicy();
 
   const duplicateVersion = selected
@@ -209,27 +303,12 @@ export function TrackAudioSection({
     ]
   );
 
-  const handleUnpin = useCallback(async (audioId: number) => {
-    setUnpinning(true);
-    const result = await unpinPrimaryTrackAudio(audioId);
-    setUnpinning(false);
-    if (isActionError(result)) {
-      toast.error(`Couldn't unpin primary version: ${result.error}`);
-    }
-  }, []);
-
   return (
     <m.div {...useArrival("audio")} className="group/track-play mt-6">
       {selected && selectedPlayable ? (
         <>
-          {/* One grid, `[auto_minmax(0,1fr)]`: the play affordance and every
-              strip's label share the first (content-sized) column, the
-              waveform and every strip's seek surface the second, so a
-              strip's x-axis lines up with the waveform's own bars however
-              wide the play affordance renders. `MeasureStack` and each
-              `StripRow` inherit these same two tracks through
-              `grid-cols-subgrid` rather than sizing a label column of
-              their own. */}
+          {/* `PlayAffordance` owns column 1 alone so opening the Analysis
+              drawer or toggling strips never shifts the waveform horizontally. */}
           <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5">
             <PlayAffordance
               kind="track"
@@ -237,7 +316,7 @@ export function TrackAudioSection({
               title={title}
               playable={selectedPlayable}
               hero
-              menuClassName="fine:motion-reveal fine:opacity-0 fine:group-hover/track-play:opacity-100 fine:focus-visible:opacity-100 group-data-[active]/play:opacity-100"
+              hideMenu
             />
             <div className="min-w-0 [&>*]:w-full">
               <TrackWaveform
@@ -246,6 +325,7 @@ export function TrackAudioSection({
                 peaks={hearingB ? peaksB : peaksA}
                 comparePeaks={hearingB ? peaksA : peaksB}
                 scale={scale}
+                durationSeconds={durationSeconds}
                 size={waveformHeight}
                 commentMarks={commentMarks}
                 onMarkerClick={handleMarkerClick}
@@ -253,98 +333,117 @@ export function TrackAudioSection({
             </div>
 
             {comparing && (
-              <CompareChangeStrip
-                comparing={comparing}
-                durationSeconds={durationSeconds}
-              />
+              <div className="col-start-2 mt-2 min-w-0">
+                <CompareChangeStrip
+                  comparing={comparing}
+                  durationSeconds={durationSeconds}
+                />
+              </div>
             )}
 
             {durationMs > 0 && (
-              <MeasureStack
-                trackAudioId={selected.id}
-                previousAudioId={previousAudioId}
-                durationSeconds={durationSeconds}
-                spectrogramKey={selected.spectrogramKey}
-                selectedIds={selectedStrips}
-                onToggle={toggleStrip}
-                getSeconds={getSeconds}
-                onSeek={seekTo}
-                live={isActiveAsset}
-              />
+              <div className="col-start-2 min-w-0">
+                <HeightReveal open={analysisOpen}>
+                  <MeasureStack
+                    trackAudioId={selected.id}
+                    previousAudioId={previousAudioId}
+                    previousVersion={previousVersion}
+                    durationSeconds={durationSeconds}
+                    spectrogramKey={selected.spectrogramKey}
+                    selectedIds={selectedStrips}
+                    onToggle={toggleStrip}
+                    onClear={clearStrips}
+                    getSeconds={getSeconds}
+                    onSeek={seekTo}
+                    live={isActiveAsset}
+                  />
+                </HeightReveal>
+              </div>
             )}
           </div>
 
-          {/* On a phone the identity of what is playing (version, loudness)
-              keeps the first line and the actions take one of their own; the
-              trigger only grows where it has a filename to grow for. */}
-          <div className="mt-2 flex flex-wrap items-center gap-3 gap-y-1.5 text-micro text-ink-soft phone:gap-y-2">
-            <TrackAudioDropdown
-              audios={audios}
-              selectedAudioId={selected.id}
-              onSelect={handleSelect}
-              onManage={canEdit ? () => setManageOpen(true) : undefined}
-            >
-              <button
-                type="button"
-                className={cn(VERSION_TRIGGER, "group flex-1 phone:flex-none")}
-                aria-label="Choose a version"
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-micro text-ink-soft phone:gap-y-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+              <TrackAudioDropdown
+                audios={audios}
+                selectedAudioId={selected.id}
+                onSelect={handleSelect}
+                onManage={canEdit ? () => setManageOpen(true) : undefined}
               >
-                <IconChevronRight className={VERSION_CHEVRON} />
-                <VersionBadge version={selected.version} active />
-                <span className="min-w-0 truncate phone:hidden">
-                  {selected.asset.name}
-                  {selected.isPrimary && " · Primary"}
-                </span>
-              </button>
-            </TrackAudioDropdown>
-
-            {selected.isPrimary && selected.primaryPinned && (
-              <>
-                <StatusChip
-                  flag
-                  colour="var(--ink-soft)"
-                  title="Pinned as primary — newer bounces will not replace it"
-                  className="flex-none"
+                <button
+                  type="button"
+                  className={cn(VERSION_TRIGGER, "group min-w-0")}
+                  aria-label={`${selected.version == null ? "—" : `v${selected.version}`} ${selected.asset.name} — Choose a version`}
                 >
-                  Pinned
-                </StatusChip>
-                {canEdit && (
-                  <button
-                    type="button"
-                    className={AUDIO_PILL}
-                    disabled={unpinning}
-                    onClick={() => handleUnpin(selected.id)}
-                  >
-                    Unpin
-                  </button>
-                )}
-              </>
-            )}
+                  <IconChevronRight className={VERSION_CHEVRON} />
+                  <VersionBadge version={selected.version} active />{" "}
+                  <span className="min-w-0 truncate phone:hidden">
+                    {selected.asset.name}
+                  </span>
+                </button>
+              </TrackAudioDropdown>
 
-            {duplicateVersion != null && (
-              <DuplicateFlag version={duplicateVersion} className="flex-none" />
-            )}
+              {selected.isPrimary && selected.primaryPinned && (
+                <span
+                  role="img"
+                  title="Pinned as primary — newer bounces will not replace it"
+                  aria-label="Pinned as primary"
+                  className="inline-flex shrink-0 items-center text-ink-soft"
+                >
+                  <IconPinFilled className="size-3" aria-hidden />
+                </span>
+              )}
 
-            <LoudnessLabel
-              lufs={selected.lufs}
-              truePeakDb={selected.truePeakDb}
-            />
-            <FromCommitLink audio={selected} trackId={trackId} />
-            {analysisOutstanding(selected) && (
-              <AudioAnalysisWatcher key={selected.id} eachJob />
-            )}
+              {duplicateVersion != null && (
+                <DuplicateFlag
+                  version={duplicateVersion}
+                  className="flex-none"
+                />
+              )}
 
-            {viewingHistory && primaryAudio && (
-              <button
-                type="button"
-                className={AUDIO_PILL}
-                onClick={() => handleSelect(primaryAudio.id)}
-              >
-                Back to primary
-              </button>
-            )}
+              <LoudnessLabel
+                lufs={selected.lufs}
+                truePeakDb={selected.truePeakDb}
+              />
+              <FromCommitLink audio={selected} trackId={trackId} />
+              {analysisOutstanding(selected) && (
+                <AudioAnalysisWatcher key={selected.id} eachJob />
+              )}
 
-            <div className="ml-auto flex items-center gap-2 phone:ml-0 phone:basis-full">
+              {viewingHistory && primaryAudio && (
+                <button
+                  type="button"
+                  className={AUDIO_PILL}
+                  onClick={() => handleSelect(primaryAudio.id)}
+                >
+                  Back to primary
+                </button>
+              )}
+            </div>
+
+            <div className="ml-auto flex flex-wrap items-center gap-2 phone:ml-0">
+              {durationMs > 0 && (
+                <button
+                  type="button"
+                  aria-expanded={analysisOpen}
+                  onClick={() => setAnalysisOpen((prev) => !prev)}
+                  className={cn(
+                    AUDIO_PILL,
+                    analysisOpen && "border-ink-faint text-ink"
+                  )}
+                >
+                  {(analysisOpen || selectedStrips.length > 0) && (
+                    <i aria-hidden className="size-1.5 rounded-full bg-art" />
+                  )}
+                  <span>Analysis</span>
+                  {selectedStrips.length > 0 && (
+                    <span className="text-ink-faint tabular-nums">
+                      {selectedStrips.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
               <AudioCompareControls
                 audios={audios}
                 selected={selected}
@@ -353,6 +452,13 @@ export function TrackAudioSection({
                 onEnd={handleEndCompare}
               />
               <AudioCommentPanel />
+              <VersionOverflowMenu
+                trackId={trackId}
+                title={title}
+                playable={selectedPlayable}
+                canEdit={canEdit}
+                onManage={() => setManageOpen(true)}
+              />
             </div>
           </div>
         </>

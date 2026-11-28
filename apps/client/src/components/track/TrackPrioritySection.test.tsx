@@ -24,6 +24,7 @@ mock.module("@/entities/mutations", () => ({ patchEntityFields }));
 
 const { HIGH, LEVEL_COLOURS, LOW, NONE, SEEDED_SCALE } =
   await import("@/fields/priority-fixture");
+const { ProjectProvider } = await import("@/hooks/use-project-role");
 const { TrackPrioritySection } = await import("./TrackPrioritySection");
 
 afterEach(() => {
@@ -34,13 +35,11 @@ afterEach(() => {
 
 const trigger = () => screen.getByRole("button");
 
-// Base UI's menu trigger opens on pointerdown, which happy-dom's synthetic
-// pointer event does not carry the button information for; ArrowDown opens it.
 async function openMenu() {
   await act(async () => {
-    fireEvent.keyDown(trigger(), { key: "ArrowDown" });
+    fireEvent.click(trigger());
   });
-  return screen.findByRole("menu");
+  return screen.findByRole("listbox");
 }
 
 describe("TrackPrioritySection", () => {
@@ -68,7 +67,7 @@ describe("TrackPrioritySection", () => {
     const menu = await openMenu();
     expect(
       within(menu)
-        .getAllByRole("menuitem")
+        .getAllByRole("option")
         .map((item) => item.textContent)
     ).toEqual(["None", "Low", "Medium", "High", "Urgent"]);
   });
@@ -80,7 +79,7 @@ describe("TrackPrioritySection", () => {
 
     const menu = await openMenu();
     await act(async () => {
-      fireEvent.click(within(menu).getByRole("menuitem", { name: "High" }));
+      fireEvent.click(within(menu).getByRole("option", { name: "High" }));
     });
 
     expect(patchEntityFields).toHaveBeenCalledTimes(1);
@@ -96,9 +95,20 @@ describe("TrackPrioritySection", () => {
 
     const menu = await openMenu();
     await act(async () => {
-      fireEvent.click(within(menu).getByRole("menuitem", { name: "Low" }));
+      fireEvent.click(within(menu).getByRole("option", { name: "Low" }));
     });
 
     expect(patchEntityFields).not.toHaveBeenCalled();
+  });
+
+  it("renders the badge read-only without a menu trigger for viewers", () => {
+    render(
+      <ProjectProvider project={{ id: 1, name: "P", role: "viewer" }}>
+        <TrackPrioritySection trackId={9} level={HIGH} levels={SEEDED_SCALE} />
+      </ProjectProvider>
+    );
+
+    expect(screen.getByText("High")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

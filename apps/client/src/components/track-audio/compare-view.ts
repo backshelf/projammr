@@ -91,7 +91,11 @@ export const hearSideLabel = (side: "a" | "b", version: number | undefined) =>
 
 export type CompareStripProps = {
   label: string;
+  vsVersion: number | null;
+  aligned: boolean;
+  offsetMs: number | null;
   change: readonly number[];
+  loudnessDelta: readonly number[];
   summary: ChangeSummary;
 };
 
@@ -105,10 +109,14 @@ export function compareStripProps(
 ): CompareStripProps | null {
   const diff = compare?.diff;
   if (!diff || diff.change.length === 0) return null;
-  const version = compare.b.trackAudio?.version;
+  const version = compare.b.trackAudio?.version ?? null;
   return {
-    label: version == null ? "Change" : `Change to v${version}`,
+    label: "Change",
+    vsVersion: version,
+    aligned: diff.aligned,
+    offsetMs: diff.offsetMs,
     change: diff.change,
+    loudnessDelta: diff.loudnessDelta,
     summary: diff.summary,
   };
 }

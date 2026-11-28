@@ -1,8 +1,13 @@
 "use client";
 
+import {
+  BottomSheet,
+  SHEET_ROW,
+  SheetCancelRow,
+} from "@/components/dock/BottomSheet";
 import { IconX } from "@tabler/icons-react";
 import type { Label, PriorityLevel, Status } from "@workspace/api/api";
-import { Button, buttonVariants } from "@workspace/ui/components/button";
+import { Button } from "@workspace/ui/components/button";
 import {
   Collapsible,
   CollapsibleChevron,
@@ -20,6 +25,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import { useIsMobile } from "@workspace/ui/hooks/use-mobile";
 import { FADE, LEAVE, m, SPRING } from "@workspace/ui/lib/motion";
+import { cn } from "@workspace/ui/lib/utils";
 import { useState } from "react";
 
 import type { FieldValue } from "@/fields/types";
@@ -159,15 +165,19 @@ export function BulkActionsBar({
   onDelete?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const isMobile = useIsMobile();
   const run = async (fn: () => void | Promise<void>) => {
     setBusy(true);
     try {
       await fn();
+      setSheetOpen(false);
     } finally {
       setBusy(false);
     }
   };
+
+  const countLabel = `${selectedCount} ${entityLabel}${selectedCount === 1 ? "" : "s"} selected`;
 
   return (
     // The bar rises from the bottom edge as a surface taking its place, and
@@ -182,97 +192,265 @@ export function BulkActionsBar({
       exit={{ opacity: 0, y: 8, transition: LEAVE.move }}
       className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center phone:bottom-[calc(var(--dock)+0.75rem)]"
     >
-      <div className="pointer-events-auto flex max-w-[calc(100vw-1.5rem)] flex-wrap items-center justify-center gap-2 rounded-lg border border-glass-edge bg-glass px-3 py-2 shadow-float backdrop-blur-[20px]">
-        <span className="text-small font-medium phone:basis-full phone:text-center">
-          {selectedCount} {entityLabel}
-          {selectedCount === 1 ? "" : "s"} selected
-        </span>
+      {isMobile ? (
+        <div
+          data-slot="bulk-bar-mobile"
+          className="pointer-events-auto flex h-14 max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-lg border border-glass-edge bg-glass px-3 shadow-float backdrop-blur-[20px]"
+        >
+          <span className="truncate text-small font-medium">{countLabel}</span>
 
-        {canSelectAllMatching && !allMatching && (
-          <Button variant="link" size="sm" onClick={onSelectAllMatching}>
-            Select all matching
-          </Button>
-        )}
-
-        {onSetStatus && statuses && statuses.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={busy}>
-                Set status
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="center"
-              className="max-h-72 overflow-y-auto"
-            >
-              {statuses.map((s) => (
-                <DropdownMenuItem
-                  key={s.id}
-                  onClick={() => void run(() => onSetStatus(s.id))}
-                >
-                  <StatusOption status={s} />
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-
-        {onAddToCollection && collections && collections.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={busy}>
-                Add to collection
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="center"
-              className="max-h-72 overflow-y-auto"
-            >
-              {collections.map((c) => (
-                <DropdownMenuItem
-                  key={c.id}
-                  onClick={() => void run(() => onAddToCollection(c.id))}
-                >
-                  {c.title}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-
-        {onSetLabels &&
-          (isMobile ? (
-            // `basis-full` on the whole disclosure, trigger included: the
-            // Labels item can grow much taller than its siblings once open,
-            // and a shared flex line centres shorter siblings against that
-            // height (`items-center`) — its own line avoids that.
-            <Collapsible className="basis-full">
-              <CollapsibleTrigger
-                disabled={busy || !labels || labels.length === 0}
-                className={buttonVariants({
-                  variant: "outline",
-                  size: "sm",
-                  className: "w-full justify-center",
-                })}
+          <BottomSheet
+            title="Bulk actions"
+            open={sheetOpen}
+            onOpenChange={setSheetOpen}
+            trigger={
+              <Button
+                variant="outline"
+                size="sm"
+                className="coarse:min-h-11"
+                disabled={busy}
               >
-                {labels && labels.length > 0 ? "Labels" : "No labels yet"}
-                {labels && labels.length > 0 && (
-                  <CollapsibleChevron className="ml-1" />
-                )}
-              </CollapsibleTrigger>
-              {labels && labels.length > 0 && (
+                Actions
+              </Button>
+            }
+          >
+            <div className="border-b border-rule px-4 py-2 text-small font-medium text-ink-soft">
+              {countLabel}
+            </div>
+
+            {canSelectAllMatching && !allMatching && (
+              <button
+                type="button"
+                className={SHEET_ROW}
+                onClick={() => {
+                  onSelectAllMatching();
+                  setSheetOpen(false);
+                }}
+              >
+                Select all matching
+              </button>
+            )}
+
+            {onSetStatus && statuses && statuses.length > 0 && (
+              <Collapsible>
+                <CollapsibleTrigger
+                  disabled={busy}
+                  className={cn(SHEET_ROW, "justify-between")}
+                >
+                  <span>Set status</span>
+                  <CollapsibleChevron />
+                </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <LabelSubmenus
-                    labels={labels}
-                    onPick={(add, remove) =>
-                      void run(() => onSetLabels(add, remove))
-                    }
-                    primitives={sheetPrimitives}
-                  />
+                  {statuses.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className={cn(SHEET_ROW, "pl-8")}
+                      disabled={busy}
+                      onClick={() => void run(() => onSetStatus(s.id))}
+                    >
+                      <StatusOption status={s} />
+                    </button>
+                  ))}
                 </CollapsibleContent>
-              )}
-            </Collapsible>
-          ) : (
+              </Collapsible>
+            )}
+
+            {onAddToCollection && collections && collections.length > 0 && (
+              <Collapsible>
+                <CollapsibleTrigger
+                  disabled={busy}
+                  className={cn(SHEET_ROW, "justify-between")}
+                >
+                  <span>Add to collection</span>
+                  <CollapsibleChevron />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  {collections.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={cn(SHEET_ROW, "pl-8")}
+                      disabled={busy}
+                      onClick={() => void run(() => onAddToCollection(c.id))}
+                    >
+                      {c.title}
+                    </button>
+                  ))}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {onSetLabels && (
+              <Collapsible>
+                <CollapsibleTrigger
+                  disabled={busy || !labels || labels.length === 0}
+                  className={cn(SHEET_ROW, "justify-between")}
+                >
+                  <span>
+                    {labels && labels.length > 0 ? "Labels" : "No labels yet"}
+                  </span>
+                  {labels && labels.length > 0 && <CollapsibleChevron />}
+                </CollapsibleTrigger>
+                {labels && labels.length > 0 && (
+                  <CollapsibleContent>
+                    <LabelSubmenus
+                      labels={labels}
+                      onPick={(add, remove) =>
+                        void run(() => onSetLabels(add, remove))
+                      }
+                      primitives={sheetPrimitives}
+                    />
+                  </CollapsibleContent>
+                )}
+              </Collapsible>
+            )}
+
+            {onSetPriority && priorityLevels && priorityLevels.length > 0 && (
+              <Collapsible>
+                <CollapsibleTrigger
+                  disabled={busy}
+                  className={cn(SHEET_ROW, "justify-between")}
+                >
+                  <span>Priority</span>
+                  <CollapsibleChevron />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  {priorityLevels.map((level) => (
+                    <button
+                      key={level.id}
+                      type="button"
+                      className={cn(SHEET_ROW, "pl-8")}
+                      disabled={busy}
+                      onClick={() => void run(() => onSetPriority(level.id))}
+                    >
+                      <PriorityBadge level={level} />
+                    </button>
+                  ))}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {onSetField && fields && fields.length > 0 && (
+              <div className="px-4 py-2">
+                <SetFieldPopover
+                  fields={fields}
+                  disabled={busy}
+                  onApply={(key, value) => run(() => onSetField(key, value))}
+                />
+              </div>
+            )}
+
+            {actions?.map(({ id, label, onSelect }) => (
+              <button
+                key={id}
+                type="button"
+                disabled={busy}
+                className={SHEET_ROW}
+                onClick={() => void run(onSelect)}
+              >
+                {label}
+              </button>
+            ))}
+
+            {onMove && (
+              <button
+                type="button"
+                disabled={busy}
+                className={SHEET_ROW}
+                onClick={() => {
+                  setSheetOpen(false);
+                  onMove();
+                }}
+              >
+                Move to project…
+              </button>
+            )}
+
+            {onDelete && (
+              <button
+                type="button"
+                disabled={busy}
+                className={cn(SHEET_ROW, "text-destructive")}
+                onClick={() => {
+                  setSheetOpen(false);
+                  onDelete();
+                }}
+              >
+                Delete
+              </button>
+            )}
+
+            <SheetCancelRow />
+          </BottomSheet>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="coarse:size-11"
+            aria-label="Clear selection"
+            onClick={onClear}
+          >
+            <IconX size={16} />
+          </Button>
+        </div>
+      ) : (
+        <div className="pointer-events-auto flex max-w-[calc(100vw-1.5rem)] flex-wrap items-center justify-center gap-2 rounded-lg border border-glass-edge bg-glass px-3 py-2 shadow-float backdrop-blur-[20px]">
+          <span className="text-small font-medium">{countLabel}</span>
+
+          {canSelectAllMatching && !allMatching && (
+            <Button variant="link" size="sm" onClick={onSelectAllMatching}>
+              Select all matching
+            </Button>
+          )}
+
+          {onSetStatus && statuses && statuses.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={busy}>
+                  Set status
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="center"
+                className="max-h-72 overflow-y-auto"
+              >
+                {statuses.map((s) => (
+                  <DropdownMenuItem
+                    key={s.id}
+                    onClick={() => void run(() => onSetStatus(s.id))}
+                  >
+                    <StatusOption status={s} />
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {onAddToCollection && collections && collections.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={busy}>
+                  Add to collection
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="center"
+                className="max-h-72 overflow-y-auto"
+              >
+                {collections.map((c) => (
+                  <DropdownMenuItem
+                    key={c.id}
+                    onClick={() => void run(() => onAddToCollection(c.id))}
+                  >
+                    {c.title}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {onSetLabels && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -300,78 +478,84 @@ export function BulkActionsBar({
                 </DropdownMenuContent>
               )}
             </DropdownMenu>
+          )}
+
+          {onSetPriority && priorityLevels && priorityLevels.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={busy}>
+                  Priority
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="center"
+                className="max-h-72 overflow-y-auto"
+              >
+                {priorityLevels.map((level) => (
+                  <DropdownMenuItem
+                    key={level.id}
+                    onClick={() => void run(() => onSetPriority(level.id))}
+                  >
+                    <PriorityBadge level={level} />
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {onSetField && fields && fields.length > 0 && (
+            <SetFieldPopover
+              fields={fields}
+              disabled={busy}
+              onApply={(key, value) => run(() => onSetField(key, value))}
+            />
+          )}
+
+          {actions?.map(({ id, label, onSelect }) => (
+            <Button
+              key={id}
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void run(onSelect)}
+            >
+              {label}
+            </Button>
           ))}
 
-        {onSetPriority && priorityLevels && priorityLevels.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" disabled={busy}>
-                Priority
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="center"
-              className="max-h-72 overflow-y-auto"
+          {onMove && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={onMove}
             >
-              {priorityLevels.map((level) => (
-                <DropdownMenuItem
-                  key={level.id}
-                  onClick={() => void run(() => onSetPriority(level.id))}
-                >
-                  <PriorityBadge level={level} />
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+              Move to project…
+            </Button>
+          )}
 
-        {onSetField && fields && fields.length > 0 && (
-          <SetFieldPopover
-            fields={fields}
-            disabled={busy}
-            onApply={(key, value) => run(() => onSetField(key, value))}
-          />
-        )}
+          {onDelete && (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={busy}
+              onClick={onDelete}
+            >
+              Delete
+            </Button>
+          )}
 
-        {actions?.map(({ id, label, onSelect }) => (
           <Button
-            key={id}
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => void run(onSelect)}
+            variant="ghost"
+            size="icon"
+            className="coarse:size-11"
+            aria-label="Clear selection"
+            onClick={onClear}
           >
-            {label}
+            <IconX size={16} />
           </Button>
-        ))}
-
-        {onMove && (
-          <Button variant="outline" size="sm" disabled={busy} onClick={onMove}>
-            Move to project…
-          </Button>
-        )}
-
-        {onDelete && (
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={busy}
-            onClick={onDelete}
-          >
-            Delete
-          </Button>
-        )}
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="coarse:size-11"
-          aria-label="Clear selection"
-          onClick={onClear}
-        >
-          <IconX size={16} />
-        </Button>
-      </div>
+        </div>
+      )}
     </m.div>
   );
 }

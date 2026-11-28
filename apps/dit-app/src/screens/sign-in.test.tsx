@@ -53,8 +53,17 @@ describe("SignIn", () => {
     );
   });
 
-  test("waits with the code, and Open again asks the app to show the approval page again", async () => {
+  test("waits with the code, copies it, opens again, or cancels sign-in", async () => {
     const calls = mockApp(base);
+    let copied = "";
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          copied = text;
+        },
+      },
+    });
     renderScreen(
       <SignIn
         auth={auth({
@@ -70,9 +79,18 @@ describe("SignIn", () => {
     ).toBeTruthy();
     expect(screen.getByText("WDJB-MJHT")).toBeTruthy();
     expect(screen.queryByLabelText("Instance")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Open again" }));
 
+    fireEvent.click(screen.getByRole("button", { name: "Copy code" }));
+    await waitFor(() => expect(copied).toBe("WDJB-MJHT"));
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open again" }));
     await waitFor(() => expect(argsOf(calls, "sign_in")).toEqual([{ host }]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(argsOf(calls, "cancel_sign_in")).toHaveLength(1)
+    );
   });
 
   test("says the hub signed this computer out and keeps the address to sign back in to", () => {

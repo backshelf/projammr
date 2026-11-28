@@ -9,6 +9,7 @@ import {
   useCurrentArt,
   useCurrentTrack,
   useIsPlaying,
+  useLabAltering,
   usePlayerActions,
 } from "@/components/music-player/player-hooks";
 import { Scrub } from "@/components/music-player/Scrub";
@@ -20,6 +21,7 @@ import { IconPlayerSkipForwardFilled } from "@tabler/icons-react";
 import { IconButton } from "@workspace/ui/components/icon-button";
 import { TrackCell } from "@workspace/ui/components/table";
 import { m, useDragControls } from "@workspace/ui/lib/motion";
+import { LABEL } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
 import {
   useRef,
@@ -53,8 +55,9 @@ export function MiniPlayer() {
   const art = useCurrentArt();
   const isPlaying = useIsPlaying();
   const { togglePlay, next } = usePlayerActions();
-  const { coverInSheet, openFromCover } = useNowPlaying();
+  const { coverInSheet, openFromCover, setOpen, setView } = useNowPlaying();
   const isPhone = useIsMobile();
+  const labAltering = useLabAltering();
 
   const pull = useDragControls();
   const pulledRef = useRef(false);
@@ -141,6 +144,25 @@ export function MiniPlayer() {
           </span>
         </TrackCell>
       </button>
+
+      {labAltering && (
+        <button
+          type={"button"}
+          onClick={() => {
+            setView("lab");
+            setOpen(true);
+          }}
+          aria-label={"Lab active, open Lab"}
+          className={cn(
+            LABEL,
+            "relative inline-flex h-4 shrink-0 items-center rounded-sm bg-art px-1 leading-none text-paper",
+            "motion-press hover:opacity-85 focus-visible:ring-2 focus-visible:ring-art/40 focus-visible:outline-hidden",
+            "coarse:after:absolute coarse:after:-inset-2 coarse:after:content-['']"
+          )}
+        >
+          LAB
+        </button>
+      )}
 
       <IconButton
         size={"touch"}

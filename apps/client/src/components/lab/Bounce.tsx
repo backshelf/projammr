@@ -112,14 +112,11 @@ export function Bounce({ current }: { current: MusicPlayerTrack }) {
             </Button>
           )}
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             onClick={bounce}
             disabled={view.running !== null}
           >
-            {view.running === "bounce" && (
-              <IconLoader2 className="animate-spin" />
-            )}
             Bounce
           </Button>
         </div>

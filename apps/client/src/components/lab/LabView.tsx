@@ -2,17 +2,27 @@
 
 import { Auditions } from "@/components/lab/Auditions";
 import { Bounce } from "@/components/lab/Bounce";
+import { labHasChanges } from "@/components/lab/lab-view-model";
 import { MatchEq } from "@/components/lab/MatchEq";
 import { RackComp } from "@/components/lab/RackComp";
 import { RackEq } from "@/components/lab/RackEq";
 import { RackReverb } from "@/components/lab/RackReverb";
 import { SpeedPitch } from "@/components/lab/SpeedPitch";
-import { useCompare } from "@/components/music-player/player-hooks";
+import {
+  useCompare,
+  useLab,
+  usePlayerActions,
+} from "@/components/music-player/player-hooks";
 import type { MusicPlayerTrack } from "@/components/music-player/types";
+import { useLabPolicy } from "@/lib/policies/provider";
 import type { TrackAudioWithAsset } from "@workspace/api/api";
+import { Button } from "@workspace/ui/components/button";
+import { Kbd } from "@workspace/ui/components/kbd";
+import { TogglePill } from "@workspace/ui/components/toggle-pill";
+import { isTypingTarget } from "@workspace/ui/lib/keymap";
 import { SECTION_TITLE } from "@workspace/ui/lib/shell";
 import { cn } from "@workspace/ui/lib/utils";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 /** A section head in the rail's caption shape, over a hairline that separates
  *  it from whatever came before — the Lab's own version of `SectionHead` for
@@ -49,6 +59,32 @@ export function LabView({
   audios: TrackAudioWithAsset[] | null;
 }) {
   const compare = useCompare();
+  const { settings, bypass } = useLab();
+  const { setLabBypass, resetLab } = usePlayerActions();
+  const labPolicy = useLabPolicy();
+  const dirty = labHasChanges(settings, labPolicy);
+
+  useEffect(() => {
+    if (!current || compare?.unmatched) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      if (isTypingTarget(event.target)) return;
+      if (event.key === "b" || event.key === "B") {
+        event.preventDefault();
+        setLabBypass(!bypass);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [current, compare?.unmatched, bypass, setLabBypass]);
 
   if (!current) {
     return <p className="shrink-0 text-lead text-ink-soft">Nothing playing</p>;
@@ -63,33 +99,62 @@ export function LabView({
   }
 
   return (
-    <div
-      className={cn(
-        "flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain pt-3 pb-5",
-        // Rows scrolling past either edge fade out rather than being cut
-        // mid-line against the header or the transport.
-        "[mask-image:linear-gradient(to_bottom,transparent,black_0.75rem,black_calc(100%-1.25rem),transparent)]"
-      )}
-      data-base-ui-swipe-ignore
-    >
-      <LabSection title="Time & pitch">
-        <SpeedPitch />
-      </LabSection>
+    <div className="flex min-h-0 flex-1 flex-col" data-base-ui-swipe-ignore>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-rule pb-2.5">
+        <TogglePill
+          pressed={bypass}
+          onPressedChange={(pressed) => setLabBypass(pressed)}
+          aria-keyshortcuts="b"
+        >
+          <span>Bypass</span>
+          <Kbd variant="bare" className="text-current opacity-65">
+            b
+          </Kbd>
+        </TogglePill>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={resetLab}
+          disabled={!dirty && !bypass}
+        >
+          Reset all
+        </Button>
+      </div>
 
-      <LabSection title="Rack">
-        <RackEq />
-        <RackComp />
-        <RackReverb />
-      </LabSection>
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain pt-3 pb-5",
+          // Rows scrolling past either edge fade out rather than being cut
+          // mid-line against the header or the transport.
+          "[mask-image:linear-gradient(to_bottom,transparent,black_0.75rem,black_calc(100%-1.25rem),transparent)]"
+        )}
+      >
+        <div
+          className={cn(
+            "flex flex-col gap-5 motion-ink",
+            bypass && "opacity-60"
+          )}
+        >
+          <LabSection title="Time & pitch">
+            <SpeedPitch />
+          </LabSection>
 
-      <LabSection title="Hear it as">
-        <Auditions lufs={current.trackAudio?.lufs ?? null} />
-        <MatchEq current={current} audios={audios} />
-      </LabSection>
+          <LabSection title="Rack">
+            <RackEq />
+            <RackComp />
+            <RackReverb />
+          </LabSection>
 
-      <LabSection title="Bounce">
-        <Bounce current={current} />
-      </LabSection>
+          <LabSection title="Hear it as">
+            <Auditions lufs={current.trackAudio?.lufs ?? null} />
+            <MatchEq current={current} audios={audios} />
+          </LabSection>
+
+          <LabSection title="Bounce">
+            <Bounce current={current} />
+          </LabSection>
+        </div>
+      </div>
     </div>
   );
 }

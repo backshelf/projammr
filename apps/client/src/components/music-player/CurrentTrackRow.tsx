@@ -3,6 +3,7 @@ import {
   trackLabel,
   type MusicPlayerTrack,
 } from "@/components/music-player/types";
+import { VersionBadge } from "@/components/track-audio/VersionBadge";
 import { IconVolume } from "@tabler/icons-react";
 
 /**
@@ -21,6 +22,13 @@ export function CurrentTrackRow({ track }: { track: MusicPlayerTrack }) {
       <div className={"min-w-0 flex-1"}>
         <p className={"truncate text-small font-semibold"}>
           {trackLabel(track)}
+          {track.trackAudio?.version != null && (
+            <VersionBadge
+              version={track.trackAudio.version}
+              active
+              className={"ml-1.5 align-middle"}
+            />
+          )}
         </p>
         {artists && (
           <p className={"truncate text-micro text-ink-soft"}>{artists}</p>

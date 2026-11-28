@@ -21,6 +21,9 @@
       "ignoreDependencies": [
         // Loaded by name from postcss.config.mjs, which re-exports @workspace/ui's config.
         "@tailwindcss/postcss",
+        // Imported directly from packages/ui/node_modules in src/app.css so the panel skips @blocknote/shadcn and doc.css.
+        "tailwindcss",
+        "shadcn",
       ],
     },
     "apps/client": {
@@ -34,11 +37,6 @@
     },
     "apps/web": {
       "entry": ["scripts/**/*.ts"],
-      "ignoreDependencies": [
-        // Kept external to the prerender build so its native binding resolves under
-        // Bun's isolated install (astro.config.ts); nothing imports it by name.
-        "satteri",
-      ],
     },
     "apps/e2e": {
       // The stack driver and the smoke run by path, from CI and by hand.

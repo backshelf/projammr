@@ -95,4 +95,51 @@ describe("RowCard", () => {
     expect(item.className).toContain("[content-visibility:auto]");
     expect(item.className).toContain("[contain-intrinsic-size:auto_76px]");
   });
+
+  it("shows trackNumber badge when present and hides default None priority", () => {
+    render(
+      <RowCard
+        entityLabel="track"
+        row={baseRow({
+          trackNumber: 3,
+          priority: {
+            id: 1,
+            name: "None",
+            colour: "var(--ink-soft)",
+            rank: 0,
+          } as RowCardModel["priority"],
+        })}
+      />
+    );
+
+    expect(screen.getByText("#3")).toBeTruthy();
+    expect(screen.queryByText("None")).toBeNull();
+  });
+
+  it("renders a 44x44 drag grip handle with touch-action none on the handle only", () => {
+    render(
+      <RowCard
+        entityLabel="track"
+        row={baseRow()}
+        dragHandle={{
+          attributes: {
+            role: "button",
+            tabIndex: 0,
+            "aria-disabled": false,
+            "aria-pressed": undefined,
+            "aria-roledescription": "sortable",
+            "aria-describedby": "",
+          },
+          listeners: undefined,
+        }}
+      />
+    );
+
+    const handle = screen.getByRole("button", {
+      name: "Drag to reorder Midnight Static",
+    });
+    expect(handle.className).toContain("size-11");
+    expect(handle.style.touchAction).toBe("none");
+    expect(screen.getByRole("listitem").style.touchAction).not.toBe("none");
+  });
 });

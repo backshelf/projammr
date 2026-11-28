@@ -1,22 +1,23 @@
 import { z } from "zod";
 import { defineGroup, defineSetting } from "../define.js";
-import { allShown, arrangedList, optionsOf } from "../options.js";
+import { arrangedList, optionsOf } from "../options.js";
 
-/** The sidebar's sections, in the order they have always stood. */
+/** The sidebar's sections, in song-first order. */
 export const SIDEBAR_SECTIONS = [
   "collections",
   "tracks",
+  "studio",
   "notebook",
-  "sessions",
 ] as const;
 
-/** The phone tab bar's tabs, in the order they have always stood. */
+/** The phone tab bar's tabs, in song-first order (`studio` is opt-in). */
 export const DOCK_TABS = [
+  "home",
   "collections",
   "tracks",
   "notes",
-  "sessions",
   "search",
+  "studio",
 ] as const;
 
 export const group = defineGroup({
@@ -83,7 +84,7 @@ export const settings = [
     default: SIDEBAR_SECTIONS.map((id) => ({
       id,
       shown: true,
-      collapsed: false,
+      collapsed: id === "studio",
     })),
     control: {
       kind: "custom",
@@ -91,8 +92,8 @@ export const settings = [
       options: optionsOf({
         collections: "Collections",
         tracks: "Tracks",
+        studio: "Studio / DAW",
         notebook: "Notebook",
-        sessions: "Sessions",
       }),
     },
     audience: "all",
@@ -126,16 +127,17 @@ export const settings = [
     schema: arrangedList(
       z.object({ id: z.enum(DOCK_TABS), shown: z.boolean() })
     ),
-    default: allShown(DOCK_TABS),
+    default: DOCK_TABS.map((id) => ({ id, shown: id !== "studio" })),
     control: {
       kind: "custom",
       component: "ordered-list",
       options: optionsOf({
+        home: "Home",
         collections: "Collections",
         tracks: "Tracks",
         notes: "Notes",
-        sessions: "Sessions",
         search: "Search",
+        studio: "Studio",
       }),
     },
     audience: "all",

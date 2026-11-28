@@ -24,8 +24,8 @@ import { ArtProvider } from "@/components/art/ArtProvider";
 import { JobsSection } from "@/components/project-home/JobsSection";
 import { NewSection } from "@/components/project-home/NewSection";
 import { QuietSection } from "@/components/project-home/QuietSection";
-import { RecentActivitySection } from "@/components/project-home/RecentActivitySection";
 import { TodayReadout } from "@/components/project-home/TodayReadout";
+import { UnassignedSetsSection } from "@/components/project-home/UnassignedSetsSection";
 import { AttachmentList } from "@/components/attachments/AttachmentList";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { EntityBoard } from "@/components/tables/EntityBoard";
@@ -65,6 +65,7 @@ import type { TableSearchParams } from "@/lib/table-params";
 import { cachedFormatters } from "@/lib/formatters";
 import { cachedPolicies } from "@/lib/policies/server";
 import { cachedEffectiveSettings } from "@/lib/settings/server";
+import { settingsHref } from "@/lib/settings/href";
 import { PageSections } from "@/components/layout/PageSections";
 import { createBreadcrumbs, hrefFromParsedRoute } from "@/lib/utils";
 import { pluralizeCount } from "@workspace/session-diff/format";
@@ -174,7 +175,11 @@ export default async function ProjectPage({
           </Suspense>
         }
       >
-        <TodayReadout projectId={projectId} today={todayPromise} />
+        <TodayReadout
+          projectId={projectId}
+          today={todayPromise}
+          canEdit={canEdit}
+        />
       </Masthead>
       <div className={BODY}>
         <SectionFold>
@@ -183,7 +188,20 @@ export default async function ProjectPage({
             sections={{
               new: (
                 <Suspense fallback={null}>
-                  <NewSection projectId={projectId} today={todayPromise} />
+                  <NewSection
+                    projectId={projectId}
+                    today={todayPromise}
+                    canEdit={canEdit}
+                  />
+                </Suspense>
+              ),
+              "unassigned-sets": (
+                <Suspense fallback={null}>
+                  <UnassignedSetsSection
+                    projectId={projectId}
+                    today={todayPromise}
+                    canEdit={canEdit}
+                  />
                 </Suspense>
               ),
               quiet: (
@@ -192,11 +210,6 @@ export default async function ProjectPage({
                 </Suspense>
               ),
               jobs: <JobsSection />,
-              "recent-activity": (
-                <Suspense fallback={null}>
-                  <RecentActivitySection projectId={projectId} />
-                </Suspense>
-              ),
               overview: (
                 <section className={SPLIT}>
                   <div className={"min-w-0 wrap-anywhere"}>
@@ -356,8 +369,18 @@ export default async function ProjectPage({
           <ProjectRailCounts
             name={project.name}
             collectionsPromise={collectionsPromise}
+            trackCountPromise={trackCountPromise}
           />
         </Suspense>
+        {canEdit && (
+          <Suspense fallback={null}>
+            <ProjectStudioRailBlock
+              projectId={projectId}
+              sessionCountPromise={sessionCountPromise}
+              todayPromise={todayPromise}
+            />
+          </Suspense>
+        )}
         <RailBlock>
           <RailLabel>LINKS</RailLabel>
           <MetadataItem>{pluralizeCount(links.length, "link")}</MetadataItem>
@@ -606,6 +629,66 @@ async function ProjectCollectionsBoard({
       statuses={isActionError(statusesResult) ? [] : statusesResult}
       filters={{ q: query.q }}
     />
+  );
+}
+
+async function ProjectStudioRailBlock({
+  projectId,
+  sessionCountPromise,
+  todayPromise,
+}: {
+  projectId: number;
+  sessionCountPromise: ReturnType<typeof getSessionsPageForProject>;
+  todayPromise: ReturnType<typeof getProjectToday>;
+}) {
+  const [sessionsResult, todayResult] = await Promise.all([
+    sessionCountPromise,
+    todayPromise,
+  ]);
+  const sessionCount = isActionError(sessionsResult)
+    ? 0
+    : sessionsResult.rowCount;
+  const unassignedCount = isActionError(todayResult)
+    ? 0
+    : todayResult.unassignedSets.total;
+
+  return (
+    <RailBlock>
+      <RailLabel>STUDIO</RailLabel>
+      <div className="flex flex-col gap-1 text-small">
+        <AppLink
+          href={hrefFromParsedRoute({ kind: "session-all" }, projectId)}
+          className="text-ink-soft motion-ink hover:text-ink"
+        >
+          {pluralizeCount(sessionCount, "DAW set")}
+          {unassignedCount > 0 ? ` · ${unassignedCount} unassigned` : ""}
+        </AppLink>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-micro text-ink-soft">
+          <AppLink
+            href={hrefFromParsedRoute({ kind: "plugins" }, projectId)}
+            className="motion-ink hover:text-ink"
+          >
+            Plugins
+          </AppLink>
+          <AppLink
+            href={hrefFromParsedRoute({ kind: "samples" }, projectId)}
+            className="motion-ink hover:text-ink"
+          >
+            Samples
+          </AppLink>
+          <AppLink
+            href={`${settingsHref({
+              section: "project",
+              projectId,
+              group: "assets",
+            })}#repos`}
+            className="motion-ink hover:text-ink"
+          >
+            Repositories
+          </AppLink>
+        </div>
+      </div>
+    </RailBlock>
   );
 }
 

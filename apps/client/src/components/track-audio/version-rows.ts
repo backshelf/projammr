@@ -1,10 +1,6 @@
 import { hrefFromParsedRoute } from "@/lib/utils";
 import type { TrackAudioWithAsset } from "@workspace/api/api";
-import {
-  commitRowId,
-  LOG_BRANCH,
-  MOST_COMMITS,
-} from "@workspace/ui/lib/commit-log";
+import { LOG_BRANCH } from "@workspace/ui/lib/commit-log";
 import type { Formatters } from "@workspace/ui/lib/formatters";
 
 /**
@@ -68,7 +64,7 @@ export function duplicateOfVersion<T extends { id: number; version: number }>(
 type BouncedFrom = NonNullable<TrackAudioWithAsset["bouncedFrom"]>;
 
 /** The commit a version was bounced from, which only a bounce recorded by a commit has. */
-type FromCommit = Pick<BouncedFrom, "sessionId"> & {
+type FromCommit = Pick<BouncedFrom, "sessionId" | "saveId"> & {
   commit: NonNullable<BouncedFrom["commit"]>;
 };
 
@@ -76,7 +72,11 @@ const fromCommitOf = (
   bouncedFrom: TrackAudioWithAsset["bouncedFrom"] | undefined
 ): FromCommit | null =>
   bouncedFrom?.commit
-    ? { sessionId: bouncedFrom.sessionId, commit: bouncedFrom.commit }
+    ? {
+        sessionId: bouncedFrom.sessionId,
+        saveId: bouncedFrom.saveId,
+        commit: bouncedFrom.commit,
+      }
     : null;
 
 /** "from commit 'added strings'"; null for a version no commit recorded. */
@@ -88,10 +88,8 @@ export function fromCommitLabel(
 }
 
 /**
- * The history row of the commit a version was bounced from; null when the
- * commit is on a branch the log does not show. The log shows its first 30
- * commits and folds checkpoints away, so the link asks for the whole
- * log and, for a checkpoint, the unfolded one, or the anchor would not exist.
+ * The track's Studio/DAW history drawer URL for the commit a version was
+ * bounced from; null when the commit is on a branch the log does not show.
  */
 export function fromCommitHref(
   bouncedFrom: TrackAudioWithAsset["bouncedFrom"] | undefined,
@@ -99,11 +97,12 @@ export function fromCommitHref(
 ): string | null {
   const from = fromCommitOf(bouncedFrom);
   if (!from || from.commit.branch !== LOG_BRANCH) return null;
-  const query = new URLSearchParams({ commits: String(MOST_COMMITS) });
+  const query = new URLSearchParams({
+    studio: "history",
+    session: String(from.sessionId),
+    to: String(from.saveId),
+  });
   if (from.commit.kind === "checkpoint") query.set("checkpoints", "1");
-  const history = hrefFromParsedRoute(
-    { kind: "session-history", sessionId: from.sessionId, trackId },
-    projectId
-  );
-  return `${history}?${query}#${commitRowId(from.commit.id)}`;
+  const track = hrefFromParsedRoute({ kind: "track", trackId }, projectId);
+  return `${track}?${query}`;
 }

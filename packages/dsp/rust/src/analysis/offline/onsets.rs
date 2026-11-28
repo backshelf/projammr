@@ -106,7 +106,7 @@ impl FrontEnd {
             hops: 0,
             second: Second::default(),
             second_index: 0,
-            spectrogram: spectrogram.then(|| Spectrogram::new(rate, n)),
+            spectrogram: spectrogram.then(|| Spectrogram::new(rate)),
             onset: Vec::new(),
             mel_seconds: Vec::new(),
             chroma_seconds: Vec::new(),
@@ -115,6 +115,9 @@ impl FrontEnd {
     }
 
     pub fn push(&mut self, mono: &[f32]) {
+        if let Some(spectrogram) = &mut self.spectrogram {
+            spectrogram.push(mono);
+        }
         self.fed += mono.len() as u64;
         let n = self.window.len();
         let mut rest = mono;
@@ -218,9 +221,6 @@ impl FrontEnd {
         }
         self.second.hops += 1;
 
-        if let Some(spectrogram) = &mut self.spectrogram {
-            spectrogram.push(&self.power, centre * 10 / u64::from(self.rate));
-        }
         self.hops += 1;
     }
 
@@ -295,8 +295,8 @@ mod tests {
         assert_eq!(front.onset().len(), 301);
         assert_eq!(front.mel_seconds().len(), 4);
         assert_eq!(front.chroma_seconds().len(), 4);
-        let columns = front.spectrogram.as_ref().unwrap().bytes().len() / 128;
-        assert_eq!(columns, 31);
+        let columns = front.spectrogram.as_ref().unwrap().bytes().len() / 160;
+        assert_eq!(columns, 61);
     }
 
     #[test]
@@ -325,9 +325,9 @@ mod tests {
     #[test]
     fn a_full_scale_sine_reads_near_zero_db_in_the_spectrogram() {
         let front = run(&sine(1000.0, 1.0, 1.0), true);
-        let column = &front.spectrogram.as_ref().unwrap().bytes()[128 * 5..128 * 6];
+        let column = &front.spectrogram.as_ref().unwrap().bytes()[160 * 10..160 * 11];
         let loudest = *column.iter().max().unwrap();
-        assert!(loudest >= 245, "{loudest}");
-        assert!(column[0] < 60, "{}", column[0]);
+        assert!(loudest >= 235, "{loudest}");
+        assert!(column[0] < 20, "{}", column[0]);
     }
 }

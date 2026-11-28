@@ -11,13 +11,17 @@ import { IconPlus, IconTag } from "@tabler/icons-react";
 import type { Label, TableEntityKind } from "@workspace/api/api";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@workspace/ui/components/popover";
-import { Separator } from "@workspace/ui/components/separator";
+  ResponsivePicker,
+  ResponsivePickerContent,
+  ResponsivePickerCreate,
+  ResponsivePickerEmpty,
+  ResponsivePickerFooter,
+  ResponsivePickerItem,
+  ResponsivePickerList,
+  ResponsivePickerSearch,
+  ResponsivePickerTrigger,
+} from "@workspace/ui/components/responsive-picker";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { isActionError } from "@workspace/api/lib/action-result";
@@ -73,6 +77,7 @@ export function LabelsCell({
 }) {
   const mutate = useMutate();
   const { id: projectId, can } = useProject();
+  const canEdit = can?.("editor") ?? true;
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -132,88 +137,92 @@ export function LabelsCell({
         />
       )}
       trailing={
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Edit labels"
-              className="size-6 shrink-0"
-            >
-              {rowLabels.length ? (
-                <IconPlus size={14} />
-              ) : (
-                <IconTag size={14} />
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-64 p-2">
-            <Input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Filter or create…"
-              className="mb-2 h-7 text-small"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && draft.trim() && !exactMatch) addNew();
-              }}
-            />
-            <div className="max-h-56 space-y-0.5 overflow-y-auto">
-              {filtered.map((label) => (
-                <button
-                  key={label.id}
-                  type="button"
-                  disabled={saving}
-                  onClick={() => toggle(label.id)}
-                  className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-small hover:bg-ink/4 disabled:opacity-50"
-                >
-                  <span
-                    aria-hidden
-                    className="size-3 shrink-0 rounded-full border"
-                    style={{
-                      backgroundColor: selectedIds.has(label.id)
-                        ? label.colourHex
-                        : "transparent",
-                      borderColor: label.colourHex,
-                    }}
-                  />
-                  <span className="truncate">{label.name}</span>
-                </button>
-              ))}
-              {draft.trim() && !exactMatch && (
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={addNew}
-                  className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-small hover:bg-ink/4 disabled:opacity-50"
-                >
+        canEdit ? (
+          <ResponsivePicker
+            open={open}
+            onOpenChange={setOpen}
+            closeOnSelect={false}
+          >
+            <ResponsivePickerTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Edit labels"
+                className="size-6 shrink-0 in-[td]:coarse:min-h-0"
+              >
+                {rowLabels.length ? (
                   <IconPlus size={14} />
-                  Create “{draft.trim()}”
-                </button>
+                ) : (
+                  <IconTag size={14} />
+                )}
+              </Button>
+            </ResponsivePickerTrigger>
+            <ResponsivePickerContent
+              title="Labels"
+              align="start"
+              desktopClassName="w-64 p-2"
+            >
+              <ResponsivePickerSearch
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Filter or create…"
+                aria-label="Filter or create labels"
+                className="h-7"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && draft.trim() && !exactMatch)
+                    addNew();
+                }}
+              />
+              <ResponsivePickerList className="max-h-56">
+                {filtered.map((label) => (
+                  <ResponsivePickerItem
+                    key={label.id}
+                    selected={selectedIds.has(label.id)}
+                    disabled={saving}
+                    onSelect={() => toggle(label.id)}
+                    icon={
+                      <span
+                        aria-hidden
+                        className="size-3 shrink-0 rounded-full border"
+                        style={{
+                          backgroundColor: selectedIds.has(label.id)
+                            ? label.colourHex
+                            : "transparent",
+                          borderColor: label.colourHex,
+                        }}
+                      />
+                    }
+                  >
+                    {label.name}
+                  </ResponsivePickerItem>
+                ))}
+                {draft.trim() && !exactMatch && (
+                  <ResponsivePickerCreate disabled={saving} onSelect={addNew}>
+                    Create “{draft.trim()}”
+                  </ResponsivePickerCreate>
+                )}
+                {filtered.length === 0 && !draft.trim() && (
+                  <ResponsivePickerEmpty>No labels yet.</ResponsivePickerEmpty>
+                )}
+              </ResponsivePickerList>
+              {/* Renaming, recolouring and deleting labels is an editor's. */}
+              {can("editor") && (
+                <ResponsivePickerFooter>
+                  <AppLink
+                    href={settingsHref({
+                      section: "project",
+                      projectId,
+                      group: "labels",
+                    })}
+                    className="flex min-h-11 items-center rounded px-1.5 py-1 text-small text-ink-soft hover:bg-ink/4 md:min-h-0"
+                  >
+                    Manage labels
+                  </AppLink>
+                </ResponsivePickerFooter>
               )}
-              {filtered.length === 0 && !draft.trim() && (
-                <p className="px-1.5 py-1 text-small text-ink-soft">
-                  No labels yet.
-                </p>
-              )}
-            </div>
-            {/* Renaming, recolouring and deleting labels is an editor's. */}
-            {can("editor") && (
-              <>
-                <Separator className="my-2" />
-                <AppLink
-                  href={settingsHref({
-                    section: "project",
-                    projectId,
-                    group: "labels",
-                  })}
-                  className="block rounded px-1.5 py-1 text-small text-ink-soft hover:bg-ink/4"
-                >
-                  Manage labels
-                </AppLink>
-              </>
-            )}
-          </PopoverContent>
-        </Popover>
+            </ResponsivePickerContent>
+          </ResponsivePicker>
+        ) : undefined
       }
     />
   );

@@ -3,6 +3,7 @@ import { IconArrowUpRight } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
 import { useFormat } from "@workspace/ui/components/format-provider";
 import { Empty, EmptyTitle } from "@workspace/ui/components/empty";
+import { IconButton } from "@workspace/ui/components/icon-button";
 import {
   Row,
   RowMain,
@@ -31,10 +32,12 @@ const NO_RENDERS: readonly RenderCard[] = [];
 export function Repos({
   repos,
   renders = NO_RENDERS,
+  flushTop = true,
 }: {
   repos: RepoRow[];
   /** The renders waiting: with no set open, their cards are still the way to decide them. */
   renders?: readonly RenderCard[];
+  flushTop?: boolean;
 }): JSX.Element {
   const { nav } = usePanelActions();
   const openBackfill = useOpenBackfill();
@@ -45,29 +48,40 @@ export function Repos({
 
   return (
     <div className="flex flex-col gap-4">
-      <PanelHead title="Repos" back={nav === "repos"} />
-      <RenderBand cards={renders} />
       {repos.length === 0 ? (
-        <Empty className="p-4">
-          <EmptyTitle>
-            Open a set in Live and dit will offer to track its project, or bring
-            in all your projects at once.
-          </EmptyTitle>
-          <Button variant="outline" onClick={() => void openBackfill()}>
-            Bring in projects…
-          </Button>
-        </Empty>
+        <>
+          <PanelHead title="Repos" back={nav === "repos"} />
+          <RenderBand cards={renders} />
+          <Empty className="p-4">
+            <EmptyTitle>
+              Open a set in Live and dit will offer to track its project, or
+              track folders in bulk.
+            </EmptyTitle>
+            <Button variant="outline" onClick={() => void openBackfill()}>
+              {"Track a folder\u2026"}
+            </Button>
+          </Empty>
+        </>
       ) : (
         <>
-          <PanelInput
-            ref={focusTarget}
-            type="search"
-            aria-label="Filter repos"
-            placeholder="Filter repos"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            spellCheck={false}
-          />
+          <div
+            className={cn(
+              "sticky top-0 z-10 -mx-4 flex flex-col gap-3 border-b border-rule bg-panel px-4 pb-3",
+              flushTop ? "-mt-4 pt-4" : "pt-1"
+            )}
+          >
+            <PanelHead title="Repos" back={nav === "repos"} />
+            <PanelInput
+              ref={focusTarget}
+              type="search"
+              aria-label="Filter repos"
+              placeholder="Filter repos"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              spellCheck={false}
+            />
+          </div>
+          <RenderBand cards={renders} />
           {shown.length === 0 ? (
             <p className="text-small text-ink-soft">
               No repo matches “{filter.trim()}”.
@@ -92,10 +106,7 @@ function RepoItem({ repo }: { repo: RepoRow }): JSX.Element {
   const unreachable = repo.unreachable !== null;
 
   return (
-    <Row
-      as="li"
-      className="flex-wrap items-start px-0 [contain-intrinsic-size:auto_3rem] [content-visibility:auto]"
-    >
+    <Row as="li" className="flex-wrap items-start px-0">
       <RowMain>
         <RowTitle id={titleId} className={cn(unreachable && "text-ink-soft")}>
           {repo.name}
@@ -108,17 +119,17 @@ function RepoItem({ repo }: { repo: RepoRow }): JSX.Element {
         </RowMeta>
       </RowMain>
       {repo.webPath !== null && (
-        <Button
-          variant="link"
+        <IconButton
+          aria-label="Open on the web"
           aria-describedby={titleId}
-          className="shrink-0 gap-0.5 px-0"
+          title="Open on the web"
+          className="shrink-0"
           onClick={() =>
             void run(() => call("open_web", { path: repo.webPath }))
           }
         >
-          Open on the web
           <IconArrowUpRight aria-hidden />
-        </Button>
+        </IconButton>
       )}
       <ErrorLine error={error} />
     </Row>

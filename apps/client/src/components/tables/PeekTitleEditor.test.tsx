@@ -64,13 +64,16 @@ describe("PeekTitleEditor", () => {
     expect(onEnd).toHaveBeenCalledTimes(1);
   });
 
-  it("ends without saving on blur", () => {
+  it("saves the edited title on blur", async () => {
     const { input, save, onEnd } = renderEditor();
 
-    type(input, "Golden Hour");
-    fireEvent.blur(input);
+    type(input, "  Golden Hour  ");
+    await act(async () => {
+      fireEvent.blur(input);
+    });
 
-    expect(save).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith("Golden Hour");
     expect(onEnd).toHaveBeenCalledTimes(1);
   });
 

@@ -229,7 +229,7 @@ impl Offline {
         &self.sections
     }
 
-    /// 128 bytes per 100 ms column, lowest band first.
+    /// 160 log-spaced bytes per 50 ms column, lowest band first.
     pub fn spectrogram(&self) -> &[u8] {
         self.finished_front_end()
             .and_then(|front_end| front_end.spectrogram.as_ref())

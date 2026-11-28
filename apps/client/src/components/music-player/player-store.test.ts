@@ -1926,7 +1926,9 @@ describe("spectrum subscription", () => {
     // `attachMeters` compiles the real `dsp.wasm` (`compileDsp`) before it
     // creates a node, which is genuine I/O rather than a microtask — a fixed
     // number of ticks is not a reliable wait for it.
-    await waitFor(() => expect(nodes.length).toBeGreaterThan(0));
+    await waitFor(() => expect(nodes.length).toBeGreaterThan(0), {
+      timeout: 5000,
+    });
 
     const heard: [string, Float32Array][] = [];
     const other: [string, Float32Array][] = [];
@@ -2436,5 +2438,62 @@ describe("load failure", () => {
     events().error(7, "second");
 
     expect(store.getSnapshot().loadError?.message).toBe("second");
+  });
+});
+
+describe("Lab bypass", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("sends neutral settings and clears match-EQ curve without discarding tuned settings", () => {
+    const { store, lab } = fakeEngine();
+    store.actions.playNow([track]);
+    store.actions.setSpeed(0.8);
+    store.actions.setEqOn(true);
+    const curve = Array.from({ length: 31 }, () => 2);
+    store.actions.setEqCurve(curve);
+    lab.set.mockClear();
+    lab.setEqCurve.mockClear();
+
+    store.actions.setLabBypass(true);
+
+    expect(store.getSnapshot().lab.bypass).toBe(true);
+    expect(store.getSnapshot().lab.settings.speed).toBe(0.8);
+    expect(store.getSnapshot().lab.settings.rack.eq.on).toBe(true);
+    expect(lab.set).toHaveBeenLastCalledWith(DEFAULT_LAB, loudness(null));
+    expect(lab.setEqCurve).toHaveBeenLastCalledWith(null);
+
+    store.actions.setLabBypass(false);
+
+    expect(store.getSnapshot().lab.bypass).toBe(false);
+    expect(lab.set).toHaveBeenLastCalledWith(
+      store.getSnapshot().lab.settings,
+      loudness(null)
+    );
+    expect(lab.setEqCurve).toHaveBeenLastCalledWith(curve);
+  });
+
+  it("releases the Lab when bypassed and re-engages when un-bypassed", () => {
+    jest.useFakeTimers();
+    const { store, lab } = fakeEngine();
+    store.actions.setAudition({ stereo: "mono" });
+    expect(lab.engage).toHaveBeenCalledTimes(1);
+
+    store.actions.setLabBypass(true);
+    jest.advanceTimersByTime(RELEASE_DELAY_MS);
+    expect(lab.release).toHaveBeenCalledTimes(1);
+
+    store.actions.setLabBypass(false);
+    expect(lab.engage).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears bypass on resetLab", () => {
+    const { store } = fakeEngine();
+    store.actions.setSpeed(1.25);
+    store.actions.setLabBypass(true);
+
+    store.actions.resetLab();
+
+    expect(store.getSnapshot().lab.bypass).toBe(false);
+    expect(store.getSnapshot().lab.settings).toEqual(DEFAULT_LAB);
   });
 });

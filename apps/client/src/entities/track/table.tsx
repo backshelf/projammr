@@ -102,6 +102,7 @@ function trackToPeekRow(row: ListTrack): PeekRow {
   ];
   return {
     id: row.id,
+    trackNumber: row.trackNumber,
     title: row.title,
     subtitle: artists.join(", "),
     flag: row.explicit ? "Explicit" : undefined,
@@ -656,6 +657,7 @@ export const trackTable = {
 
     const initiallyHiddenColumns = useMemo(
       () => [
+        "id",
         "releaseDate",
         "isrc",
         "iswc",
@@ -669,6 +671,27 @@ export const trackTable = {
       [embedded, collectionId, customFields]
     );
 
+    const reorder = useMemo(
+      () =>
+        collectionId == null
+          ? undefined
+          : {
+              onMove: async (trackId: number, trackNumber: number) => {
+                const result = await updateTrackNumber(
+                  collectionId,
+                  trackId,
+                  trackNumber
+                );
+                if (isActionError(result)) {
+                  toast.error(`Reorder failed: ${result.error}`);
+                  return false;
+                }
+                return true;
+              },
+            },
+      [collectionId]
+    );
+
     return {
       columns,
       editableCells,
@@ -679,6 +702,7 @@ export const trackTable = {
       subRows,
       cards,
       rowAccent,
+      reorder,
       initiallyHiddenColumns,
       bulkCollections: collections,
       onBulkAddToCollection,

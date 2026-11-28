@@ -3,6 +3,7 @@ import type { ListSession, Machine } from "@workspace/api/api";
 import { afterEach, describe, expect, it, mock } from "bun:test";
 
 mock.module("server-only", () => ({}));
+const { ProjectProvider } = await import("@/hooks/use-project-role");
 const { sessionColumns } = await import("./columns");
 
 afterEach(cleanup);
@@ -40,5 +41,35 @@ describe("session table Open in DAW", () => {
     expect(ids).not.toContain("localFileUpdatedAt");
     expect(ids).not.toContain("localFileCreatedAt");
     expect(ids).toContain("inDit");
+  });
+
+  it("hides the Assign to a track button for viewers on unassigned sessions", () => {
+    const column = sessionColumns(1, [], undefined, machines).find(
+      (c) => c.id === "track"
+    );
+    const cell = column?.cell as (info: unknown) => React.ReactNode;
+    const cellEl = cell({
+      row: { original: { id: 9, track: null } as unknown as ListSession },
+    });
+
+    render(
+      <ProjectProvider project={{ id: 1, name: "P", role: "viewer" }}>
+        {cellEl}
+      </ProjectProvider>
+    );
+    expect(
+      screen.queryByRole("button", { name: "Assign to a track" })
+    ).toBeNull();
+    expect(screen.getByText("—")).toBeTruthy();
+
+    cleanup();
+    render(
+      <ProjectProvider project={{ id: 1, name: "P", role: "editor" }}>
+        {cellEl}
+      </ProjectProvider>
+    );
+    expect(
+      screen.getByRole("button", { name: "Assign to a track" })
+    ).toBeTruthy();
   });
 });

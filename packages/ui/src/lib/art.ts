@@ -37,7 +37,7 @@ const NEUTRAL = {
  * numbers (foundation.css), and `appearance.test.ts` holds it to them.
  */
 export const ACCENT_TONES = {
-  art: { lightness: 0.55, chromaScale: 1.3, maxChroma: 0.19 },
+  art: { lightness: 0.5, chromaScale: 1.3, maxChroma: 0.19 },
   glow: { lightness: 0.72, chromaScale: 1, maxChroma: 0.14 },
   artDark: { lightness: 0.78, chromaScale: 1.25, maxChroma: 0.17 },
   glowDark: { lightness: 0.45, chromaScale: 1, maxChroma: 0.14 },

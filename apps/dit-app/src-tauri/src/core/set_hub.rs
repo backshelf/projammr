@@ -5,8 +5,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::*;
-use crate::reducer::{HubSet, HubTarget};
-use crate::snapshot::{Artwork, TrackChoice};
+use crate::reducer::HubSet;
+use crate::snapshot::{Artwork, OpenTrack, TrackChoice};
 use dit_daemon::backfill::propose;
 
 /// The `propose_track` value that makes a new track, titled as the proposal said.
@@ -24,7 +24,11 @@ struct SessionBody {
 }
 
 #[derive(Deserialize)]
-struct TrackBody {}
+#[serde(rename_all = "camelCase")]
+struct TrackBody {
+    id: i64,
+    title: String,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +62,7 @@ struct TrackSummary {
 #[derive(Deserialize)]
 struct Created {
     id: i64,
+    title: String,
 }
 
 /// Whether the open set's facts are being read, and whether another reading was asked for meanwhile.
@@ -109,7 +114,11 @@ impl Core {
         else {
             return;
         };
-        let choices = if session.track.is_none() && target.wants_track {
+        let track = session.track.map(|track| OpenTrack {
+            id: track.id,
+            title: track.title,
+        });
+        let choices = if track.is_none() {
             self.track_choices(&remote, session.project_id, &target)
                 .unwrap_or_default()
         } else {
@@ -119,7 +128,8 @@ impl Core {
             path: target.path,
             session_id: target.session_id,
             project_id: session.project_id,
-            has_track: session.track.is_some(),
+            has_track: track.is_some(),
+            track,
             artwork: session.artwork.map(Artwork::from),
             choices,
         };
@@ -131,7 +141,7 @@ impl Core {
         &self,
         remote: &remote::Remote,
         project_id: i64,
-        target: &HubTarget,
+        target: &crate::reducer::HubTarget,
     ) -> Result<Vec<TrackChoice>, String> {
         let summaries: Vec<TrackSummary> = remote
             .get(&format!("/projects/{project_id}/tracks/summary"))
@@ -163,26 +173,33 @@ impl Core {
         let session: SessionBody = remote
             .get(&format!("/sessions/{}", target.session_id))
             .map_err(message)?;
-        if session.track.is_none() {
-            let id = match track_id {
-                Some(id) => id,
-                None => {
-                    let made: Created = remote
-                        .post(
-                            "/tracks",
-                            &json!({ "projectId": session.project_id, "title": target.folder_name }),
-                        )
-                        .map_err(message)?;
-                    made.id
-                }
-            };
-            remote
-                .patch::<Value>(
-                    &format!("/sessions/{}", target.session_id),
-                    &json!({ "trackId": id }),
-                )
-                .map_err(message)?;
-        }
+        let linked_track = match session.track {
+            Some(existing) => Some(OpenTrack {
+                id: existing.id,
+                title: existing.title,
+            }),
+            None => {
+                let (id, created_title) = match track_id {
+                    Some(id) => (id, None),
+                    None => {
+                        let made: Created = remote
+                            .post(
+                                "/tracks",
+                                &json!({ "projectId": session.project_id, "title": target.folder_name }),
+                            )
+                            .map_err(message)?;
+                        (made.id, Some(made.title))
+                    }
+                };
+                remote
+                    .patch::<Value>(
+                        &format!("/sessions/{}", target.session_id),
+                        &json!({ "trackId": id }),
+                    )
+                    .map_err(message)?;
+                created_title.map(|title| OpenTrack { id, title })
+            }
+        };
         // The proposal is answered at once; the track's cover follows from the reading that comes next.
         self.with_reducer(|reducer| {
             reducer.set_hub_set(HubSet {
@@ -190,6 +207,7 @@ impl Core {
                 session_id: target.session_id,
                 project_id: session.project_id,
                 has_track: true,
+                track: linked_track,
                 artwork: session.artwork.map(Artwork::from),
                 choices: Vec::new(),
             });
@@ -253,7 +271,9 @@ mod tests {
             "artwork":{"assetPath":"images/9f2c.webp","accentHue":262.5,"accentChroma":0.14},"other":[1]}"##;
         let session: SessionBody = serde_json::from_str(body).unwrap();
         assert_eq!(session.project_id, 4);
-        assert!(session.track.is_some());
+        let track = session.track.unwrap();
+        assert_eq!(track.id, 12);
+        assert_eq!(track.title, "science");
         let artwork = Artwork::from(session.artwork.unwrap());
         assert_eq!(artwork.asset_path, "images/9f2c.webp");
         assert_eq!(artwork.accent_hue, Some(262.5));

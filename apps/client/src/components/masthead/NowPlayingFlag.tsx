@@ -1,6 +1,5 @@
 "use client";
 
-import { StatusChip } from "@workspace/ui/components/status-chip";
 import {
   playbackState,
   type PlaybackOwner,
@@ -14,10 +13,11 @@ import { AppLink } from "@/components/navigation/AppLink";
 import { hrefFromParsedRoute } from "@/lib/utils";
 
 /**
- * The masthead's answer to the room's light: `Playing`/`Paused` beside the
- * status pill when this page's own record is what the player holds. On a
- * collection page it names the playing track and links to it inside this
- * collection. Renders nothing when the player holds something else.
+ * The masthead's quiet inline answer to the room's light when this page's
+ * record is what the player holds: a small art dot beside `Playing`, or plain
+ * ink beside `Paused`. On a collection page it names the playing track and
+ * links to it inside this collection. Renders nothing when the player holds
+ * something else.
  */
 export function NowPlayingFlag({
   owner,
@@ -32,30 +32,37 @@ export function NowPlayingFlag({
 
   if (state === null) return null;
 
-  const label = state === "playing" ? "Playing" : "Paused";
+  const isActive = state === "playing";
+  const label = isActive ? "Playing" : "Paused";
+  const dot = isActive ? (
+    <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-art" />
+  ) : null;
 
   if (owner.kind === "track" || !current) {
     return (
-      <StatusChip flag colour="var(--art)">
-        {label}
-      </StatusChip>
+      <span className="inline-flex items-center gap-1.5 text-micro text-ink-soft">
+        {dot}
+        <span>{label}</span>
+      </span>
     );
   }
 
   return (
-    <StatusChip flag colour="var(--art)">
-      <AppLink
-        href={hrefFromParsedRoute(
-          {
-            kind: "track",
-            trackId: current.ownerId,
-            collectionId: owner.id,
-          },
-          projectId
-        )}
-      >
+    <AppLink
+      href={hrefFromParsedRoute(
+        {
+          kind: "track",
+          trackId: current.ownerId,
+          collectionId: owner.id,
+        },
+        projectId
+      )}
+      className="inline-flex items-center gap-1.5 text-micro text-ink-soft motion-ink hover:text-ink"
+    >
+      {dot}
+      <span>
         {label} · {trackLabel(current)}
-      </AppLink>
-    </StatusChip>
+      </span>
+    </AppLink>
   );
 }
