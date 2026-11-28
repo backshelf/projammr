@@ -11,6 +11,7 @@ import {
   recentSessions,
   recentTracks,
 } from "@/components/sidebar/sidebar-lists";
+import { distinctArtwork } from "@/lib/art";
 import { useShellPolicy } from "@/lib/policies/provider";
 import type { CollectionSummary } from "@workspace/api/api";
 import { SidebarMenu } from "@workspace/ui/components/sidebar";
@@ -52,9 +53,11 @@ export function SidebarRecentNotes({
 export function SidebarCollections({
   collections,
   projectId,
+  projectImage = null,
 }: {
   collections: CollectionSummary[];
   projectId: number;
+  projectImage?: string | null;
 }) {
   const { sidebarCollectionOrder } = useShellPolicy();
   return (
@@ -65,7 +68,8 @@ export function SidebarCollections({
             key={collection.id}
             collection={collection}
             projectId={projectId}
-            swatch={collection.artwork}
+            swatch={distinctArtwork(collection.artwork, projectImage)}
+            projectImage={projectImage}
           />
         )
       )}

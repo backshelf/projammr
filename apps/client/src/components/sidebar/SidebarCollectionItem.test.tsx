@@ -131,4 +131,52 @@ describe("SidebarCollectionItem", () => {
     // No listener survives the unmount, so the key firing reads nothing again.
     expect(clientGetCollectionTrackSummaries).toHaveBeenCalledTimes(1);
   });
+
+  it("shows a quiet empty state when a collection has no tracks", async () => {
+    clientGetCollectionTrackSummaries.mockResolvedValue([]);
+    renderItem();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Demos" }));
+    expect(await screen.findByText("No tracks")).toBeTruthy();
+  });
+
+  it("renders a coloured spine only for nested tracks with distinct artwork", async () => {
+    const collectionArt = {
+      assetPath: "covers/collection.jpg",
+      accentHue: 220,
+      accentChroma: 0.14,
+    };
+    const ownTrackArt = {
+      assetPath: "covers/track.jpg",
+      accentHue: 45,
+      accentChroma: 0.15,
+    };
+    clientGetCollectionTrackSummaries.mockResolvedValue([
+      { ...track, id: 11, title: "Inherited", artwork: collectionArt },
+      { ...track, id: 12, title: "Own Cover", artwork: ownTrackArt },
+    ]);
+
+    const { container } = render(
+      <SidebarProvider>
+        <SidebarCollectionItem
+          collection={{ ...collection, artwork: collectionArt }}
+          projectId={7}
+          swatch={collectionArt}
+        />
+      </SidebarProvider>,
+      { wrapper: MotionProvider }
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Demos" }));
+    await screen.findByText("Own Cover");
+
+    const spines = container.querySelectorAll('[data-variant="spine"]');
+    expect(spines).toHaveLength(3);
+    // Collection spine carries its own hue
+    expect(spines[0]?.hasAttribute("data-fallback")).toBe(false);
+    // Track inheriting the collection's cover drops to a neutral hairline
+    expect(spines[1]?.hasAttribute("data-fallback")).toBe(true);
+    // Track with its own cover keeps its hue
+    expect(spines[2]?.hasAttribute("data-fallback")).toBe(false);
+  });
 });

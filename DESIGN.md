@@ -274,7 +274,8 @@ client's `apps/client/src/lib/art.ts` `artVarsFromArtwork` hands it an artwork r
 - session → parent track → that track's first collection → parent collection → project
 
 **Who carries art.** `ArtProvider` sets the vars on an entity page's wrapper. `ArtSwatch` sets them on a 10px
-swatch (sidebar rows, palette results). The music player sets its own from the **playing** track
+square chip in palette results and pickers (`variant="swatch"`) and on a 2px vertical spine along sidebar rows
+(`variant="spine"`, falling back to a quiet `--rule-strong` hairline when a row only inherits its parent's cover). The music player sets its own from the **playing** track
 (`useCurrentArt`), which is not necessarily the page's artwork. The share page sets them from the shared entity
 with `artVarsFromAccent`.
 
@@ -766,7 +767,7 @@ local file. While the file is being processed the name shimmers.
 
 ### Navigation
 
-- **Sidebar** (`{components.sidebar}`): sunk paper, song-first hierarchy (`Home` with unassigned-sets dot, `COLLECTIONS`, `TRACKS`, `STUDIO` collapsed by default and hidden from viewers, separated `NOTEBOOK` `"Personal"` with track badges on recents, single `Settings` button in the footer), `SIDEBAR_EYEBROW` group labels, an `ArtSwatch` beside each collection and track, collapsible groups, and `SidebarSearchTrigger` for the command palette. Active rows take the sidebar accent plate (8% ink, 12% dark).
+- **Sidebar** (`{components.sidebar}`): sunk paper on a single left alignment rail, song-first hierarchy (square-cover project switcher with `JobsTray` beside it, quiet `Search` field, `Home` with unassigned-sets dot, `COLLECTIONS` with right-aligned expand chevrons, `TRACKS`, `STUDIO` collapsed by default and hidden from viewers, separated `NOTEBOOK` `"Personal"` with linked track titles on a quiet borderless second line, and a compact single-row account/settings/hide footer), `SIDEBAR_EYEBROW` group labels, a 2px vertical `ArtSwatch` (`variant="spine"`) beside each collection and track coloured only when the item carries distinct artwork (neutral `--rule-strong` hairline on project fallback), collapsible groups, and `SidebarSearchTrigger` for the command palette. Active rows take `aria-current="page"` and the sidebar accent plate (8% ink, 12% dark).
 - **Breadcrumbs:** `crumbs` on `Masthead` and `PageHead`, lifted for contrast by the masthead scrim.
 - **TabBar** (phones): `h-(--tabbar-height)`, five `min-h-11` tabs (`Home · Collections · Tracks · Notes · Search`, plus opt-in `Studio`); a lit tab is a hairline-height bar at the bar's own top edge, not a badge on the icon.
 - **TopStrip** (phones): project switcher or back link on the left, `+` `QuickCreateSheet` trigger (New Track / New Collection / New Session / New Note) and account trigger on the right, opening bottom `Sheet`s.

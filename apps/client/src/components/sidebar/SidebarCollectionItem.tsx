@@ -1,6 +1,10 @@
 "use client";
 import { ArtSwatch } from "@/components/art/ArtSwatch";
-import { AppLink } from "@/components/navigation/AppLink";
+import {
+  SidebarNavLink,
+  SidebarSubNavLink,
+} from "@/components/sidebar/SidebarNavLink";
+import { distinctArtwork } from "@/lib/art";
 import { clientGetCollectionTrackSummaries } from "@/lib/client-api";
 import { onInvalidated } from "@/lib/mutation";
 import { hrefFromParsedRoute } from "@/lib/utils";
@@ -17,13 +21,10 @@ import {
   CollapsibleTrigger,
 } from "@workspace/ui/components/collapsible";
 import {
-  SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
-  SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@workspace/ui/components/sidebar";
-import { Spinner } from "@workspace/ui/components/spinner";
 import { useEffect, useState } from "react";
 
 /** One collection in the sidebar: a link, and its tracks behind a disclosure. */
@@ -31,12 +32,14 @@ export function SidebarCollectionItem({
   collection,
   projectId,
   swatch = null,
+  projectImage = null,
 }: {
   collection: CollectionSummary;
   projectId: number;
-  /** The collection's own artwork. Its tracks carry theirs, falling back to
-   *  this collection's. */
+  /** The collection's own distinct artwork (null when inheriting the project cover). */
   swatch?: Artwork | null;
+  /** Project cover key, used to suppress redundant fallback hues on nested tracks. */
+  projectImage?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [tracks, setTracks] = useState<CollectionTrackSummary[] | null>(null);
@@ -64,12 +67,25 @@ export function SidebarCollectionItem({
     []
   );
 
+  const parentImage = collection.artwork?.assetPath ?? projectImage;
+
   return (
     <SidebarMenuItem>
       <Collapsible open={open} onOpenChange={setOpen}>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 pr-0.5">
+          <SidebarNavLink
+            href={hrefFromParsedRoute(
+              { kind: "collection", collectionId: collection.id },
+              projectId
+            )}
+            title={collection.title}
+            className={"min-w-0 flex-1 pr-1"}
+          >
+            <ArtSwatch artwork={swatch} variant="spine" />
+            <span className={"truncate"}>{collection.title}</span>
+          </SidebarNavLink>
           <CollapsibleTrigger
-            className="flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-faint hover:text-ink focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+            className="flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-faint motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-sidebar-ring/30 focus-visible:outline-hidden"
             aria-label={
               open
                 ? `Collapse ${collection.title}`
@@ -78,46 +94,41 @@ export function SidebarCollectionItem({
           >
             <CollapsibleChevron />
           </CollapsibleTrigger>
-          <SidebarMenuButton asChild>
-            <AppLink
-              href={hrefFromParsedRoute(
-                { kind: "collection", collectionId: collection.id },
-                projectId
-              )}
-              title={collection.title}
-              className={"flex items-center gap-2 truncate"}
-            >
-              <ArtSwatch artwork={swatch} />
-              <span className={"truncate"}>{collection.title}</span>
-            </AppLink>
-          </SidebarMenuButton>
         </div>
         <CollapsibleContent>
           <SidebarMenuSub>
             {tracks === null ? (
               <SidebarMenuSubItem>
-                <Spinner className="w-4" />
+                <span className="block px-2 py-1 text-micro text-ink-faint">
+                  Loading…
+                </span>
+              </SidebarMenuSubItem>
+            ) : tracks.length === 0 ? (
+              <SidebarMenuSubItem>
+                <span className="block px-2 py-1 text-micro text-ink-faint">
+                  No tracks
+                </span>
               </SidebarMenuSubItem>
             ) : (
               tracks.map((track) => (
                 <SidebarMenuSubItem key={track.id}>
-                  <SidebarMenuSubButton asChild>
-                    <AppLink
-                      href={hrefFromParsedRoute(
-                        {
-                          kind: "track",
-                          trackId: track.id,
-                          collectionId: collection.id,
-                        },
-                        projectId
-                      )}
-                      title={track.title}
-                      className="flex items-center gap-2 truncate text-ink-soft hover:text-ink"
-                    >
-                      <ArtSwatch artwork={track.artwork} />
-                      <span className={"truncate"}>{track.title}</span>
-                    </AppLink>
-                  </SidebarMenuSubButton>
+                  <SidebarSubNavLink
+                    href={hrefFromParsedRoute(
+                      {
+                        kind: "track",
+                        trackId: track.id,
+                        collectionId: collection.id,
+                      },
+                      projectId
+                    )}
+                    title={track.title}
+                  >
+                    <ArtSwatch
+                      artwork={distinctArtwork(track.artwork, parentImage)}
+                      variant="spine"
+                    />
+                    <span className={"truncate"}>{track.title}</span>
+                  </SidebarSubNavLink>
                 </SidebarMenuSubItem>
               ))
             )}

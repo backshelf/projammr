@@ -25,8 +25,12 @@ mock.module("@/lib/client-api", () => ({
   clientGetCollectionTrackSummaries: mock(),
 }));
 
-const { SidebarCollections, SidebarRecentSessions, SidebarRecentTracks } =
-  await import("./SidebarRecents");
+const {
+  SidebarCollections,
+  SidebarRecentNotes,
+  SidebarRecentSessions,
+  SidebarRecentTracks,
+} = await import("./SidebarRecents");
 const { DEFAULT_POLICIES } = await import("@/lib/policies/policies");
 const { PoliciesProvider } = await import("@/lib/policies/provider");
 type ShellPolicy = import("@/lib/policies/shell").ShellPolicy;
@@ -158,5 +162,76 @@ describe("SidebarCollections", () => {
     expect(within(list).getAllByRole("listitem")).toHaveLength(
       collections.length
     );
+  });
+
+  it("colours spines only for collections with covers distinct from the project cover", () => {
+    const projectCover = "covers/project.jpg";
+    const items = [
+      {
+        ...collection(1, "Own Cover", "2026-09-01T00:00:00.000Z"),
+        artwork: {
+          assetPath: "covers/ep.jpg",
+          accentHue: 210,
+          accentChroma: 0.14,
+        },
+      },
+      {
+        ...collection(2, "Project Fallback", "2026-09-02T00:00:00.000Z"),
+        artwork: {
+          assetPath: projectCover,
+          accentHue: 15,
+          accentChroma: 0.16,
+        },
+      },
+    ];
+
+    const { container } = render(
+      <Shell shell={{ sidebarCollectionOrder: "title" }}>
+        <SidebarCollections
+          collections={items}
+          projectId={7}
+          projectImage={projectCover}
+        />
+      </Shell>
+    );
+
+    const spines = container.querySelectorAll('[data-variant="spine"]');
+    expect(spines).toHaveLength(2);
+    expect(spines[0]?.hasAttribute("data-fallback")).toBe(false);
+    expect(spines[1]?.hasAttribute("data-fallback")).toBe(true);
+  });
+});
+
+describe("SidebarRecentNotes", () => {
+  it("renders linked tracks on a second line without a redundant caption", () => {
+    render(
+      <Shell shell={{ recentItems: 5 }}>
+        <SidebarRecentNotes
+          notes={[
+            {
+              id: 1,
+              label: "When we met did you know",
+              href: "/notes/1",
+              updatedAt: "2026-09-02T00:00:00.000Z",
+              badge: "Deep Breath",
+            },
+            {
+              id: 2,
+              label: "Loose bridge ideas",
+              href: "/notes/2",
+              updatedAt: "2026-09-01T00:00:00.000Z",
+              badge: null,
+            },
+          ]}
+          hrefAll="/notes"
+          allLabel="Show all notes"
+        />
+      </Shell>
+    );
+
+    expect(screen.queryByText(/recently edited/i)).toBeNull();
+    expect(screen.getByText("When we met did you know")).toBeTruthy();
+    expect(screen.getByText("Deep Breath")).toBeTruthy();
+    expect(screen.getByText("Loose bridge ideas")).toBeTruthy();
   });
 });

@@ -1,23 +1,16 @@
 import { AppLink } from "@/components/navigation/AppLink";
-import { SIDEBAR_EYEBROW } from "@workspace/ui/lib/shell";
-import { cachedShellData } from "@/lib/server-data";
-import { SETTINGS_HREF } from "@/lib/settings/href";
-import { roleSatisfies } from "@/lib/roles";
-import { Loading } from "@workspace/ui/components/layout/loading";
 import { AppSidebarGroup } from "@/components/sidebar/AppSidebarGroup";
 import AppSidebarHeader from "@/components/sidebar/AppSidebarHeader";
+import { ResponsiveSidebar } from "@/components/sidebar/ResponsiveSidebar";
 import SignOutDropdownMenuItem from "@/components/sidebar/SignOutDropdownMenuItem";
 import { cachedSidebarProjectToday } from "@/components/sidebar/sidebar-reads";
+import { roleSatisfies } from "@/lib/roles";
+import { cachedShellData } from "@/lib/server-data";
 import { getCachedSession, sessionUser } from "@/lib/session";
+import { SETTINGS_HREF } from "@/lib/settings/href";
 import { initials, mediaProxyUrl } from "@/lib/utils";
-import { isActionError } from "@workspace/api/lib/action-result";
 import { IconSettings, IconUserCircle } from "@tabler/icons-react";
-import { Button } from "@workspace/ui/components/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@workspace/ui/components/tooltip";
+import { isActionError } from "@workspace/api/lib/action-result";
 import {
   Avatar,
   AvatarFallback,
@@ -30,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
+import { Loading } from "@workspace/ui/components/layout/loading";
 import {
   SidebarContent,
   SidebarFooter,
@@ -38,7 +32,11 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
 } from "@workspace/ui/components/sidebar";
-import { ResponsiveSidebar } from "@/components/sidebar/ResponsiveSidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@workspace/ui/components/tooltip";
 import { Suspense } from "react";
 
 /**
@@ -64,26 +62,25 @@ export const AppSidebar = () => {
           // The card is anchored over this footer wherever the sidebar is on
           // screen, which is every width down to the phone tier; below it the
           // sidebar is absent and the clearance goes away.
-          "pb-[calc(var(--player-card)+0.5rem)] phone:pb-2"
+          "border-t border-rule/70 pb-[calc(var(--player-card)+0.5rem)] phone:pb-2"
         }
       >
         <SidebarMenu>
-          <SidebarMenuItem className={"flex items-center gap-1"}>
+          <SidebarMenuItem className={"flex items-center gap-0.5"}>
             <Suspense fallback={<SignedOutAccount />}>
               <SidebarAccount />
             </Suspense>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant={"ghost"}
-                  size={"icon-sm"}
-                  className={"shrink-0 text-ink-soft hover:text-ink"}
-                  asChild
+                <AppLink
+                  href={SETTINGS_HREF}
+                  aria-label={"Settings"}
+                  className={
+                    "flex size-7 shrink-0 items-center justify-center rounded-sm text-ink-soft motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-sidebar-ring/30 focus-visible:outline-hidden"
+                  }
                 >
-                  <AppLink href={SETTINGS_HREF} aria-label={"Settings"}>
-                    <IconSettings />
-                  </AppLink>
-                </Button>
+                  <IconSettings className={"size-4"} aria-hidden />
+                </AppLink>
               </TooltipTrigger>
               <TooltipContent>Settings</TooltipContent>
             </Tooltip>
@@ -128,14 +125,14 @@ async function SidebarGroups() {
 
 function SignedOutAccount() {
   return (
-    <SidebarMenuButton size={"lg"} className={"flex-1"} asChild>
+    <SidebarMenuButton size={"default"} className={"min-w-0 flex-1"} asChild>
       <AppLink href={"/"}>
-        <Avatar>
-          <AvatarFallback>
-            <IconUserCircle />
+        <Avatar className={"size-5 shrink-0"}>
+          <AvatarFallback className={"text-micro"}>
+            <IconUserCircle className={"size-3.5"} aria-hidden />
           </AvatarFallback>
         </Avatar>
-        Sign in
+        <span className={"truncate"}>Sign in</span>
       </AppLink>
     </SidebarMenuButton>
   );
@@ -150,15 +147,14 @@ async function SidebarAccount() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <SidebarMenuButton size={"lg"} className={"flex-1"}>
-          <Avatar>
-            <AvatarImage src={mediaProxyUrl(user.image)} alt="avatar" />
-            <AvatarFallback>{initials(user.name)}</AvatarFallback>
+        <SidebarMenuButton size={"default"} className={"min-w-0 flex-1"}>
+          <Avatar className={"size-5 shrink-0"}>
+            <AvatarImage src={mediaProxyUrl(user.image)} alt="" />
+            <AvatarFallback className={"text-micro"}>
+              {initials(user.name)}
+            </AvatarFallback>
           </Avatar>
-          <span className={"flex min-w-0 flex-col text-left"}>
-            <span className={SIDEBAR_EYEBROW}>Account</span>
-            <span className={"truncate"}>{user.name}</span>
-          </span>
+          <span className={"truncate"}>{user.name}</span>
         </SidebarMenuButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent>

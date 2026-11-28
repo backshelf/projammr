@@ -1,8 +1,4 @@
-import {
-  cachedCollectionSummaries,
-  cachedMyNotes,
-  cachedTrackSummaries,
-} from "@/lib/server-data";
+import { SidebarNavLink } from "@/components/sidebar/SidebarNavLink";
 import {
   SidebarCollections,
   SidebarRecentNotes,
@@ -16,7 +12,13 @@ import {
   cachedSidebarProjectSamples,
   cachedSidebarProjectToday,
 } from "@/components/sidebar/sidebar-reads";
+import { distinctArtwork } from "@/lib/art";
 import { roleSatisfies } from "@/lib/roles";
+import {
+  cachedCollectionSummaries,
+  cachedMyNotes,
+  cachedTrackSummaries,
+} from "@/lib/server-data";
 import { settingsHref } from "@/lib/settings/href";
 import {
   hrefFromParsedRoute,
@@ -27,12 +29,7 @@ import {
 } from "@/lib/utils";
 import type { MyProject, NoteSummary } from "@workspace/api/api";
 import { isActionError } from "@workspace/api/lib/action-result";
-import { AppLink } from "@/components/navigation/AppLink";
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@workspace/ui/components/sidebar";
+import { SidebarMenu, SidebarMenuItem } from "@workspace/ui/components/sidebar";
 
 /**
  * The sidebar's sections for the current project. Every list goes down whole:
@@ -43,13 +40,13 @@ export async function AppSidebarGroup({ project }: { project?: MyProject }) {
   if (!project) {
     const allNotes = await cachedMyNotes();
     return (
-      <div>
+      <nav aria-label="Workspace" className="flex flex-col gap-3.5 py-2.5">
         <SidebarSections
           sections={{
             notebook: notebookSection(isActionError(allNotes) ? [] : allNotes),
           }}
         />
-      </div>
+      </nav>
     );
   }
 
@@ -63,14 +60,18 @@ export async function AppSidebarGroup({ project }: { project?: MyProject }) {
   ]);
 
   if (isActionError(collections)) {
-    return <p>Could not retrieve collections</p>;
+    return (
+      <p className="px-4 py-3 text-small text-ink-soft">
+        Could not retrieve collections
+      </p>
+    );
   }
 
   const tracks = (isActionError(allTracks) ? [] : allTracks).map((track) => ({
     id: track.id,
     label: track.title,
     href: hrefFromParsedRoute({ kind: "track", trackId: track.id }, project.id),
-    swatch: track.artwork,
+    swatch: distinctArtwork(track.artwork, project.image),
     archivedAt: track.archivedAt,
   }));
 
@@ -82,7 +83,7 @@ export async function AppSidebarGroup({ project }: { project?: MyProject }) {
       : 0;
 
   return (
-    <div>
+    <nav aria-label="Project" className="flex flex-col gap-3.5 py-2.5">
       <SidebarSections
         sections={{
           collections: {
@@ -104,6 +105,7 @@ export async function AppSidebarGroup({ project }: { project?: MyProject }) {
               <SidebarCollections
                 collections={collections}
                 projectId={project.id}
+                projectImage={project.image}
               />
             ),
           },
@@ -135,67 +137,59 @@ export async function AppSidebarGroup({ project }: { project?: MyProject }) {
                   children: (
                     <SidebarMenu>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <AppLink
-                            href={hrefFromParsedRoute(
-                              { kind: "session-all" },
-                              project.id
-                            )}
-                            className="flex items-center gap-2"
-                          >
-                            <span>DAW Sets</span>
-                            {unassignedCount > 0 && (
-                              <span className="ml-auto rounded-full bg-ink/8 px-1.5 py-0.5 text-micro text-ink-soft tabular-nums">
-                                {unassignedCount} unassigned
-                              </span>
-                            )}
-                          </AppLink>
-                        </SidebarMenuButton>
+                        <SidebarNavLink
+                          href={hrefFromParsedRoute(
+                            { kind: "session-all" },
+                            project.id
+                          )}
+                          className="flex items-center gap-2"
+                        >
+                          <span>DAW Sets</span>
+                          {unassignedCount > 0 && (
+                            <span className="ml-auto shrink-0 text-micro text-ink-faint tabular-nums">
+                              {unassignedCount} unassigned
+                            </span>
+                          )}
+                        </SidebarNavLink>
                       </SidebarMenuItem>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <AppLink
-                            href={hrefFromParsedRoute(
-                              { kind: "plugins" },
-                              project.id
-                            )}
-                          >
-                            Plugins
-                          </AppLink>
-                        </SidebarMenuButton>
+                        <SidebarNavLink
+                          href={hrefFromParsedRoute(
+                            { kind: "plugins" },
+                            project.id
+                          )}
+                        >
+                          Plugins
+                        </SidebarNavLink>
                       </SidebarMenuItem>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <AppLink
-                            href={hrefFromParsedRoute(
-                              { kind: "samples" },
-                              project.id
-                            )}
-                            className="flex items-center gap-2"
-                          >
-                            <span>Samples</span>
-                            {missingSampleCount > 0 && (
-                              <span
-                                role="img"
-                                aria-label={`${missingSampleCount} missing samples`}
-                                className="ml-auto size-1.5 rounded-full bg-warn"
-                              />
-                            )}
-                          </AppLink>
-                        </SidebarMenuButton>
+                        <SidebarNavLink
+                          href={hrefFromParsedRoute(
+                            { kind: "samples" },
+                            project.id
+                          )}
+                          className="flex items-center gap-2"
+                        >
+                          <span>Samples</span>
+                          {missingSampleCount > 0 && (
+                            <span
+                              role="img"
+                              aria-label={`${missingSampleCount} missing samples`}
+                              className="ml-auto size-1.5 shrink-0 rounded-full bg-warn"
+                            />
+                          )}
+                        </SidebarNavLink>
                       </SidebarMenuItem>
                       <SidebarMenuItem>
-                        <SidebarMenuButton asChild>
-                          <AppLink
-                            href={`${settingsHref({
-                              section: "project",
-                              projectId: project.id,
-                              group: "assets",
-                            })}#repos`}
-                          >
-                            Repositories
-                          </AppLink>
-                        </SidebarMenuButton>
+                        <SidebarNavLink
+                          href={`${settingsHref({
+                            section: "project",
+                            projectId: project.id,
+                            group: "assets",
+                          })}#repos`}
+                        >
+                          Repositories
+                        </SidebarNavLink>
                       </SidebarMenuItem>
                     </SidebarMenu>
                   ),
@@ -205,7 +199,7 @@ export async function AppSidebarGroup({ project }: { project?: MyProject }) {
           notebook: notebookSection(isActionError(allNotes) ? [] : allNotes),
         }}
       />
-    </div>
+    </nav>
   );
 }
 

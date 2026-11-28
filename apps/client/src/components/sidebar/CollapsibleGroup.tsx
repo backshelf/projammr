@@ -1,9 +1,6 @@
 "use client";
 import { AppLink } from "@/components/navigation/AppLink";
-import { cn } from "@workspace/ui/lib/utils";
-import { SIDEBAR_EYEBROW } from "@workspace/ui/lib/shell";
 import { IconPlus } from "@tabler/icons-react";
-import { Button } from "@workspace/ui/components/button";
 import {
   Collapsible,
   CollapsibleChevron,
@@ -14,13 +11,14 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenuAction,
 } from "@workspace/ui/components/sidebar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip";
+import { SIDEBAR_EYEBROW } from "@workspace/ui/lib/shell";
+import { cn } from "@workspace/ui/lib/utils";
 import type { ReactNode } from "react";
 
 /**
@@ -54,18 +52,12 @@ export function CollapsibleGroup({
   const open = !collapsed;
 
   return (
-    <SidebarGroup className={cn(separator && "mt-1 border-t border-rule pt-2")}>
+    <SidebarGroup className={cn(separator && "border-t border-rule pt-3")}>
       <Collapsible
         open={open}
         onOpenChange={(next) => onCollapsedChange(!next)}
       >
-        <div className="relative flex items-center gap-1">
-          <CollapsibleTrigger
-            className="flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-faint hover:text-ink focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-            aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
-          >
-            <CollapsibleChevron />
-          </CollapsibleTrigger>
+        <div className="flex h-6 items-center gap-0.5 pr-0.5 pl-2">
           {hrefAll ? (
             <SidebarGroupLabel asChild>
               <AppLink
@@ -80,38 +72,42 @@ export function CollapsibleGroup({
               {label}
             </SidebarGroupLabel>
           )}
+          <CollapsibleTrigger
+            className="flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-faint motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-sidebar-ring/30 focus-visible:outline-hidden"
+            aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
+          >
+            <CollapsibleChevron />
+          </CollapsibleTrigger>
           {hint && (
             <span
               className={cn(
                 SIDEBAR_EYEBROW,
-                "ml-auto text-ink-faint",
-                hrefNew && "mr-6"
+                "ml-auto hidden min-w-0 truncate text-ink-faint @[13.5rem]/sidebar:inline"
               )}
             >
               {hint}
             </span>
           )}
           {hrefNew && newLabel && (
-            // A div, not the primitive's default button: the link inside is
-            // the control, and a button around a link nests two.
-            <SidebarMenuAction key="new" asChild>
-              <div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant={"ghost"} size={"icon-xs"} asChild>
-                      <AppLink href={hrefNew} aria-label={newLabel}>
-                        <IconPlus />
-                      </AppLink>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{newLabel}</TooltipContent>
-                </Tooltip>
-              </div>
-            </SidebarMenuAction>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <AppLink
+                  href={hrefNew}
+                  aria-label={newLabel}
+                  className={cn(
+                    "flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-soft motion-ink hover:text-ink focus-visible:ring-2 focus-visible:ring-sidebar-ring/30 focus-visible:outline-hidden",
+                    !hint && "ml-auto"
+                  )}
+                >
+                  <IconPlus className="size-3.5" aria-hidden />
+                </AppLink>
+              </TooltipTrigger>
+              <TooltipContent>{newLabel}</TooltipContent>
+            </Tooltip>
           )}
         </div>
         <CollapsibleContent>
-          <SidebarGroupContent>{children}</SidebarGroupContent>
+          <SidebarGroupContent className="pt-1">{children}</SidebarGroupContent>
         </CollapsibleContent>
       </Collapsible>
     </SidebarGroup>

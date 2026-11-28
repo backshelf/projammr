@@ -1,9 +1,9 @@
-import { SIDEBAR_EYEBROW } from "@workspace/ui/lib/shell";
 import { JobsTray } from "@/components/jobs/JobsTray";
 import { AppLink } from "@/components/navigation/AppLink";
 import LeaveProjectDropdownMenuItem, {
   LeaveProjectScope,
 } from "@/components/sidebar/LeaveProjectDropdownMenuItem";
+import { SidebarNavLink } from "@/components/sidebar/SidebarNavLink";
 import { SidebarSearchTrigger } from "@/components/sidebar/SidebarSearchTrigger";
 import {
   hrefFromParsedRoute,
@@ -44,66 +44,62 @@ export default async function AppSidebarHeader({
   unassignedCount?: number;
 }) {
   return (
-    <SidebarHeader>
-      <SidebarMenu>
-        <SidebarMenuItem>
+    <SidebarHeader className={"border-b border-rule/70"}>
+      <SidebarMenu className={"gap-1"}>
+        <SidebarMenuItem className={"flex items-center gap-1"}>
           <LeaveProjectScope project={currentProject}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton
-                  size={"lg"}
-                  className={"flex items-center justify-between gap-2"}
+                  size={"default"}
+                  className={
+                    "min-w-0 flex-1 items-center justify-between gap-2 text-ink"
+                  }
                 >
                   <span className={"flex min-w-0 items-center gap-2"}>
-                    <Avatar>
+                    <Avatar className={"size-5 shrink-0 rounded-sm"}>
                       <AvatarImage
                         src={mediaProxyUrl(currentProject?.image)}
-                        alt="avatar"
+                        alt=""
                       />
-                      <AvatarFallback>
+                      <AvatarFallback className={"rounded-sm text-micro"}>
                         {currentProject && initials(currentProject.name)}
                       </AvatarFallback>
                     </Avatar>
 
                     {currentProject?.name ? (
-                      <span className={"flex min-w-0 flex-col text-left"}>
-                        <span className={SIDEBAR_EYEBROW}>Project</span>
-                        <span className={"truncate"}>
-                          {currentProject.name}
-                        </span>
+                      <span className={"truncate font-medium text-ink"}>
+                        {currentProject.name}
                       </span>
                     ) : (
-                      <span
-                        className={
-                          "translate-y-[5%] text-small text-ink-soft italic"
-                        }
-                      >
-                        Select a project...
+                      <span className={"truncate text-ink-soft italic"}>
+                        Select a project…
                       </span>
                     )}
                   </span>
 
-                  <IconSelector className={"translate-y-[5%]"} />
+                  <IconSelector
+                    className={"size-3.5 shrink-0 text-ink-faint"}
+                    aria-hidden
+                  />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuGroup>
                   <DropdownMenuLabel>Your projects</DropdownMenuLabel>
                   {projects.length !== 0 ? (
-                    projects.map((project) => {
-                      return (
-                        <DropdownMenuItem key={project.id} asChild>
-                          <AppLink
-                            href={hrefFromParsedRoute(
-                              { kind: "project" },
-                              project.id
-                            )}
-                          >
-                            <span>{project.name}</span>
-                          </AppLink>
-                        </DropdownMenuItem>
-                      );
-                    })
+                    projects.map((project) => (
+                      <DropdownMenuItem key={project.id} asChild>
+                        <AppLink
+                          href={hrefFromParsedRoute(
+                            { kind: "project" },
+                            project.id
+                          )}
+                        >
+                          <span>{project.name}</span>
+                        </AppLink>
+                      </DropdownMenuItem>
+                    ))
                   ) : (
                     <DropdownMenuLabel>No projects</DropdownMenuLabel>
                   )}
@@ -121,33 +117,37 @@ export default async function AppSidebarHeader({
               </DropdownMenuContent>
             </DropdownMenu>
           </LeaveProjectScope>
+          {currentProject && <JobsTray />}
         </SidebarMenuItem>
+
         {currentProject && (
           <>
-            <SidebarMenuItem className={"flex items-center gap-1"}>
+            <SidebarMenuItem>
               <SidebarSearchTrigger />
-              <JobsTray />
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
-                <AppLink
-                  href={hrefFromParsedRoute(
-                    { kind: "project" },
-                    currentProject.id
-                  )}
-                  className={"flex items-center gap-2"}
-                >
-                  <IconHome className={"size-4 text-ink-soft"} />
-                  <span>Home</span>
-                  {unassignedCount > 0 && (
-                    <span
-                      role="img"
-                      aria-label={`${unassignedCount} unassigned DAW sets`}
-                      className={"ml-auto size-1.5 rounded-full bg-art"}
-                    />
-                  )}
-                </AppLink>
-              </SidebarMenuButton>
+              <SidebarNavLink
+                href={hrefFromParsedRoute(
+                  { kind: "project" },
+                  currentProject.id
+                )}
+                className={"flex items-center gap-2"}
+              >
+                <IconHome
+                  className={
+                    "size-3.5 shrink-0 text-ink-faint group-hover/menu-button:text-ink group-data-[active=true]/menu-button:text-ink"
+                  }
+                  aria-hidden
+                />
+                <span>Home</span>
+                {unassignedCount > 0 && (
+                  <span
+                    role="img"
+                    aria-label={`${unassignedCount} unassigned DAW sets`}
+                    className={"ml-auto size-1.5 shrink-0 rounded-full bg-art"}
+                  />
+                )}
+              </SidebarNavLink>
             </SidebarMenuItem>
           </>
         )}

@@ -2288,18 +2288,17 @@ grid element's `onKeyDown`. A cell carries `role="gridcell"`; `isActivationTarge
 gridcell claim `Enter`, so `Enter` reaches the keymap, while space on a cell stays inert as on any other role.
 
 **Sidebar** (`sidebar/`, desktop only — `ResponsiveSidebar` = `Sidebar collapsible="offcanvas" mobile="hidden"`):
-`AppSidebar` (RSC) streams two `cachedShellData()` readers — `AppSidebarHeader` (project switcher, `Home` link with an `--art` dot when `unassignedCount > 0`, and `SidebarSearchTrigger` on project pages) and
-`AppSidebarGroup({ project? })` — plus a footer with `SidebarAccount` (avatar dropdown: Profile, Sign out), a single `IconSettings` link to `SETTINGS_HREF`, and a hide trigger; footer clears the
-anchored player card (`--player-card`). `AppSidebarGroup` (RSC, reading `sidebar-reads.ts`) hands
-`SidebarSections({ sections })` (client) each section in song-first order (`Collections`, `Tracks`, `Studio`, `Notebook`): Collections (`SidebarCollectionItem`, lazy `clientGetCollectionTrackSummaries`, ordered by `sidebar-lists.ts`), Tracks (`RecentlyEdited` with `ArtSwatch`), Studio (`STUDIO` is omitted for viewers without `canEdit` and collapsed by default for editors, linking `DAW Sets` with `unassignedCount`, `Plugins`, `Samples` with a `--warn` dot when `missingSampleCount > 0`, and `Repositories` `#repos`), and Notebook (`separator: true`, `hint: "Personal"`, with `note.track?.title` badges on recents, rendered even without a project). `SidebarSections` shows them in the policy's
+`AppSidebar` (RSC) streams two `cachedShellData()` readers — `AppSidebarHeader` (square-cover project switcher with `JobsTray` beside it, quiet `SidebarSearchTrigger` field, and `Home` via `SidebarNavLink` with an `--art` dot when `unassignedCount > 0`) and
+`AppSidebarGroup({ project? })` — plus a single-row footer with `SidebarAccount` (avatar dropdown: Profile, Sign out), a bare `IconSettings` link to `SETTINGS_HREF`, and a hide trigger; footer clears the
+anchored player card (`--player-card`). `AppSidebarGroup` (RSC, reading `sidebar-reads.ts`) wraps
+`SidebarSections({ sections })` (client) in a `<nav>` landmark in song-first order (`Collections`, `Tracks`, `Studio`, `Notebook`): Collections (`SidebarCollectionItem` with right-aligned disclosure chevron, lazy `clientGetCollectionTrackSummaries`, ordered by `sidebar-lists.ts`), Tracks (`RecentlyEdited`), Studio (`STUDIO` is omitted for viewers without `canEdit` and collapsed by default for editors, linking `DAW Sets` with `unassignedCount`, `Plugins`, `Samples` with a `--warn` dot when `missingSampleCount > 0`, and `Repositories` `#repos`), and Notebook (`separator: true`, `hint: "Personal"`, with `note.track?.title` rendered on a quiet borderless second line, rendered even without a project). Collection and track rows wear `ArtSwatch variant="spine"` (a 2px vertical bar), filtered through `distinctArtwork(artwork, fallbackImage)` (`lib/art.ts`) so items inheriting the project/collection cover render as a quiet neutral hairline instead of repeating the parent's hue. Every navigation link goes through `SidebarNavLink` / `SidebarSubNavLink` (`SidebarNavLink.tsx`) for exact-path `isActive` and `aria-current="page"` state. `SidebarSections` shows them in the policy's
 `sidebarSections` order, leaves out those it hides and those the page did not hand over, and starts each collapsed as
 the policy says; a fold the viewer makes is held there for the session. `sidebar-lists.ts`'s `recentTracks`/
 `recentSessions`/`recentNotes(items, policy)` take the policy's `recentItems`, dropping archived tracks and sessions
 of archived tracks first while `recentsSkipArchived`, so the lists stay full; the palette's recents reuse them.
 `RecentlyEdited` is a component over
-`{ id, label, href, swatch? }[]`. `RecentlyEdited` renders its own "Recently edited" caption and nothing at all when empty.
-`CollapsibleGroup({ label, hrefNew?, newLabel?, hrefAll?, collapsed, onCollapsedChange })` is controlled: it shows
-`collapsed` and reports a toggle, the state held by its owner (`newLabel` names what the "+"
+`{ id, label, href, swatch?, badge? }[]` and renders nothing when empty.
+`CollapsibleGroup({ label, hrefNew?, newLabel?, hrefAll?, collapsed, onCollapsedChange })` is controlled: it places the label flush on the left rail with the chevron trigger beside it and the bare "+" link at the right edge (`newLabel` names what the "+"
 creates — "New track" — since `label` names the group; it doubles as the link's `aria-label` and its Tooltip,
 and the chevron trigger's own `aria-label` toggles "Collapse {label}"/"Expand {label}" with open state). `SidebarReveal`
 (reopen trigger, lives in the player card). `AppSidebarHeader` wraps the project switcher in
