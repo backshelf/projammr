@@ -15,18 +15,18 @@
     "test": "bun test --parallel --timeout=30000"
   },
   "dependencies": {
-    "@better-auth/oauth-provider": "^1.7.19",
-    "better-auth": "^1.7.19",
+    "@better-auth/oauth-provider": "^1.7.28",
+    "better-auth": "^1.7.28",
     "openapi-fetch": "^0.17.0"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.4",
-    "@types/node": "^26.6.6",
+    "@types/bun": "^1.4.5",
+    "@types/node": "^26.6.7",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/settings": "workspace:*",
     "@workspace/test": "workspace:*",
     "@workspace/typescript-config": "workspace:*",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "server": "workspace:*",
     "typescript": "^7.1.0-dev.20261010.1"
   }
